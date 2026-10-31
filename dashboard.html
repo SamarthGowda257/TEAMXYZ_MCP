@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>City Hospital · Appointments</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --panel:#ffffff; --ink:#1c1b19; --muted:#6d6a63; --line:#e4e1da;
+    --free:#e7f4ec; --free-ink:#1f6b3d; --booked:#f3e3e0; --booked-ink:#8a2f22;
+    --ai:#5b3fd1; --ai-bg:#ece8fd; --past:#efeeea; --off:#f1efe9; --accent:#5b3fd1;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16161a; --panel:#1f1f24; --ink:#ecebe7; --muted:#9b988f; --line:#2f2f36;
+      --free:#173324; --free-ink:#7fd3a0; --booked:#3a201c; --booked-ink:#f0a596;
+      --ai:#b3a3ff; --ai-bg:#2c2550; --past:#232328; --off:#1b1b20; --accent:#9d88ff; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{font-size:18px;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13px}
+  .live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;background:#2fb36b;box-shadow:0 0 0 3px #2fb36b33}
+  .dot.err{background:#d64b3a;box-shadow:0 0 0 3px #d64b3a33}
+  main{padding:20px 24px;display:grid;gap:20px;grid-template-columns:minmax(0,1fr) 340px}
+  @media (max-width:1000px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line);align-items:center}
+  .days{display:flex;gap:6px;flex-wrap:wrap}
+  button.day{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:6px 10px;cursor:pointer;font:inherit;font-size:13px}
+  button.day.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.day.sun{opacity:.55}
+  select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+  .legend{display:flex;gap:12px;margin-left:auto;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
+  .doctors{padding:8px 16px 16px}
+  .doc{padding:12px 0;border-bottom:1px solid var(--line)}
+  .doc:last-child{border-bottom:0}
+  .dochead{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .docname{font-weight:600}
+  .meta{color:var(--muted);font-size:12px}
+  .slots{display:flex;flex-wrap:wrap;gap:5px}
+  .slot{font-variant-numeric:tabular-nums;font-size:12px;padding:4px 7px;border-radius:6px;min-width:52px;text-align:center;cursor:default;position:relative}
+  .slot.free{background:var(--free);color:var(--free-ink)}
+  .slot.booked{background:var(--booked);color:var(--booked-ink)}
+  .slot.ai{background:var(--ai-bg);color:var(--ai);font-weight:600;outline:1.5px solid var(--ai)}
+  .slot.past{background:var(--past);color:var(--muted);text-decoration:line-through}
+  .slot.flash{animation:flash 1.6s ease 3}
+  @keyframes flash{50%{transform:scale(1.12)}}
+  .off{background:var(--off);color:var(--muted);border-radius:8px;padding:8px 10px;font-size:13px}
+  .side h2{font-size:14px;margin:0;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:14px 16px}
+  .stat{border:1px solid var(--line);border-radius:10px;padding:10px}
+  .stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+  .stat span{color:var(--muted);font-size:12px}
+  .feed{list-style:none;margin:0;padding:0 16px 16px;max-height:60vh;overflow:auto}
+  .feed li{border-top:1px solid var(--line);padding:10px 0}
+  .tag{font-size:11px;padding:2px 6px;border-radius:5px;margin-right:6px;font-weight:600}
+  .tag.booked{background:var(--ai-bg);color:var(--ai)}
+  .tag.cancelled{background:var(--booked);color:var(--booked-ink)}
+  .empty{color:var(--muted);padding:16px}
+  #tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:6px 8px;border-radius:6px;display:none;max-width:260px;z-index:9}
+  .tokenbox{padding:40px;text-align:center}
+  .tokenbox input{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);width:280px;max-width:100%}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>City Hospital, Bengaluru · OPD Appointments</h1>
+    <div class="sub" id="sub">Live view of doctors' slots and bookings made by the AI receptionist</div>
+  </div>
+  <div class="live"><span class="dot" id="dot"></span><span id="clock">connecting…</span></div>
+</header>
+
+<div id="app"></div>
+<div id="tip"></div>
+
+<script>
+const qs = new URLSearchParams(location.search);
+let TOKEN = qs.get("token") || "";
+let selDate = null, selDept = "all", lastAiIds = new Set(), firstLoad = true;
+const $ = s => document.querySelector(s);
+const fmt = t => { const [h,m]=t.split(":").map(Number); return `${((h+11)%12)+1}:${String(m).padStart(2,"0")} ${h<12?"AM":"PM"}`; };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function askToken(){
+  $("#app").innerHTML = `<div class="card tokenbox" style="margin:24px">
+    <p>Enter the dashboard token (same as MCP_TOKEN)</p>
+    <input id="tk" type="password" placeholder="token"> <button class="day on" id="go">Open</button></div>`;
+  $("#go").onclick = () => { TOKEN = $("#tk").value.trim(); history.replaceState(null,"","?token="+encodeURIComponent(TOKEN)); boot(); };
+}
+
+function layout(){
+  $("#app").innerHTML = `<main>
+    <section class="card">
+      <div class="controls">
+        <div class="days" id="days"></div>
+        <select id="dept"><option value="all">All departments</option></select>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--free)"></i>Free</span>
+          <span><i class="sw" style="background:var(--booked)"></i>Booked</span>
+          <span><i class="sw" style="background:var(--ai-bg);outline:1.5px solid var(--ai)"></i>Booked by AI</span>
+          <span><i class="sw" style="background:var(--past)"></i>Past</span>
+        </div>
+      </div>
+      <div class="doctors" id="doctors"></div>
+    </section>
+    <aside class="card side">
+      <h2>AI receptionist activity</h2>
+      <div class="stats" id="stats"></div>
+      <ul class="feed" id="feed"></ul>
+    </aside></main>`;
+  $("#dept").onchange = e => { selDept = e.target.value; load(); };
+}
+
+function renderDays(today){
+  const base = new Date(today+"T00:00:00");
+  let html = "";
+  for(let i=0;i<7;i++){
+    const d = new Date(base); d.setDate(base.getDate()+i);
+    const iso = d.toLocaleDateString("en-CA");
+    const label = i===0?"Today":i===1?"Tomorrow":d.toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"});
+    html += `<button class="day ${iso===selDate?"on":""} ${d.getDay()===0?"sun":""}" data-d="${iso}">${label}</button>`;
+  }
+  $("#days").innerHTML = html;
+  document.querySelectorAll("button.day[data-d]").forEach(b => b.onclick = () => { selDate = b.dataset.d; load(); });
+}
+
+async function api(path){
+  const r = await fetch(`${path}${path.includes("?")?"&":"?"}token=${encodeURIComponent(TOKEN)}`);
+  if(r.status===401) throw new Error("unauthorized");
+  return r.json();
+}
+
+async function load(){
+  try{
+    const [sch, act] = await Promise.all([api(`/api/schedule?date=${selDate||"today"}`), api(`/api/bookings`)]);
+    if(!selDate) selDate = sch.today;
+    renderDays(sch.today);
+    const deptSel = $("#dept");
+    if(deptSel.options.length===1) sch.departments.forEach(d => deptSel.add(new Option(d,d)));
+    const newIds = new Set(act.recent_ai_activity.map(b=>b.id+b.updated_at));
+    const fresh = firstLoad ? new Set() : new Set([...newIds].filter(x=>!lastAiIds.has(x)));
+    lastAiIds = newIds; firstLoad = false;
+
+    let html = "";
+    for(const doc of sch.doctors){
+      if(selDept!=="all" && doc.dept!==selDept) continue;
+      const free = doc.cells.filter(c=>c.state==="free").length;
+      html += `<div class="doc"><div class="dochead">
+        <div><span class="docname">${esc(doc.name)}</span> <span class="meta">· ${esc(doc.dept)} · ${esc(doc.room)} · ₹${doc.fee}</span></div>
+        <div class="meta">${doc.unavailable?"":`${free} free of ${doc.cells.length} · ${fmt(doc.start)}–${fmt(doc.end)} · ${doc.slot} min`}</div></div>`;
+      if(doc.unavailable){ html += `<div class="off">${esc(doc.unavailable)}</div></div>`; continue; }
+      html += `<div class="slots">` + doc.cells.map(c=>{
+        const b=c.booking, ai=b&&b.source==="ai_agent";
+        const cls = c.state==="booked"?(ai?"ai":"booked"):c.state;
+        const flash = b && fresh.has(b.id+b.updated_at) ? " flash":"";
+        const tip = b?`${b.id} · ${b.patient_name} · ${b.reason}${ai?" · booked by AI":""}`:(c.state==="free"?"Free":"Past");
+        return `<span class="slot ${cls}${flash}" data-tip="${esc(tip)}">${fmt(c.time)}</span>`;
+      }).join("") + `</div></div>`;
+    }
+    $("#doctors").innerHTML = html || `<div class="empty">No doctors in this department.</div>`;
+
+    const s = act.stats;
+    $("#stats").innerHTML = `
+      <div class="stat"><b>${s.booked??0}</b><span>Upcoming booked</span></div>
+      <div class="stat"><b>${s.by_ai??0}</b><span>Handled by AI</span></div>
+      <div class="stat"><b>${s.cancelled??0}</b><span>Cancelled</span></div>
+      <div class="stat"><b>${sch.doctors.filter(d=>!d.unavailable).length}</b><span>Doctors in OPD</span></div>`;
+    $("#feed").innerHTML = act.recent_ai_activity.length ? act.recent_ai_activity.map(b=>`
+      <li><span class="tag ${b.status}">${b.status==="booked"?"BOOKED":"CANCELLED"}</span><b>${esc(b.id)}</b> · ${esc(b.patient_name)}
+      <div class="meta">${esc(b.doctor)} · ${esc(b.date)} ${fmt(b.time)} · ${esc(b.reason)}</div>
+      <div class="meta">${new Date(b.updated_at).toLocaleTimeString("en-IN")} · ****${esc(b.phone.slice(-4))}</div></li>`).join("")
+      : `<li class="empty">No AI bookings yet. Book something through the Talkdesk bot and it appears here.</li>`;
+
+    $("#sub").textContent = `${sch.date_human} · live view, refreshes every 4 s`;
+    $("#clock").textContent = `IST ${sch.now} · live`; $("#dot").className="dot";
+  }catch(e){
+    if(e.message==="unauthorized"){ askToken(); return; }
+    $("#clock").textContent = "server not reachable"; $("#dot").className="dot err";
+  }
+}
+
+document.addEventListener("mouseover", e => { const t=e.target.closest("[data-tip]"); const tip=$("#tip");
+  if(t){ tip.textContent=t.dataset.tip; tip.style.display="block"; } else tip.style.display="none"; });
+document.addEventListener("mousemove", e => { const tip=$("#tip"); tip.style.left=(e.clientX+12)+"px"; tip.style.top=(e.clientY+12)+"px"; });
+
+let timer;
+function boot(){ layout(); load(); clearInterval(timer); timer = setInterval(load, 4000); }
+TOKEN ? boot() : askToken();
+</script>
+</body>
+</html>

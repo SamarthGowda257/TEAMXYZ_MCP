@@ -1,5 +1,5 @@
-# Core MCP SDK — includes MCPServer, Streamable HTTP transport internals
+# Core MCP SDK (2.x: MCPServer + Streamable HTTP transport)
 mcp[cli]==2.3.0
 
-# ASGI server — used directly in server.py to run the Starlette app with auth middleware
+# ASGI server used to run the Starlette app with the auth middleware
 uvicorn>=0.29.0

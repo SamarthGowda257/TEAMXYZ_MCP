@@ -30,3 +30,6 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Local appointment database (recreated and seeded automatically)
+hospital.db
