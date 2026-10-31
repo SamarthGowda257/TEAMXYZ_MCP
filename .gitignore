@@ -33,3 +33,7 @@ htmlcov/
 
 # Local appointment database (recreated and seeded automatically)
 hospital.db
+
+# Local-only shortcuts that may contain the real token
+*.local.html
+.env

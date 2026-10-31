@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>City Hospital · Appointments</title>
+<script>
+  // Double-clicked from disk (file://)? Open the live dashboard on Render instead.
+  if (location.protocol === "file:") {
+    location.replace("https://teamxyz-mcp.onrender.com/dashboard" + location.search);
+  }
+</script>
+
 <style>
   :root{
     --bg:#f6f5f2; --panel:#ffffff; --ink:#1c1b19; --muted:#6d6a63; --line:#e4e1da;
@@ -79,7 +86,9 @@
 
 <script>
 const qs = new URLSearchParams(location.search);
-let TOKEN = qs.get("token") || "";
+const store = { get(){ try { return localStorage.getItem("td_dash_token") || ""; } catch(e){ return ""; } },
+                set(v){ try { localStorage.setItem("td_dash_token", v); } catch(e){} } };
+let TOKEN = qs.get("token") || store.get();
 let selDate = null, selDept = "all", lastAiIds = new Set(), firstLoad = true;
 const $ = s => document.querySelector(s);
 const fmt = t => { const [h,m]=t.split(":").map(Number); return `${((h+11)%12)+1}:${String(m).padStart(2,"0")} ${h<12?"AM":"PM"}`; };
@@ -89,7 +98,7 @@ function askToken(){
   $("#app").innerHTML = `<div class="card tokenbox" style="margin:24px">
     <p>Enter the dashboard token (same as MCP_TOKEN)</p>
     <input id="tk" type="password" placeholder="token"> <button class="day on" id="go">Open</button></div>`;
-  $("#go").onclick = () => { TOKEN = $("#tk").value.trim(); history.replaceState(null,"","?token="+encodeURIComponent(TOKEN)); boot(); };
+  $("#go").onclick = () => { TOKEN = $("#tk").value.trim(); store.set(TOKEN); boot(); };
 }
 
 function layout(){
@@ -188,7 +197,7 @@ document.addEventListener("mouseover", e => { const t=e.target.closest("[data-ti
 document.addEventListener("mousemove", e => { const tip=$("#tip"); tip.style.left=(e.clientX+12)+"px"; tip.style.top=(e.clientY+12)+"px"; });
 
 let timer;
-function boot(){ layout(); load(); clearInterval(timer); timer = setInterval(load, 4000); }
+function boot(){ store.set(TOKEN); if (qs.get("token")) history.replaceState(null,"",location.pathname); layout(); load(); clearInterval(timer); timer = setInterval(load, 4000); }
 TOKEN ? boot() : askToken();
 </script>
 </body>
