@@ -369,7 +369,10 @@ def book_appointment(patient_name: str, phone: str, date: str, time: str,
         con.execute("INSERT INTO bookings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (bid, patient_name.strip().title(), p, chosen["id"], chosen["name"], chosen["dept"],
                      d.isoformat(), t, reason.strip() or "Consultation", "booked", "ai_agent", ts, ts))
-    return {"status": "booked", "booking_id": bid, "patient_name": patient_name.strip().title(),
+    msg = (f"Booking confirmed. Booking ID {bid}. {chosen['name']} ({chosen['dept']}), "
+           f"{human_date(d)} at {human_time(t)}, room {chosen['room']}, fee Rs {chosen['fee']}. "
+           f"Tell the caller the booking ID {bid} and ask them to keep it.")
+    return {"message": msg, "status": "booked", "booking_id": bid, "patient_name": patient_name.strip().title(),
             "doctor": chosen["name"], "department": chosen["dept"], "date": human_date(d),
             "time": human_time(t), "room": chosen["room"], "fee_inr": chosen["fee"],
             "instructions": "Please arrive 15 minutes early with a photo ID. An SMS confirmation has been sent."}
@@ -405,7 +408,8 @@ def reschedule_appointment(booking_id: str, new_date: str, new_time: str) -> dic
     with _lock, db() as con:
         r = con.execute("SELECT * FROM bookings WHERE id=?", (bid,)).fetchone()
         if not r or r["status"] != "booked":
-            return {"status": "failed", "reason": f"No active booking {bid}."}
+            return {"status": "failed", "reason": f"No active booking {bid} (it may be cancelled or not exist). "
+                    "Tell the caller and offer a new booking."}
         doc = DOC_BY_ID[r["doctor_id"]]
         if t not in free_slots(con, doc, d):
             fail = {"status": "failed", "reason": "That slot is not available.",
@@ -415,8 +419,10 @@ def reschedule_appointment(booking_id: str, new_date: str, new_time: str) -> dic
             return fail
         con.execute("UPDATE bookings SET date=?, time=?, updated_at=?, source='ai_agent' WHERE id=?",
                     (d.isoformat(), t, now().isoformat(timespec="seconds"), bid))
-    return {"status": "rescheduled", "booking_id": bid, "doctor": doc["name"],
-            "date": human_date(d), "time": human_time(t)}
+    msg = (f"Rescheduled. Booking ID {bid} is now with {doc['name']} on {human_date(d)} at "
+           f"{human_time(t)}, room {doc['room']}, fee Rs {doc['fee']}. Tell the caller the booking ID {bid}.")
+    return {"message": msg, "status": "rescheduled", "booking_id": bid, "doctor": doc["name"],
+            "date": human_date(d), "time": human_time(t), "room": doc["room"], "fee_inr": doc["fee"]}
 
 
 @mcp.tool()
@@ -430,10 +436,13 @@ def cancel_appointment(booking_id: str, phone: str = "") -> dict:
         if phone and clean_phone(phone) != r["phone"]:
             return {"status": "failed", "reason": "Phone number does not match this booking."}
         if r["status"] == "cancelled":
-            return {"status": "already_cancelled", "booking_id": bid}
+            return {"message": f"Booking {bid} was already cancelled earlier. Offer a new booking if needed.",
+                    "status": "already_cancelled", "booking_id": bid}
         con.execute("UPDATE bookings SET status='cancelled', updated_at=?, source='ai_agent' WHERE id=?",
                     (now().isoformat(timespec="seconds"), bid))
-    return {"status": "cancelled", "booking_id": bid, "doctor": r["doctor"],
+    msg = (f"Cancelled. Booking ID {bid} with {r['doctor']} on {human_date(date.fromisoformat(r['date']))} "
+           f"at {human_time(r['time'])} is cancelled. Tell the caller the booking ID {bid} is cancelled.")
+    return {"message": msg, "status": "cancelled", "booking_id": bid, "doctor": r["doctor"],
             "date": human_date(date.fromisoformat(r["date"])), "time": human_time(r["time"])}
 
 
