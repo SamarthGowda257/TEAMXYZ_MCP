@@ -93,6 +93,12 @@ def main(a):
         sig = top["signals"] if top else {}
         print(f"{'PASS' if ok3 else 'MISS'} [{kind:8}] {q[:52]:52} -> {(top['ref'] if top else '(nothing)'):28} "
               f"fts={sig.get('fts')} trgm={sig.get('trgm')} vec={sig.get('vec')} words={sig.get('words')} {d['ms']}ms")
+        if a.verbose:
+            by_vec = sorted([h for h in raw if h["signals"].get("vec") is not None], key=lambda h: -h["signals"]["vec"])
+            vr = next((i + 1 for i, h in enumerate(by_vec) if exp and matches(h, exp)), None)
+            right_v = by_vec[vr - 1]["signals"]["vec"] if vr else None
+            print(f"       meaning leg: " + ", ".join(f"{h['ref'].split(':', 1)[-1]} {h['signals']['vec']:.3f}" for h in by_vec[:3])
+                  + (f" | right passage: rank {vr}, cos {right_v:.3f}" if vr else (" | right passage not in top 8" if exp else "")))
     n = len(rows)
     h1 = sum(r[1] for r in rows) / n
     h3 = sum(r[2] for r in rows) / n
@@ -125,5 +131,6 @@ def main(a):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-hit3", type=float, default=0.0)
+    ap.add_argument("--verbose", action="store_true", help="print the meaning leg's top candidates per question")
     ap.add_argument("--require", default="", help="comma list of kinds that must all pass, e.g. keyword,typo,code,negative")
     main(ap.parse_args())
