@@ -73,7 +73,7 @@ Keep the existing ones (marked *existing*) and **update their descriptions** whe
 | `medicine_name` **new** | The medicine to refill, e.g. Amlodipine 5 mg. |
 | `bill_id` **new** | A bill ID like BL-55012, only if the patient says one. |
 | `symptoms` **new** | The patient's main symptoms in their own words. |
-| `hospital_topic` **new** | What the patient asks about: address, hours, parking, visiting, emergency, facilities, pharmacy or contact. |
+| `hospital_topic` **new** | The patient's question about the hospital in their own words, e.g. "can my son stay overnight with me", "is there wifi", "where is parking". |
 | `preferred_language` **new** | The language the patient prefers, e.g. Kannada, Hindi, English. |
 | `caregiver_name` **new** | The caregiver's or family member's name. |
 | `caregiver_phone` **new** | The caregiver's 10-digit mobile number. |
@@ -89,7 +89,7 @@ Keep the existing ones (marked *existing*) and **update their descriptions** whe
 | `handoff_id` **new** | A handoff reference like HO-12345. |
 | `conversation_summary` **new** | One or two sentences summarising what the patient asked and what was done. |
 | `conversation_topics` **new** | Comma-separated topics, e.g. mri, insurance, booking. |
-| `memory_query` **new** | What the patient wants to recall, e.g. MRI report, insurance question. |
+| `memory_query` **new** | What the patient wants to recall, in their own words, e.g. "my MRI report", "booking WN-48213". |
 | `pain_score` **new** | Pain from 0 to 10. |
 | `has_fever` **new** | yes or no. |
 | `symptoms_worse` **new** | yes or no: are symptoms worse since the visit. |
@@ -249,12 +249,14 @@ Never cancel or change a booking that the server says does not belong to this pa
 | `verify_patient` | phone\* → `patient_phone`; date_of_birth\* → `date_of_birth` |
 
 ### 5.6 Info Agent (existing, extend it)
-**Description:** `General hospital information: doctors, departments, fees, timings, which department for a symptom, facilities and visit preparation.`
+**Description:** `General hospital information: doctors, departments, fees, timings, which department for a symptom, facilities, visitor and FAQ questions, and visit preparation.`
 **Instructions:**
 ```
 1. get_doctors for doctors of a department or a named doctor (days, hours, fee, room, languages). For free slots the Booking Agent is better.
 2. suggest_department when the patient describes symptoms: give the department and the disclaimer. If it returns emergency true, tell the patient to call 108 now and hand back for an urgent handoff.
-3. get_hospital_info for address, hours, parking, visiting, emergency, facilities, pharmacy, contact.
+3. get_hospital_info for any question about the hospital itself: address, hours, parking, visiting, food, wifi, payment,
+   cashless insurance, records, packages, wheelchairs and more. Pass the patient's question in their own words as topic
+   and read the answer back as it is. If it has no answer, offer a call back instead of guessing.
 4. get_visit_instructions for fasting, documents and arrival time before a test or visit.
 ```
 **Skills:**
@@ -330,6 +332,13 @@ Priya 98450 00003 / 1997-01-20 · Rahul 98450 00004 / 1981-09-10.
 | 10 | "Did I ask you about my MRI report last week?" (Priya + DOB) | Support → search_past_interactions | Yes, with the date |
 | 11 | "What medicine should I take for a headache?" | Receptionist / Info | Declines advice, offers a department |
 | 12 | "I'm 67 and need a wheelchair for my visit." (Shanthamma) | Care Assist → request_assistance | Wheelchair arranged |
+| 13 | "Can my son stay overnight with me in the ward?" | Info → get_hospital_info | One attendant pass; can stay overnight |
+| 14 | "Where can I grab a bite to eat?" | Info → get_hospital_info | Cafeteria, ground floor, 7 AM to 10 PM (meaning search) |
+| 15 | "I need a cardiolgy check up" (typo on purpose, chat) | Info → suggest_department | Cardiology |
+| 16 | "Anything about WN-48213?" (Shanthamma + DOB) | Support → search_past_interactions | Finds the booking by its code |
+
+Tests 13–16 use hybrid search. If 14 says it has no answer, the meaning part may be paused for a minute by Google's
+free limit; the rest still works.
 
 If a tool input is empty in Insight, improve that variable's description; if the wrong agent answers, tighten
 its line in the Conditions.
