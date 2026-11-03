@@ -427,7 +427,8 @@ def seed(verbose: bool = False) -> dict:
                     r = rnd.random()
                     status = "completed" if r < 0.85 else ("no_show" if r < 0.91 else "cancelled")
                 else:
-                    status = "cancelled" if rnd.random() < 0.05 else "booked"
+                    # (no cancelled holes in Dr. Iyer's fully booked week, so the waitlist demo holds)
+                    status = "cancelled" if rnd.random() < 0.05 and not (doc_id == iyer and k <= 7) else "booked"
                 ch = rnd.choices(["web", "voice", "chat", "staff"], [35, 30, 30, 5])[0]
                 a = add_appt(patient_id=pid, doctor_id=doc_id, appt_date=dd, appt_time=hh, status=status,
                              reason=rnd.choice(REASONS[dept]), channel=ch, created_at=created)

@@ -244,6 +244,19 @@ def next_available(c, docs, start: date, pref="any", days=14):
     return None
 
 
+def first_day_with_time(c, docs, proc, hh: str, days=14) -> date | None:
+    """First day (same start as find_slots' 'next available') on which hh is free for the test or any of the doctors."""
+    start = config.today() if config.now().hour < 19 else config.today() + timedelta(days=1)
+    for k in range(days):
+        d = start + timedelta(days=k)
+        if proc:
+            if hh in dict(free_for_procedure(c, proc, d)):
+                return d
+        elif any(hh in t for t in free_for_doctors(c, docs, d).values()):
+            return d
+    return None
+
+
 # ------------------------------------------------------------------ helpers
 def _appt_view(a: dict) -> dict:
     if a["doctor_id"]:
@@ -295,9 +308,12 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
     p_norm = norm_phone(phone)
     if not patient_id and not p_norm:
         return fail("invalid_input", "Please share a valid 10 digit mobile number for the booking.")
-    d, err = _resolve_date(date_text)
-    if err:
-        return err
+    earliest = _wants_earliest(date_text)   # 'next available' carried over from find_available_slots
+    d = None
+    if not earliest:
+        d, err = _resolve_date(date_text)
+        if err:
+            return err
     hh = parse_time(time_text)
     if not hh:
         return fail("invalid_input", "I didn't catch the time. Please say a time like 10:30 AM.")
@@ -331,6 +347,10 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
                         patient_code=pt.random_code("PT", 6), full_name=name, phone=p_norm, date_of_birth=dob,
                         is_guest=dob is None, created_at=config.now())).inserted_primary_key[0]
                     patient = pt.get_by_id(c, pid)
+            if earliest:
+                d = first_day_with_time(c, docs, proc, hh)
+                if not d:
+                    return fail("slot_taken", f"{human_time(hh)} isn't free in the next two weeks. Which day would you like?")
             # idempotency: same key, or same patient + same slot, returns the existing booking
             if key:
                 ex = c.execute(select(A).where(A.c.idempotency_key == key)).mappings().first()

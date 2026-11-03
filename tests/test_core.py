@@ -236,3 +236,18 @@ def test_eval_fixes_3nov(monkeypatch):
     assert "security desk" in records.hospital_info("I lost my phone in the waiting area").message.lower()
     assert records.hospital_info("what is the cricket score today").data.get("found") is False
     assert "Outer Ring Road" in records.hospital_info("where are you located").message
+
+
+def test_eval_fixes_v3():
+    """Regressions from the v3 evaluation dataset replay (3 Nov)."""
+    from app.services import blackboard as bb
+    seed.reset(verbose=False); ref.load(); bb.clear_all()
+    # Booking agent carries 'next available' from find_available_slots into book_appointment: book that same day
+    s = ap.find_slots("next available", doctor_name="Dr. Harish Gowda")
+    t = parse_time(s.data["doctors"][0]["free_slots"][0])
+    b = ap.book("9845000003", "next available", t, doctor_name="Dr. Harish Gowda", date_of_birth="1997-01-20")
+    assert b.ok and b.data["date_iso"] == s.data["date_iso"]
+    # Dr. Rajesh Iyer stays fully booked for the coming week (waitlist demo): no cancelled holes
+    iyer = ref.find_doctor("Rajesh Iyer")
+    for k in range(1, 8):
+        assert not ap.free_for_doctors(db.engine.connect(), [iyer], config.today() + timedelta(days=k)).get(iyer["id"])
