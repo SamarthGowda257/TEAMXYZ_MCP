@@ -38,8 +38,9 @@ WEIGHTS = {"f": 1.0, "t": 1.0, "v": 1.0, "c": 3.0}
 TRGM_MIN = 0.45          # strict_word_similarity (whole words) a query word needs: typos ~0.5-0.6, "car" in "cardiology" 0.25
 LEG_LIMIT = 20           # meaning leg depth
 # Only natural-language text gets a meaning vector. Action logs ("book appointment: ... (WN-48213)") are short,
-# machine-written records of codes, names and dates: keyword, fuzzy and code matching are the right tools for them,
-# and skipping them keeps the embeddings inside the provider's free tier.
+# machine-written records of codes, names and dates: keyword, fuzzy and code matching are the right tools for them.
+# Knowledge passages (~95) are embedded eagerly; a patient's notes only when that patient shows up (verified, session
+# warm-up, new note), because the free tier allows roughly 1,000 embeddings a day and most patients never call.
 EMBED_KINDS = "('kb', 'note')"
 KW_LIMIT = 100           # keyword legs go deeper: common words tie across many passages
 _embed_lock = threading.Lock()
@@ -130,14 +131,14 @@ def vector_ready() -> bool:
 
 def embed_pending(limit: int = 200, patient_id: int | None = None) -> int:
     """Background: give un-embedded rows a vector. Re-uses embedding_cache first (free), then calls the provider for
-    the rest, knowledge passages and notes first. Returns rows newly embedded. Never raises."""
+    the rest. Without patient_id: knowledge passages only. With patient_id: that patient's notes. Never raises."""
     if not vector_ready():
         return 0
     if not _embed_lock.acquire(timeout=0 if patient_id is None else 10):
         return 0
     try:
         model = emb.model_id()
-        pf = "AND patient_id = :pid" if patient_id else ""
+        pf = "AND patient_id = :pid AND kind = 'note'" if patient_id else "AND kind = 'kb'"
         if not patient_id:
             limit = min(limit, emb.budget_left()) if emb.provider() == "gemini" else limit
         args = {"m": model, "pid": patient_id, "n": limit}
@@ -145,7 +146,7 @@ def embed_pending(limit: int = 200, patient_id: int | None = None) -> int:
             _pg_path(c)
             filled = c.execute(text(f"""UPDATE search_docs d SET embedding = e.embedding FROM embedding_cache e
                 WHERE d.embedding IS NULL AND d.kind IN {EMBED_KINDS} AND e.model = :m AND e.chash = d.chash
-                {pf.replace('patient_id', 'd.patient_id')}"""), args).rowcount or 0
+                {pf.replace('patient_id', 'd.patient_id').replace('kind =', 'd.kind =')}"""), args).rowcount or 0
             todo = c.execute(text(f"""SELECT chash, min(title) AS title, min(body) AS body,
                     max(CASE kind WHEN 'kb' THEN 3 WHEN 'note' THEN 2 ELSE 1 END) AS pri, max(created_at) AS at
                 FROM search_docs WHERE embedding IS NULL AND kind IN {EMBED_KINDS} {pf}
@@ -305,7 +306,10 @@ def _search_py(q, patient_id, ref_prefixes, k, ignore=frozenset()) -> dict:
     scored = []
     for r in rows:
         hay = f"{r['title'] or ''} {r['body']}".lower()
-        s = sum(1 for w in ws if w in hay or (len(w) > 4 and w[:-1] in hay)) + sum(3 for c_ in cs if c_.lower() in hay)
+        hw = set(re.findall(r"[a-z0-9]+", hay))
+        # whole words, or a shared stem for longer words ("visiting" ~ "visits"); never inside a word ("car" in "cardiology")
+        s = sum(1 for w in ws if w in hw or (len(w) > 4 and any(h.startswith(w[:-2]) and len(h) > 4 for h in hw))) \
+            + sum(3 for c_ in cs if c_.lower() in hay)
         if s:
             ca = r["created_at"]
             ts = ca.timestamp() if isinstance(ca, datetime) else 0
@@ -336,9 +340,11 @@ def status(brief: bool = False):
         try:
             with db.engine.connect() as c:
                 counts["docs"] = c.execute(text("SELECT count(*) FROM search_docs")).scalar()
-                counts["embeddable"] = c.execute(text(f"SELECT count(*) FROM search_docs WHERE kind IN {EMBED_KINDS}")).scalar()
+                counts["kb_total"] = c.execute(text("SELECT count(*) FROM search_docs WHERE kind = 'kb'")).scalar()
                 if db.IS_POSTGRES and db.SEARCH["vector"]:
-                    counts["embedded"] = c.execute(text("SELECT count(*) FROM search_docs WHERE embedding IS NOT NULL")).scalar()
+                    r = c.execute(text("SELECT count(*) FILTER (WHERE kind = 'kb'), count(*) FILTER (WHERE kind = 'note') "
+                                       "FROM search_docs WHERE embedding IS NOT NULL")).one()
+                    counts["kb_embedded"], counts["notes_embedded"] = r[0], r[1]
         except Exception as e:
             counts["error"] = str(e).splitlines()[0][:120]
         _status_cache = (time.monotonic(), counts)

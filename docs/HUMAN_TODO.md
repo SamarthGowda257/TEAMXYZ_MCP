@@ -63,10 +63,12 @@ Keyword and typo search already work on the live server with nothing to set up. 
     chat or screenshots. No billing or card needed: leave the project on the free tier.
 16. [ ] **Render** → `teamxyz-mcp` → **Environment** → add `EMBEDDINGS_API_KEY` = the key → **Save** (Render redeploys).
 17. [ ] **GitHub** → repository **Settings** → **Secrets and variables** → **Actions** → **New repository secret** →
-    name `EMBEDDINGS_API_KEY`, value = the same key. This lets the "Search eval (real embeddings)" workflow measure
+    name `EMBEDDINGS_API_KEY`. Use a key from a **separate Google project** (AI Studio → Create API key → *Create API
+    key in new project*): free quotas are per project, so test runs never eat the live server's daily quota. This lets the "Search eval (real embeddings)" workflow measure
     quality with the real model (Claude can start it and read the results; the key never leaves GitHub).
 18. [ ] **Check it worked** (2–5 minutes after the deploy): `https://teamxyz-mcp.onrender.com/health` shows
-    `"search":"hybrid"`. Detail: `/api/ops/system?token=<DASHBOARD_TOKEN>` → `search.embedded` climbs to about 900.
+    `"search":"hybrid"`. Detail: `/api/ops/system?token=<DASHBOARD_TOKEN>` → `search.kb_embedded` reaches `kb_total` (95);
+    patients' notes are embedded when that patient is verified. `embeddings.last_quota` names any Google limit hit.
     Try it: `/api/ops/search?token=<DASHBOARD_TOKEN>&q=where can I grab a bite to eat` should return `kb:faq:food`.
 19. [ ] Supabase: nothing to click. The server enables the `vector` and `pg_trgm` extensions itself (schema `extensions`).
     Only if `/api/ops/system` shows a `setup_error` about an extension: Supabase → **Database** → **Extensions** →

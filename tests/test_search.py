@@ -137,3 +137,17 @@ def test_no_key_means_meaning_leg_off(monkeypatch):
     monkeypatch.setattr(config, "EMBEDDINGS_PROVIDER", "gemini")
     monkeypatch.setattr(config, "EMBEDDINGS_API_KEY", "")
     assert embeddings.provider() == "none" and embeddings.embed_query("hello") is None
+
+
+def test_quota_error_tells_day_from_minute(gemini, monkeypatch):
+    import httpx
+    body = {"error": {"code": 429, "message": "You exceeded your current quota", "details": [
+        {"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+         "violations": [{"quotaMetric": "generativelanguage.googleapis.com/embed_content_free_tier_requests",
+                         "quotaId": "EmbedContentRequestsPerDayPerProjectPerModel-FreeTier"}]},
+        {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "41s"}]}}
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: FakeResp(429, body))
+    assert embeddings.embed_documents(["x"]) is None
+    st = embeddings.status()
+    assert st["last_quota"].startswith("EmbedContentRequestsPerDay") and st["breaker_open"]
+    assert embeddings._breaker_until - __import__("time").monotonic() > 3000      # per-day: stop for an hour

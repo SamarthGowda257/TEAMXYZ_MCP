@@ -128,8 +128,11 @@ procedures with preparation, insurers, 28 FAQs in `app/kb.py`). Three legs run i
   knowledge passages have an HNSW index (`WHERE kind = 'kb'`).
 - **Where it is used**: `search_past_interactions`; `get_hospital_info` (free-text questions); `suggest_department`
   after the deterministic red-flag and keyword rules (a meaning match to the emergency passage only ever escalates).
-- **Embeddings**: only natural-language text (knowledge passages and notes, about 900 rows) is embedded, in the
-  background (startup, `/jobs/run`, after a note is saved or a patient verified). `embedding_cache` (model + content
+- **Embeddings**: only natural-language text is embedded, in the background: the ~95 knowledge passages at startup
+  and in `/jobs/run`; a patient's notes when that patient is verified, warms a session or gets a new note (most
+  patients never call, so embedding all ~800 seeded notes up front would spend the free tier's ~1,000 daily requests
+  for nothing). A 429 records which Google limit was hit (`last_quota`): per-day pauses calls for an hour,
+  per-minute for Google's suggested delay. `embedding_cache` (model + content
   hash) survives demo resets, so re-seeding costs no API calls. Daily budget `EMBED_DAILY_BUDGET` (900) keeps the
   free tier for live queries. The query embedding is the only network call in a live tool call: 1.5 s timeout,
   7-day cache, and a circuit breaker; on any failure the search runs on keyword + fuzzy without the agent noticing.

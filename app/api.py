@@ -651,6 +651,7 @@ def ops_search(q: str, phone: str = "", scope: str = "kb", raw: bool = False):
             raise HTTPException(404, detail={"error_code": "not_found", "message": "No patient with that phone."})
         pid = p["id"]
         search.sync(patient_id=pid)
+        search.embed_pending(50, patient_id=pid)     # as verify_patient would trigger in a real call
     t0 = time.perf_counter()
     prefixes = ("kb:dept:", "kb:faq:emergency_signs") if scope == "dept" else ("kb:",)
     from .services.records import ROUTING_FILLER

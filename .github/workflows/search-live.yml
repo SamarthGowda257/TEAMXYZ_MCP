@@ -1,6 +1,7 @@
 name: Search eval (real embeddings)
 
-# Manual only: it spends Gemini free-tier quota (about 1,000 embeddings for the knowledge base and notes).
+# Manual only: it spends Gemini free-tier quota (~95 knowledge passages, a few patient notes, ~30 queries).
+# Best with a key from a separate Google project, so it never uses the live server's daily quota.
 # Needs the repository secret EMBEDDINGS_API_KEY (Google AI Studio key). Read-only for every external system.
 on:
   workflow_dispatch:
@@ -33,10 +34,12 @@ jobs:
           nohup python server.py > server.log 2>&1 &
           for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 2; done
           curl -s localhost:8000/health | grep '"search":"hybrid"'
-          for i in $(seq 1 60); do
-            s=$(curl -s "localhost:8000/api/ops/system?token=ci-token" | python -c "import json,sys; s=json.load(sys.stdin)['search']; print(s.get('embedded',0), s.get('embeddable',0), s['embeddings']['breaker_open'], s['embeddings']['last_error'])")
-            echo "embedded/embeddable/breaker/last_error: $s"
-            set -- $s; [ "$1" -ge "$2" ] && break; sleep 5
+          for i in $(seq 1 36); do
+            s=$(curl -s "localhost:8000/api/ops/system?token=ci-token" | python -c "import json,sys; s=json.load(sys.stdin)['search']; e=s['embeddings']; print(s.get('kb_embedded',0), s.get('kb_total',0), e['breaker_open'], e['last_quota'], '|', e['last_error'])")
+            echo "kb_embedded kb_total breaker quota | error: $s"
+            set -- $s; [ "$1" -gt 0 ] && [ "$1" -ge "$2" ] && break
+            [ "$3" = "True" ] && echo "Gemini refused (see error above); evaluating without the meaning leg" && break
+            sleep 5
           done
         env:
           MCP_BEARER_TOKEN: ci-token

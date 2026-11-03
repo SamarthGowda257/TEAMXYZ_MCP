@@ -24,7 +24,7 @@ log = logging.getLogger("wellnest.embeddings")
 GEMINI = "https://generativelanguage.googleapis.com/v1beta"
 BATCH = 100                     # Gemini batchEmbedContents limit
 STATS = {"doc_calls": 0, "docs_embedded": 0, "query_calls": 0, "query_cache_hits": 0, "errors": 0,
-         "last_error": None, "last_ok": None}
+         "last_error": None, "last_quota": None, "last_ok": None}
 _breaker_until = 0.0
 _lock = threading.Lock()
 
@@ -62,6 +62,36 @@ def _hash_embed(t: str) -> list[float]:
     return _unit(v)
 
 
+class QuotaError(RuntimeError):
+    """HTTP 429 from Gemini, with which limit was hit (per minute or per day) and the suggested wait."""
+
+    def __init__(self, quota: str, retry_s: float):
+        self.quota, self.retry_s = quota, retry_s
+        self.per_day = "day" in quota.lower()
+        super().__init__(f"HTTP 429 quota exceeded: {quota or 'unknown limit'}" + (f", retry in {retry_s:.0f}s" if retry_s else ""))
+
+    @classmethod
+    def from_response(cls, r):
+        quota, retry = "", 0.0
+        try:
+            for d in r.json().get("error", {}).get("details", []):
+                for v in d.get("violations", []) or []:
+                    quota = quota or v.get("quotaId") or v.get("quotaMetric", "")
+                if str(d.get("retryDelay", "")).endswith("s"):
+                    retry = float(d["retryDelay"][:-1] or 0)
+        except (ValueError, AttributeError, TypeError):
+            pass
+        return cls(quota, retry)
+
+
+def _backoff(e: Exception, default: float) -> float:
+    """Per-day quota: stop for an hour (it won't come back sooner). Per-minute: Google's retry hint, at least 60 s."""
+    if isinstance(e, QuotaError):
+        STATS["last_quota"] = e.quota or None
+        return 3600.0 if e.per_day else max(60.0, e.retry_s)
+    return default
+
+
 def _breaker_open() -> bool:
     return time.monotonic() < _breaker_until
 
@@ -82,6 +112,8 @@ def _gemini(texts: list[str], task: str, timeout: float) -> list[list[float]]:
                           "outputDimensionality": config.EMBEDDINGS_DIM} for t in texts]}
     r = httpx.post(f"{GEMINI}/models/{m}:batchEmbedContents", json=body, timeout=timeout,
                    headers={"x-goog-api-key": config.EMBEDDINGS_API_KEY, "content-type": "application/json"})
+    if r.status_code == 429:
+        raise QuotaError.from_response(r)
     if r.status_code != 200:
         msg = r.text[:300]
         try:
@@ -131,8 +163,7 @@ def embed_documents(texts: list[str]) -> list[list[float]] | None:
             out += _gemini(texts[i:i + BATCH], "RETRIEVAL_DOCUMENT", timeout=30)
             STATS["doc_calls"] += 1
     except Exception as e:
-        # 429 = free-tier quota: back off longer so the background backfill doesn't hammer it
-        _trip(f"documents: {e}", 300 if "429" in str(e) else 60)
+        _trip(f"documents: {e}", _backoff(e, 60.0))
         return None
     STATS["docs_embedded"] += len(out)
     STATS["last_ok"] = config.now().isoformat()
@@ -162,7 +193,7 @@ def embed_query(q: str) -> list[float] | None:
     try:
         v = _gemini([q], "RETRIEVAL_QUERY", timeout=config.EMBEDDINGS_TIMEOUT)[0]
     except Exception as e:
-        _trip(f"query: {e}")
+        _trip(f"query: {e}", _backoff(e, 60.0))
         return None
     STATS["query_calls"] += 1
     STATS["last_ok"] = config.now().isoformat()
