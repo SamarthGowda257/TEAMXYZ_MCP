@@ -1,6 +1,6 @@
-# CLAUDE.md — CareLine (TeamXYZ, Talkdesk AI Hackday)
+# CLAUDE.md — WellNest (TeamXYZ, Talkdesk AI Hackday)
 
-You are building **CareLine V2**: the backend, MCP server and website for "CareLine Hospitals, Bengaluru", a hospital customer-experience product whose chat and voice support runs on **Talkdesk**. Everything lives in this one repo (`SamarthGowda257/TEAMXYZ_MCP`).
+You are building **WellNest V2**: the backend, MCP server and website for "WellNest Hospitals, Bengaluru", a hospital customer-experience product whose chat and voice support runs on **Talkdesk**. Everything lives in this one repo (`SamarthGowda257/TEAMXYZ_MCP`).
 
 **Read these before writing any code, in this order:**
 

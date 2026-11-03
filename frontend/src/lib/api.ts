@@ -1,6 +1,6 @@
-// API client for the CareLine backend (/api). Same services as the Talkdesk MCP tools.
-const TOKEN_KEY = "careline_token";
-const OPS_KEY = "careline_ops_token";
+// API client for the WellNest backend (/api). Same services as the Talkdesk MCP tools.
+const TOKEN_KEY = "wellnest_token";
+const OPS_KEY = "wellnest_ops_token";
 
 function readStore(k: string): string | null {
   try { return localStorage.getItem(k); } catch { return null; }
@@ -11,7 +11,7 @@ function writeStore(k: string, v: string | null) {
 
 export const session = {
   token: () => readStore(TOKEN_KEY),
-  set: (t: string | null) => { writeStore(TOKEN_KEY, t); window.dispatchEvent(new Event("careline-auth")); },
+  set: (t: string | null) => { writeStore(TOKEN_KEY, t); window.dispatchEvent(new Event("wellnest-auth")); },
   loggedIn: () => !!readStore(TOKEN_KEY),
   opsToken: () => readStore(OPS_KEY),
   setOps: (t: string | null) => writeStore(OPS_KEY, t),
@@ -34,7 +34,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   try {
     res = await fetch(path, { method: opts.method || "GET", headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
   } catch {
-    throw new ApiError("We couldn't reach CareLine. Check your connection and try again.", 0, "network");
+    throw new ApiError("We couldn't reach WellNest. Check your connection and try again.", 0, "network");
   }
   let data: any = {};
   try { data = await res.json(); } catch { /* empty */ }

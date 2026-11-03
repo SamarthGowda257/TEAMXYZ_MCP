@@ -62,10 +62,10 @@ function OverviewBody({ me }: { me: Me }) {
         ) : <p className="quiet">Nothing else booked.</p>}
       </section>
       <section className="panel" aria-labelledby="mem-h">
-        <h2 id="mem-h" className="panel-h">What CareLine remembers</h2>
+        <h2 id="mem-h" className="panel-h">What WellNest remembers</h2>
         {me.snapshot.recent_notes?.length ? <ul className="notes">{me.snapshot.recent_notes.map((n) => <li key={n}>{n}</li>)}</ul>
           : <p className="quiet">Your conversations with the assistant will be summarised here.</p>}
-        <button type="button" className="btn btn-quiet btn-sm token-shape" onClick={openChat}><MessageCircle size={18} aria-hidden="true" />Ask CareLine</button>
+        <button type="button" className="btn btn-quiet btn-sm token-shape" onClick={openChat}><MessageCircle size={18} aria-hidden="true" />Ask WellNest</button>
       </section>
     </div>
   );
@@ -172,7 +172,7 @@ function ApptRow({ a, onChange }: { a: Appointment; onChange: () => void }) {
       )}
       {mode === "move" && (
         <div className="inline-confirm">
-          {a.is_procedure ? <p>To move a scan, ask CareLine by chat or call 080 4000 1234.</p> : (
+          {a.is_procedure ? <p>To move a scan, ask WellNest by chat or call 080 4000 1234.</p> : (
             <>
               <DateStrip value={date} onChange={setDate} />
               {slots ? <SlotGrid slots={slots} value={pick?.time} onPick={setPick} /> : <Loading label="Finding times" />}
@@ -224,7 +224,7 @@ function ReportsBody() {
   }
   if (list.loading) return <Loading />;
   if (list.error) return <ErrorNote message={list.error} onRetry={list.reload} />;
-  if (!list.data?.length) return <Empty title="No reports yet">Reports from tests at CareLine appear here as soon as the lab finishes them.</Empty>;
+  if (!list.data?.length) return <Empty title="No reports yet">Reports from tests at WellNest appear here as soon as the lab finishes them.</Empty>;
   const d = detail.data;
   return (
     <div className="split">

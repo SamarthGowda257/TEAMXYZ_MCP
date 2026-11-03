@@ -107,7 +107,7 @@ PUBLIC_BASE_URL=https://<render-app>.onrender.com
 TALKDESK_TOUCHPOINT_ID=       # empty until the team creates it
 TALKDESK_REGION=td-us-1       # confirm with the team
 # email
-SMTP_HOST= SMTP_PORT=587 SMTP_USER= SMTP_PASSWORD= EMAIL_FROM="CareLine Hospitals <...>"
+SMTP_HOST= SMTP_PORT=587 SMTP_USER= SMTP_PASSWORD= EMAIL_FROM="WellNest Hospitals <...>"
 # ops
 DASHBOARD_TOKEN= JOBS_TOKEN=
 # optional

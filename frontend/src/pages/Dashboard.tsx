@@ -35,7 +35,7 @@ export function Dashboard() {
   const seen = useRef<Set<string>>(new Set());
   const [fresh, setFresh] = useState<Set<string>>(new Set());
 
-  useEffect(() => { document.title = "Front desk live · CareLine"; }, []);
+  useEffect(() => { document.title = "Front desk live · WellNest"; }, []);
   useEffect(() => { if (qs.get("token")) { session.setOps(qs.get("token")); setQs({}, { replace: true }); } }, []); // eslint-disable-line
 
   const load = useCallback(async () => {
@@ -56,7 +56,7 @@ export function Dashboard() {
   return (
     <div className="dash">
       <header className="dash-top">
-        <Link to="/" className="wordmark small"><Mark size={28} /> <span>CareLine</span></Link>
+        <Link to="/" className="wordmark small"><Mark size={28} /> <span>WellNest</span></Link>
         <h1>Front desk, live</h1>
         <p className="row-sub">{s ? `${s.date} · updated ${stamp} · email ${s.email_mode}, SMS and WhatsApp simulated · ${s.db}` : "Loading…"}</p>
       </header>
@@ -160,13 +160,13 @@ function TokenGate({ bad, onToken }: { bad: boolean; onToken: (t: string) => voi
 
 export function Pay() {
   const [qs] = useSearchParams();
-  useEffect(() => { document.title = "Pay a bill · CareLine"; }, []);
+  useEffect(() => { document.title = "Pay a bill · WellNest"; }, []);
   return (
     <div className="accept">
       <div className="accept-card">
         <h1>Pay bill {qs.get("bill") || ""}</h1>
-        <p>This is a hackathon demo, so no payment is taken here. In a real deployment this page would hand over to the hospital's payment gateway. CareLine never asks for card details by chat or phone.</p>
-        <Link className="btn btn-primary token-shape" to="/portal">Back to My CareLine</Link>
+        <p>This is a hackathon demo, so no payment is taken here. In a real deployment this page would hand over to the hospital's payment gateway. WellNest never asks for card details by chat or phone.</p>
+        <Link className="btn btn-primary token-shape" to="/portal">Back to My WellNest</Link>
       </div>
     </div>
   );

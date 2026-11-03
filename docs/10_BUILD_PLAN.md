@@ -12,7 +12,7 @@ Timeline: build Tue 3 Nov → **code freeze Wed 4 Nov 12:30 IST**. Demos 2 PM. W
 ## Phase 1 — Skeleton without breaking V1 (1–1.5 h)
 - [ ] Restructure into `app/` (or keep `server.py` as the entry that imports `app`) so the MCP endpoint path, transport and auth are identical.
 - [ ] `config.py`, `db.py` (pool), `util/normalize.py` (+ tests), `util/envelope.py`, `metrics.py`, `@timed_tool`, `/health`.
-- [ ] Re-implement the 6 V1 tools on top of an in-memory repository first (same behaviour), returning the new envelope. Rename branding to CareLine Hospitals.
+- [ ] Re-implement the 6 V1 tools on top of an in-memory repository first (same behaviour), returning the new envelope. Rename branding to WellNest Hospitals.
 - [ ] `scripts/smoke_mcp.py` calling all tools through the real MCP transport with the bearer token (URL + token from env).
 - **Done when:** smoke test passes locally against the in-memory repo; V1 tool inputs still accepted.
 
@@ -83,7 +83,7 @@ Timeline: build Tue 3 Nov → **code freeze Wed 4 Nov 12:30 IST**. Demos 2 PM. W
 ```
 # Things a human must do (Claude Code can't click these)
 ## Supabase
-- [ ] Create project "careline" in region Singapore
+- [ ] Create project "wellnest" in region Singapore
 - [ ] Copy transaction pooler URL → Render env DATABASE_URL
 - [ ] Run: DATABASE_URL=... ./db/reset.sh   (from a laptop or Supabase SQL editor: paste schema.sql then seed.sql)
 - [ ] Auth → Email provider on; Site URL = PUBLIC_BASE_URL; copy anon key + JWT settings

@@ -20,8 +20,8 @@ export function useLoggedIn() {
   const [li, setLi] = useState(session.loggedIn());
   useEffect(() => {
     const f = () => setLi(session.loggedIn());
-    window.addEventListener("careline-auth", f);
-    return () => window.removeEventListener("careline-auth", f);
+    window.addEventListener("wellnest-auth", f);
+    return () => window.removeEventListener("wellnest-auth", f);
   }, []);
   return li;
 }
@@ -48,14 +48,14 @@ export function useTextSize(): [boolean, (v: boolean) => void] {
   const [lg, setLg] = useState(document.documentElement.dataset.size === "lg");
   const set = (v: boolean) => {
     if (v) document.documentElement.dataset.size = "lg"; else delete document.documentElement.dataset.size;
-    try { if (v) localStorage.setItem("careline_size", "lg"); else localStorage.removeItem("careline_size"); } catch { /* ignore */ }
+    try { if (v) localStorage.setItem("wellnest_size", "lg"); else localStorage.removeItem("wellnest_size"); } catch { /* ignore */ }
     setLg(v);
-    window.dispatchEvent(new Event("careline-size"));
+    window.dispatchEvent(new Event("wellnest-size"));
   };
   useEffect(() => {
     const f = () => setLg(document.documentElement.dataset.size === "lg");
-    window.addEventListener("careline-size", f);
-    return () => window.removeEventListener("careline-size", f);
+    window.addEventListener("wellnest-size", f);
+    return () => window.removeEventListener("wellnest-size", f);
   }, []);
   return [lg, set];
 }

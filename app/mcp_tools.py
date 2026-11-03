@@ -19,12 +19,12 @@ from .services import records as rc
 from .services import support as sp
 from .util import Result, mask_phone
 
-log = logging.getLogger("careline")
+log = logging.getLogger("wellnest")
 
 mcp = MCPServer(
     name="TeamXYZ-MCP",
     instructions=(
-        "Front desk tools for CareLine Hospitals, Bengaluru (fictional). Each tool returns 'message': a complete, "
+        "Front desk tools for WellNest Hospitals, Bengaluru (fictional). Each tool returns 'message': a complete, "
         "speakable answer you can relay as is. Cancel, reschedule, reports, bills, history and preferences need the "
         "patient's registered mobile number and date of birth, checked on the server. For chest pain, breathing "
         "trouble, stroke signs, heavy bleeding or suicidal thoughts call create_handoff with priority urgent. Never "
@@ -43,7 +43,7 @@ Dept = Annotated[S, Field(description="Optional. Department or plain words, e.g.
 Doc = Annotated[S, Field(description="Optional. Doctor's name, e.g. Dr. Rajesh Iyer or Iyer.")]
 Pref = Annotated[S, Field(description="Optional. morning, afternoon, evening or any.")]
 Proc = Annotated[S, Field(description="Optional. Test or scan, e.g. MRI Knee, CT Chest, X-Ray, Thyroid test.")]
-BookingId = Annotated[S, Field(description="Booking ID, e.g. CL-48213 (letters and dashes optional).")]
+BookingId = Annotated[S, Field(description="Booking ID, e.g. WN-48213 (letters and dashes optional).")]
 Ins = Annotated[S, Field(description="Optional. Insurance company, e.g. Star Health, HDFC ERGO.")]
 
 
@@ -120,7 +120,7 @@ def join_waitlist(phone: Phone, date_of_birth: Dob, department: Dept = "", docto
 
 # ======================================================================== Changes
 @tool
-def find_appointments(phone: OptPhone = "", booking_id: Annotated[S, Field(description="Optional. Booking ID, e.g. CL-48213.")] = "",
+def find_appointments(phone: OptPhone = "", booking_id: Annotated[S, Field(description="Optional. Booking ID, e.g. WN-48213.")] = "",
                       date_of_birth: OptDob = "",
                       include_past: Annotated[S, Field(description="Optional. 'yes' to list past visits instead.")] = "") -> dict:
     """Look up a patient's bookings. With phone and date of birth: lists up to 3 upcoming bookings. With only a
@@ -311,7 +311,7 @@ def get_handoff_status(handoff_id: Annotated[S, Field(description="Handoff refer
 def save_interaction_note(phone: Phone, summary: Annotated[S, Field(description="1-2 sentence summary of the conversation (max 500 chars).")],
                           topics: Annotated[S, Field(description="Optional. Comma-separated topics, e.g. mri,insurance.")] = "",
                           outcome: Annotated[S, Field(description="Optional. e.g. booked, informed, handed off.")] = "") -> dict:
-    """Save a short note at the end of a meaningful conversation so CareLine remembers it next time."""
+    """Save a short note at the end of a meaningful conversation so WellNest remembers it next time."""
     return sp.save_note(phone, summary, topics, outcome)
 
 

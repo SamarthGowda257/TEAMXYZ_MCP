@@ -6,7 +6,7 @@ import threading
 import time
 from collections import defaultdict, deque
 
-log = logging.getLogger("careline")
+log = logging.getLogger("wellnest")
 _lock = threading.Lock()
 _calls: dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
 _counts: dict[str, int] = defaultdict(int)

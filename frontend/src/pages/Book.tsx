@@ -78,7 +78,7 @@ function BookFlow({ me }: { me: Me }) {
   return (
     <div className="book">
       <div className="assist-banner compact">
-        <div><h2>Quickest: just tell the CareLine Assistant</h2><p>"Heart doctor on Wednesday morning" on chat or phone. It checks you, books a real slot and sends your booking ID.</p></div>
+        <div><h2>Quickest: just tell the WellNest Assistant</h2><p>"Heart doctor on Wednesday morning" on chat or phone. It checks you, books a real slot and sends your booking ID.</p></div>
         <ReachButtons form={false} size="sm" />
       </div>
       <p className="or-line"><span>or pick a slot yourself</span></p>

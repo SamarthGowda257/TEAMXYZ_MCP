@@ -170,7 +170,7 @@ def register(name, phone, dob, email, gender="", insurance_provider="", channel=
             pid = c.execute(insert(P).values(patient_code=code, **vals)).inserted_primary_key[0]
         log(c, pid, "register_patient", code, True, f"Registered {name}", channel=channel)
         senior = age_on(d) >= 60
-    msg = f"Welcome to CareLine, {name.split()[0]}. You're registered with patient ID {code}."
+    msg = f"Welcome to WellNest, {name.split()[0]}. You're registered with patient ID {code}."
     if ins:
         msg += f" I've noted your insurer as {ins['name']}."
     return ok(msg, patient_ref=code, is_senior=senior)

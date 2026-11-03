@@ -13,7 +13,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: careline
+          POSTGRES_DB: wellnest
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
@@ -35,7 +35,7 @@ jobs:
           curl -s localhost:8000/health | grep '"db_kind":"postgres"'
         env:
           MCP_BEARER_TOKEN: ci-token
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/careline
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wellnest
           PORT: "8000"
       - name: MCP acceptance checks (30) over the real transport
         run: python scripts/smoke_mcp.py

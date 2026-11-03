@@ -1,12 +1,12 @@
 # 01 — Project Overview
 
 ## The product
-**CareLine Hospitals, Bengaluru** — an AI front desk for a hospital that books, protects, fills and follows up, 24/7, by chat, voice and web. Every action the AI takes is written to the hospital's database, shows up on the patient's portal, and is confirmed by email.
+**WellNest Hospitals, Bengaluru** — an AI front desk for a hospital that books, protects, fills and follows up, 24/7, by chat, voice and web. Every action the AI takes is written to the hospital's database, shows up on the patient's portal, and is confirmed by email.
 
-**Pitch line:** "Hospitals lose money and patients on the front desk: hold times, no-shows, empty cancelled slots, and lab-report calls. CareLine handles them end to end on Talkdesk, safely, and hands off to a human when it should."
+**Pitch line:** "Hospitals lose money and patients on the front desk: hold times, no-shows, empty cancelled slots, and lab-report calls. WellNest handles them end to end on Talkdesk, safely, and hands off to a human when it should."
 
 ### Problems it solves
-| Problem in real hospitals | CareLine answer |
+| Problem in real hospitals | WellNest answer |
 |---|---|
 | Long phone queues for simple bookings | AI booking by chat/voice, with real slots |
 | Cancelled slots stay empty | Waitlist auto-offer: the freed slot is offered to the next patient within seconds |
@@ -26,7 +26,7 @@
 
 ## V1 (already built, live)
 - Talkdesk orchestration `CareLine_TeamXYZ` (published v1), bot `TestBot_TeamXYZ`: **Receptionist** (supervisor) → **Booking Agent**, **Info Agent**.
-- This repo's MCP server on Render: 6 tools (`get_doctors`, `find_available_slots`, `book_appointment`, `find_appointments`, `reschedule_appointment`, `cancel_appointment`), in-memory data, branded "City Hospital, Bengaluru" (rename to CareLine in V2).
+- This repo's MCP server on Render: 6 tools (`get_doctors`, `find_available_slots`, `book_appointment`, `find_appointments`, `reschedule_appointment`, `cancel_appointment`), in-memory data, branded "City Hospital, Bengaluru" (rename to WellNest in V2).
 - No database, no website, no login, no Studio flow, no phone number.
 
 ### V1 evaluation (baseline to beat)

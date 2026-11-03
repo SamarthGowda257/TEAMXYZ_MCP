@@ -1,4 +1,4 @@
-/** Flat illustration of the CareLine hospital building (drawn in code; no stock photos). */
+/** Flat illustration of the WellNest hospital building (drawn in code; no stock photos). */
 export function HospitalArt() {
   const windows = [];
   for (let r = 0; r < 5; r++) {
@@ -11,7 +11,7 @@ export function HospitalArt() {
     for (let c = 0; c < 3; c++) windows.push(<rect key={`m${r}${c}`} x={206 + c * 34} y={110 + r * 30} width="24" height="20" rx="3" fill="#dcebfb" />);
   }
   return (
-    <svg viewBox="0 0 520 420" role="img" aria-label="Illustration of the CareLine Hospitals building" className="hospital-art">
+    <svg viewBox="0 0 520 420" role="img" aria-label="Illustration of the WellNest Hospitals building" className="hospital-art">
       <rect x="0" y="0" width="520" height="420" rx="24" fill="#e8f2fd" />
       <circle cx="430" cy="78" r="34" fill="#fff4dc" />
       <path d="M40 92c18-14 44-14 60 0 14-10 34-8 44 4H40z" fill="#fff" />
@@ -30,7 +30,7 @@ export function HospitalArt() {
       <rect x="224" y="318" width="72" height="44" rx="4" fill="#ffffff" />
       <rect x="232" y="326" width="26" height="36" fill="#bcd6f2" /><rect x="262" y="326" width="26" height="36" fill="#bcd6f2" />
       <rect x="210" y="306" width="100" height="14" rx="3" fill="#08458a" />
-      <text x="260" y="317" textAnchor="middle" fontFamily="Poppins, sans-serif" fontSize="9" fontWeight="600" fill="#fff">CARELINE</text>
+      <text x="260" y="317" textAnchor="middle" fontFamily="Poppins, sans-serif" fontSize="9" fontWeight="600" fill="#fff">WELLNEST</text>
       {/* ground */}
       <rect x="0" y="362" width="520" height="58" fill="#d6e7f8" />
       <rect x="0" y="384" width="520" height="12" fill="#c4dbf3" />

@@ -1,15 +1,15 @@
-// Hospital content for the CareLine website. CareLine Hospitals is fictional (hackathon demo);
+// Hospital content for the WellNest website. WellNest Hospitals is fictional (hackathon demo);
 // all names, numbers and stories below are invented for the demo and labelled as such in the footer.
 
 export const HOSPITAL = {
-  name: "CareLine Hospitals",
+  name: "WellNest Hospitals",
   tagline: "Multi-speciality hospital · Marathahalli, Bengaluru",
   address: "42 Outer Ring Road, Marathahalli, Bengaluru 560037",
   phone: "080 4000 1234",
   phoneHref: "tel:+918040001234",
   emergency: "108",
   ambulance: "080 4000 1108",
-  email: "care@careline.test",
+  email: "care@wellnest.test",
   founded: 2009,
 };
 

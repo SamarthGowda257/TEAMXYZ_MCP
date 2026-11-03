@@ -19,12 +19,12 @@ const NAV = [
 export function PortalShell({ title, children, actions }: { title: string; children: (me: Me, reloadMe: () => void) => ReactNode; actions?: ReactNode }) {
   const loc = useLocation();
   const me = useApi<Me>(session.loggedIn() ? "/api/me" : null);
-  useEffect(() => { document.title = `${title} · My CareLine`; }, [title]);
+  useEffect(() => { document.title = `${title} · My WellNest`; }, [title]);
   useEffect(() => { if (me.data) setChatPatient({ name: me.data.name, phone: me.data.phone }); }, [me.data]);
   if (!session.loggedIn()) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
   return (
     <div className="portal has-mobile-bar">
-      <aside className="portal-side" aria-label="My CareLine">
+      <aside className="portal-side" aria-label="My WellNest">
         <div className="who">
           <p className="who-name">{me.data?.name || " "}</p>
           <p className="who-meta">{me.data ? `${me.data.id}${me.data.age != null ? ` · ${me.data.age} yrs` : ""}` : " "}</p>
@@ -34,7 +34,7 @@ export function PortalShell({ title, children, actions }: { title: string; child
             <NavLink key={to} to={to} end={end}><Icon size={18} aria-hidden="true" />{label}</NavLink>
           ))}
         </nav>
-        <button type="button" className="side-chat" onClick={openChat}><MessageCircle size={18} aria-hidden="true" />Ask CareLine</button>
+        <button type="button" className="side-chat" onClick={openChat}><MessageCircle size={18} aria-hidden="true" />Ask WellNest</button>
       </aside>
       <div className="portal-main">
         <div className="title-row">

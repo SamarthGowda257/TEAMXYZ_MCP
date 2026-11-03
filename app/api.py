@@ -136,7 +136,7 @@ def login(b: Login):
 def config_js():
     cfg = {"touchpointId": config.TALKDESK_TOUCHPOINT_ID, "region": config.TALKDESK_REGION, "voiceNumber": config.TALKDESK_VOICE_NUMBER,
            "publicBaseUrl": config.PUBLIC_BASE_URL, "hospital": config.HOSPITAL_NAME}
-    return Response(f"window.CARELINE_CONFIG = {json.dumps(cfg)};", media_type="application/javascript",
+    return Response(f"window.WELLNEST_CONFIG = {json.dumps(cfg)};", media_type="application/javascript",
                     headers={"Cache-Control": "no-cache"})
 
 
@@ -537,8 +537,8 @@ def run_reminders() -> int:
                                      subject=f"Reminder: {v['with']} tomorrow at {v['time']}",
                                      body=f"Dear {r['full_name']},\n\nA reminder of your visit with {v['with']} on {v['date']} at "
                                           f"{v['time']}, room {v['room']}. Booking {v['booking_id']}.\n\nTo cancel or change: "
-                                          f"{config.PUBLIC_BASE_URL}/portal/appointments\n\nCareLine Hospitals",
-                                     sms=f"CareLine reminder: {v['with']} {v['date']} {v['time']}, {v['booking_id']}.")
+                                          f"{config.PUBLIC_BASE_URL}/portal/appointments\n\nWellNest Hospitals",
+                                     sms=f"WellNest reminder: {v['with']} {v['date']} {v['time']}, {v['booking_id']}.")
                 n += 1
             elif 1.5 <= hours <= 2.5:
                 notify.queue(c, patient_id=r["patient_id"], channel="voice_call", template="reminder_2h", to=r["phone"],
@@ -567,7 +567,7 @@ def reset_demo():
 
 @router.get("/health")
 def health():
-    return {"ok": True, "service": "CareLine Hospitals MCP + web", "version": config.VERSION, "db": db.db_ok(),
+    return {"ok": True, "service": "WellNest Hospitals MCP + web", "version": config.VERSION, "db": db.db_ok(),
             "db_kind": "postgres" if db.IS_POSTGRES else "sqlite", "db_error": db.DB_ERROR, "db_target": db.db_target() if db.DB_ERROR else None, "time_ist": config.now().isoformat(),
             "email": "smtp" if config.EMAIL_ENABLED else "simulated"}
 
@@ -624,7 +624,7 @@ SECURITY_HEADERS = {
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="CareLine Hospitals", version=config.VERSION, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="WellNest Hospitals", version=config.VERSION, docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
     async def timing(request: Request, call_next):

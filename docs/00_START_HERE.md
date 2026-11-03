@@ -1,7 +1,7 @@
 # 00 — Start Here
 
 ## What you are building, in one paragraph
-CareLine Hospitals is a (fictional) multi-specialty hospital in Bengaluru. Patients reach it three ways: the **website** (login, book, see appointments and lab reports), **web chat** (a Talkdesk chat widget on the website), and **phone** (a Talkdesk number). The chat and phone conversations are handled by **AI agents configured inside Talkdesk**. Those agents act on the hospital's data by calling **tools on our MCP server**. You build the MCP server, the website, the website's API and the database layer, all as **one FastAPI app** in this repo.
+WellNest Hospitals is a (fictional) multi-specialty hospital in Bengaluru. Patients reach it three ways: the **website** (login, book, see appointments and lab reports), **web chat** (a Talkdesk chat widget on the website), and **phone** (a Talkdesk number). The chat and phone conversations are handled by **AI agents configured inside Talkdesk**. Those agents act on the hospital's data by calling **tools on our MCP server**. You build the MCP server, the website, the website's API and the database layer, all as **one FastAPI app** in this repo.
 
 ```
 Website ──/api──►┐
@@ -23,7 +23,7 @@ Cron pinger ─/jobs─►┘          │
 4. **Branching.** Work on `v2`. Merge to `main` only when the user says so, in small steps, with the smoke test passing.
 5. **Commit identity.** Use whatever `git config user.name/user.email` the user set. No `Co-Authored-By` trailers, no "Generated with Claude" lines, in commits or PR bodies. If the environment adds them automatically, remove them.
 6. **Secrets.** Only in env vars. Keep `.env` in `.gitignore`. Update `.env.example` with every new variable (names only, fake values).
-7. **Data is fake.** All patients, phones and emails in seed data are invented. Use `example.com` / `careline.test` emails except the demo personas the user provides via env.
+7. **Data is fake.** All patients, phones and emails in seed data are invented. Use `example.com` / `wellnest.test` emails except the demo personas the user provides via env.
 8. **No medical advice anywhere** in tool messages. Department suggestions are routing only, with a disclaimer.
 
 ## Your environment (important)

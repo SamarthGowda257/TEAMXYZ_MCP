@@ -14,7 +14,7 @@ export function Pill({ status, children }: { status: string; children?: ReactNod
   return <span className={`pill pill-${tone}`}>{children ?? label}</span>;
 }
 
-/** The booking token slip: how CareLine prints a booking ID everywhere. */
+/** The booking token slip: how WellNest prints a booking ID everywhere. */
 export function TokenSlip({ id, spoken, lines, tone = "card" }: { id: string; spoken?: string; lines: ReactNode[]; tone?: "card" | "accent" }) {
   return (
     <div className={`token-slip token-shape tone-${tone}`} data-ui>

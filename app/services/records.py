@@ -77,7 +77,7 @@ def email_report(phone, dob, report_id="", patient_id=None, actor="agent", chann
                      body=f"Dear {p['full_name']},\n\nYour {r['test_name']} report ({r['report_code']}) is ready.\n"
                           f"Summary: {r['summary'] or 'Please view the report in the portal.'}\n\n"
                           f"For your privacy the full values are only in the patient portal: {config.PUBLIC_BASE_URL}/portal/reports\n\n"
-                          f"{DISCLAIMER}\n\nCareLine Hospitals")
+                          f"{DISCLAIMER}\n\nWellNest Hospitals")
         if r["status"] == "ready":
             c.execute(update(LR).where(LR.c.id == r["id"]).values(status="collected"))
         pt.log(c, p["id"], "email_lab_report", r["report_code"], True, f"Emailed {r['test_name']}", actor, channel)
@@ -232,9 +232,9 @@ def send_payment_link(phone, dob, bill_id="") -> Result:
         notify.queue(c, patient_id=p["id"], channel="email", template="payment_link", to=p["email"],
                      subject=f"Payment link for bill {b['bill_code']}",
                      body=f"Dear {p['full_name']},\n\nAmount due: Rs {amt} for {b['description']}.\nPay securely: {link}\n"
-                          "(Demo: this link is simulated and never asks for card details by chat or phone.)\n\nCareLine Hospitals")
+                          "(Demo: this link is simulated and never asks for card details by chat or phone.)\n\nWellNest Hospitals")
         notify.queue(c, patient_id=p["id"], channel="sms", template="payment_link", to=p["phone"],
-                     body=f"CareLine: pay bill {b['bill_code']} Rs {amt}: {link}")
+                     body=f"WellNest: pay bill {b['bill_code']} Rs {amt}: {link}")
         pt.log(c, p["id"], "send_payment_link", b["bill_code"], True, f"Payment link Rs {amt}")
     m = mask_email(p["email"])
     return ok(f"I've emailed a secure payment link for {rupees(amt)} to {m}. We never take card details over chat or phone.",

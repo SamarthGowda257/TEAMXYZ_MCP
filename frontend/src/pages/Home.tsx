@@ -15,7 +15,7 @@ const SCRIPT: { who: "me" | "bot"; text: string }[] = [
   { who: "me", text: "Hi, I need a heart doctor this Wednesday morning." },
   { who: "bot", text: "Dr. Rajesh Iyer, Cardiology, is free on Wednesday 4 November at 10:00 AM and 11:15 AM. The fee is ₹1,200. Which suits you?" },
   { who: "me", text: "10 AM please. 98450 00001, born 4 March 1959." },
-  { who: "bot", text: "Thank you, Shanthamma, you're verified. Booked for 10:00 AM, room OPD-310. Your booking ID is CL-48213. I've also arranged wheelchair help at entrance B." },
+  { who: "bot", text: "Thank you, Shanthamma, you're verified. Booked for 10:00 AM, room OPD-310. Your booking ID is WN-48213. I've also arranged wheelchair help at entrance B." },
 ];
 
 function LiveChat() {
@@ -33,10 +33,10 @@ function LiveChat() {
     return () => window.clearTimeout(t);
   }, []);
   return (
-    <div className="live-chat" aria-label="Example: booking with the CareLine Assistant">
+    <div className="live-chat" aria-label="Example: booking with the WellNest Assistant">
       <div className="lc-head">
         <span className="lc-avatar"><Sparkles size={18} aria-hidden="true" /></span>
-        <div><strong>CareLine Assistant</strong><span><i className="lc-dot" /> Online now · on Talkdesk</span></div>
+        <div><strong>WellNest Assistant</strong><span><i className="lc-dot" /> Online now · on Talkdesk</span></div>
       </div>
       <div className="lc-body" aria-live="off">
         {SCRIPT.slice(0, n).map((m, i) => <p key={i} className={`bubble ${m.who}`}>{m.text}</p>)}
@@ -96,7 +96,7 @@ function HowItWorks() {
     <section className="section how" ref={ref} aria-labelledby="how-h">
       <div className="wrap">
         <div className="split-head">
-          <h2 id="how-h" className="serif rise">Booking at CareLine is a conversation, not a queue</h2>
+          <h2 id="how-h" className="serif rise">Booking at WellNest is a conversation, not a queue</h2>
           <p className="rise" style={{ ["--d" as string]: "80ms" }}>Our AI front desk runs on <strong>Talkdesk</strong>, the same platform large contact centres use. It answers the website chat and our phone line {v.label}, day and night, and hands you to a person whenever you ask.</p>
         </div>
         <ol className="how-steps">
@@ -140,7 +140,7 @@ function Numbers() {
     io.observe(el); return () => io.disconnect();
   }, []);
   return (
-    <section className="numbers" ref={ref} aria-label="CareLine in numbers">
+    <section className="numbers" ref={ref} aria-label="WellNest in numbers">
       <Photo src={IMAGES.building} alt="Hospital building exterior" icon="Hospital" className="numbers-bg" />
       <div className="wrap numbers-grid">
         {STATS.map((s) => <div key={s.label} className={on ? "num-item on" : "num-item"}><strong className="serif">{s.value}</strong><span>{s.label}</span></div>)}
@@ -178,7 +178,7 @@ function Centres() {
   );
 }
 
-// ------------------------------------------------------------------ why CareLine (photo + facilities)
+// ------------------------------------------------------------------ why WellNest (photo + facilities)
 function WhyUs() {
   const ref = useReveal<HTMLElement>();
   return (
@@ -190,7 +190,7 @@ function WhyUs() {
         </div>
         <div>
           <h2 id="why-h" className="serif rise">Everything a family needs, under one roof</h2>
-          <p className="lead rise">Since {HOSPITAL.founded}, CareLine has grown from a 120-bed neighbourhood hospital into a 350-bed medical centre, so patients in Marathahalli, Whitefield and Bellandur no longer cross the city for serious care.</p>
+          <p className="lead rise">Since {HOSPITAL.founded}, WellNest has grown from a 120-bed neighbourhood hospital into a 350-bed medical centre, so patients in Marathahalli, Whitefield and Bellandur no longer cross the city for serious care.</p>
           <ul className="fac-list">
             {FACILITIES.map((f, i) => (
               <li key={f.title} className="rise" style={{ ["--d" as string]: `${i * 60}ms` }}>
@@ -314,8 +314,8 @@ function Library() {
           <div className="promo-text">
             <FileText size={26} aria-hidden="true" />
             <h3>Your reports, the moment they're ready</h3>
-            <p>See lab results with normal ranges, your visits and your waitlist in My CareLine. Or just ask the assistant, "is my report ready?"</p>
-            <Link className="btn btn-primary btn-sm" to="/login">Open My CareLine</Link>
+            <p>See lab results with normal ranges, your visits and your waitlist in My WellNest. Or just ask the assistant, "is my report ready?"</p>
+            <Link className="btn btn-primary btn-sm" to="/login">Open My WellNest</Link>
           </div>
         </aside>
       </div>
@@ -376,7 +376,7 @@ function Callback() {
 }
 
 export default function Home() {
-  useEffect(() => { document.title = "CareLine Hospitals, Bengaluru · Book by chat or phone, 24 hours"; }, []);
+  useEffect(() => { document.title = "WellNest Hospitals, Bengaluru · Book by chat or phone, 24 hours"; }, []);
   return (
     <>
       <Hero />

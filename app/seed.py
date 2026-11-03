@@ -1,4 +1,4 @@
-"""Deterministic demo dataset for CareLine Hospitals, Bengaluru (all people and data are fictional).
+"""Deterministic demo dataset for WellNest Hospitals, Bengaluru (all people and data are fictional).
 
 Generated relative to "today" so the demo always has upcoming slots.
 Run:  python -m app.seed --reset      (drops and rebuilds everything)
@@ -139,14 +139,14 @@ INSURERS = [
 ]
 
 HOSPITAL_INFO = {
-    "address": "CareLine Hospitals, 42 Outer Ring Road, Marathahalli, Bengaluru 560037. Landmark: next to Innovative Multiplex.",
+    "address": "WellNest Hospitals, 42 Outer Ring Road, Marathahalli, Bengaluru 560037. Landmark: next to Innovative Multiplex.",
     "hours": "Outpatient clinics run Monday to Saturday, 8 AM to 8 PM. Emergency and pharmacy are open 24 hours, all days. Sunday outpatient is closed.",
     "parking": "Free parking for patients in Basement 2 for 3 hours. Valet at the main entrance. Wheelchairs are available at the entrance.",
     "visiting": "Ward visiting hours are 11 AM to 1 PM and 5 PM to 7 PM. One attendant pass per patient. ICU visits 5 PM to 6 PM only.",
     "emergency": "Our emergency department is open 24 hours on the ground floor, entrance B. For a life-threatening emergency call 108 right away.",
     "facilities": "14 specialities, 2 MRI and 2 CT scanners, 24 hour lab, pharmacy, cafeteria, ATM, prayer room, wheelchair help and a senior citizen desk.",
     "pharmacy": "The pharmacy on the ground floor is open 24 hours. Home delivery within 5 km for orders above 500 rupees.",
-    "contact": "Front desk: 080 4000 1234. Email: care@careline.test. TPA and insurance desk: 080 4000 1250, 9 AM to 6 PM, Monday to Saturday.",
+    "contact": "Front desk: 080 4000 1234. Email: care@wellnest.test. TPA and insurance desk: 080 4000 1250, 9 AM to 6 PM, Monday to Saturday.",
 }
 
 FIRST_M = ["Aarav", "Rohan", "Vikram", "Karthik", "Manoj", "Suresh", "Rahul", "Naveen", "Prakash", "Arun", "Sachin",
@@ -226,6 +226,15 @@ def doctor_slots(start: str, end: str, minutes: int) -> list[str]:
 
 def persona_email(key: str, default: str) -> str:
     return config.DEMO_PERSONA_EMAILS.get(key) or default
+
+
+def migrate_brand() -> None:
+    """One-time, repeat-safe rename of data written before the CareLine -> WellNest rename."""
+    with db.engine.begin() as c:
+        c.execute(text("UPDATE appointments SET booking_code = 'WN-' || substr(booking_code, 4) WHERE booking_code LIKE 'CL-%'"))
+        c.execute(text("UPDATE hospital_info SET content = replace(replace(replace(content, 'CareLine', 'WellNest'), 'careline', 'wellnest'), 'CARELINE', 'WELLNEST') "
+                       "WHERE lower(content) LIKE '%careline%'"))
+        c.execute(text("UPDATE interaction_notes SET summary = replace(summary, 'CareLine', 'WellNest') WHERE summary LIKE '%CareLine%'"))
 
 
 def is_seeded() -> bool:
@@ -357,7 +366,7 @@ def seed(verbose: bool = False) -> dict:
                 return c
 
     def add_appt(**kw):
-        a = dict(id=len(appts) + 1, booking_code=new_code("CL"), procedure_id=None, resource_id=None, reason=None,
+        a = dict(id=len(appts) + 1, booking_code=new_code("WN"), procedure_id=None, resource_id=None, reason=None,
                  idempotency_key=None, cancelled_at=None, cancel_reason=None, doctor_id=None)
         a.update(kw)
         a.setdefault("updated_at", a["created_at"])
@@ -378,8 +387,8 @@ def seed(verbose: bool = False) -> dict:
     s_day = next_consult(iyer, 1)
     persona_slots["shanthamma"] = add_appt(patient_id=1, doctor_id=iyer, appt_date=s_day, appt_time="10:30", status="booked",
                                            reason="BP and chest discomfort review", channel="web", created_at=NOW - timedelta(days=5))
-    persona_slots["shanthamma"]["booking_code"] = "CL-48213"
-    codes.add("CL-48213")
+    persona_slots["shanthamma"]["booking_code"] = "WN-48213"
+    codes.add("WN-48213")
     taken.add((iyer, s_day, "10:30"))
     m_day = next_consult(15, 2)  # Dr. Lakshmi Nair, paediatrics
     add_appt(patient_id=5, doctor_id=15, appt_date=m_day, appt_time="10:00", status="booked", reason="Vaccination",

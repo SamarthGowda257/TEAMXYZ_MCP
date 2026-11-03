@@ -1,4 +1,4 @@
-"""CareLine Hospitals (TeamXYZ, Talkdesk AI Hackday) - entry point.
+"""WellNest Hospitals (TeamXYZ, Talkdesk AI Hackday) - entry point.
 
   /mcp          MCP endpoint for the Talkdesk AI agents (Streamable HTTP, Bearer token)  [unchanged from V1]
   /             patient website (portal, booking, reports, waitlist accept, chat widget)
@@ -25,5 +25,5 @@ from app.main import build  # noqa: E402
 app = build()
 
 if __name__ == "__main__":
-    print(f"Starting CareLine Hospitals on http://0.0.0.0:{config.PORT}  (MCP at /mcp, website at /)")
+    print(f"Starting WellNest Hospitals on http://0.0.0.0:{config.PORT}  (MCP at /mcp, website at /)")
     uvicorn.run(app, host="0.0.0.0", port=config.PORT, log_level="warning", workers=1)

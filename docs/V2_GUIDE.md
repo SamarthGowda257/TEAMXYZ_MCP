@@ -1,4 +1,4 @@
-# CareLine V2: what's built and how to use it
+# WellNest V2: what's built and how to use it
 
 ## Shape
 One Python process on Render (`python server.py`):
@@ -17,8 +17,8 @@ Database: Postgres when `DATABASE_URL` is set (Supabase), otherwise a local SQLi
 ## Demo personas (bot: phone + date of birth)
 | Persona | Phone | DOB | Story |
 |---|---|---|---|
-| Shanthamma K, 67 | 98450 00001 | 1959-03-04 | Senior, Star Health, cardiology booking **CL-48213** with Dr. Rajesh Iyer, MRI Knee report pending, son Ravi as caregiver |
-| Arjun Mehta, 34 | 98450 00002 | 1992-06-15 | On the waitlist for Dr. Rajesh Iyer (fully booked this week). Cancel CL-48213 → Arjun gets the offer |
+| Shanthamma K, 67 | 98450 00001 | 1959-03-04 | Senior, Star Health, cardiology booking **WN-48213** with Dr. Rajesh Iyer, MRI Knee report pending, son Ravi as caregiver |
+| Arjun Mehta, 34 | 98450 00002 | 1992-06-15 | On the waitlist for Dr. Rajesh Iyer (fully booked this week). Cancel WN-48213 → Arjun gets the offer |
 | Priya Nair, 29 | 98450 00003 | 1997-01-20 | Thyroid report ready (LR-20931); asked about her MRI report 6 days ago (memory) |
 | Rahul Verma, 45 | 98450 00004 | 1981-09-10 | No insurance, unpaid bill BL-55012 |
 | Meera Joshi, 8 | 98450 00005 | 2018-05-12 | Child, father Sanjay as caregiver |

@@ -55,9 +55,9 @@ def test_time(raw, want):
 def test_dob_and_codes():
     assert parse_dob("4 March 1958") == date(1958, 3, 4)
     assert parse_dob("04/03/1958") == date(1958, 3, 4)
-    assert norm_code("cl 48213", "CL") == "CL-48213"
-    assert norm_code("CH4821", "CL") == "CL-4821"
-    assert spoken_code("CL-48213") == "C L 4 8 2 1 3"
+    assert norm_code("cl 48213", "WN") == "WN-48213"
+    assert norm_code("CH4821", "WN") == "WN-4821"
+    assert spoken_code("WN-48213") == "W N 4 8 2 1 3"
 
 
 def test_envelope_is_small_and_clean():

@@ -25,7 +25,7 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 
 // ------------------------------------------------------------------ doctors
 export function Doctors() {
-  useEffect(() => { document.title = "Find a doctor · CareLine Hospitals"; }, []);
+  useEffect(() => { document.title = "Find a doctor · WellNest Hospitals"; }, []);
   const [qs, setQs] = useSearchParams();
   const depts = useApi<{ name: string; doctors: number }[]>("/api/departments");
   const all = useApi<DoctorCard[]>("/api/doctors");
@@ -92,7 +92,7 @@ type Ins = { code: string; name: string; mode: string; tpa: string; documents: s
 const MODE: Record<string, string> = { both: "Cashless and reimbursement", cashless: "Cashless", reimbursement: "Reimbursement" };
 
 export function Insurance() {
-  useEffect(() => { document.title = "Insurance & TPA · CareLine Hospitals"; }, []);
+  useEffect(() => { document.title = "Insurance & TPA · WellNest Hospitals"; }, []);
   const ins = useApi<Ins[]>("/api/insurers");
   const procs = useApi<{ code: string; name: string }[]>("/api/procedures");
   const depts = useApi<{ name: string }[]>("/api/departments");
@@ -155,7 +155,7 @@ export function Insurance() {
 
 // ------------------------------------------------------------------ contact
 export function Contact() {
-  useEffect(() => { document.title = "Contact us · CareLine Hospitals"; }, []);
+  useEffect(() => { document.title = "Contact us · WellNest Hospitals"; }, []);
   const info = useApi<Record<string, string>>("/api/hospital-info");
   return (
     <>
@@ -163,7 +163,7 @@ export function Contact() {
       <div className="wrap page">
         <div className="contact-grid">
           <div className="contact-card">
-            <h2>CareLine Hospitals</h2>
+            <h2>WellNest Hospitals</h2>
             <p><MapPin size={18} aria-hidden="true" /> {HOSPITAL.address}</p>
             <p><Phone size={18} aria-hidden="true" /> Helpline <a href={HOSPITAL.phoneHref}>{HOSPITAL.phone}</a> (24 hours)</p>
             <p><Phone size={18} aria-hidden="true" /> Ambulance <a href="tel:08040001108">{HOSPITAL.ambulance}</a></p>
@@ -187,15 +187,15 @@ export function Contact() {
 
 // ------------------------------------------------------------------ about
 export function About() {
-  useEffect(() => { document.title = "About us · CareLine Hospitals"; }, []);
+  useEffect(() => { document.title = "About us · WellNest Hospitals"; }, []);
   return (
     <>
-      <PageHero crumb="About us" title="About CareLine Hospitals" lead="A 350-bed multi-speciality hospital founded in 2009 to bring serious medical care closer to the families of East Bengaluru." />
+      <PageHero crumb="About us" title="About WellNest Hospitals" lead="A 350-bed multi-speciality hospital founded in 2009 to bring serious medical care closer to the families of East Bengaluru." />
       <div className="wrap page">
         <div className="about-page">
           <div className="prose">
             <h2>Our story</h2>
-            <p>CareLine Hospitals began as a 120-bed hospital on Outer Ring Road, started by a group of doctors who were tired of seeing patients from Marathahalli, Whitefield and Bellandur spend hours in traffic to reach a hospital for a heart attack, a difficult delivery or a stroke.</p>
+            <p>WellNest Hospitals began as a 120-bed hospital on Outer Ring Road, started by a group of doctors who were tired of seeing patients from Marathahalli, Whitefield and Bellandur spend hours in traffic to reach a hospital for a heart attack, a difficult delivery or a stroke.</p>
             <p>Seventeen years later we are a 350-bed hospital with 14 specialities, 60 critical-care beds, a 24-hour cath lab and a level III neonatal ICU. More than 1,200 people visit our outpatient clinics every day.</p>
             <h2>Our mission</h2>
             <p>To give every patient the right care at the right time, explained clearly and priced fairly, with dignity for patients of every age.</p>
@@ -226,7 +226,7 @@ export function About() {
 
 // ------------------------------------------------------------------ specialities
 export function Specialities() {
-  useEffect(() => { document.title = "Specialities · CareLine Hospitals"; }, []);
+  useEffect(() => { document.title = "Specialities · WellNest Hospitals"; }, []);
   const { hash } = useLocation();
   const depts = useApi<{ name: string; description: string; floor: string; doctors: number }[]>("/api/departments");
   const docs = useApi<DoctorCard[]>("/api/doctors");
@@ -279,7 +279,7 @@ export function Specialities() {
 
 // ------------------------------------------------------------------ patients & visitors
 export function Visitors() {
-  useEffect(() => { document.title = "Patients & visitors · CareLine Hospitals"; }, []);
+  useEffect(() => { document.title = "Patients & visitors · WellNest Hospitals"; }, []);
   return (
     <>
       <PageHero crumb="Patients & visitors" title="Patients and visitors" lead="Everything you need to know before your visit: timings, what to bring, parking, visiting rules and your rights as a patient." />

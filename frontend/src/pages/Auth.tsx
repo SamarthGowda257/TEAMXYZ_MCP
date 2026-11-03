@@ -10,7 +10,7 @@ function Side({ title }: { title: string }) {
     <div className="auth-side">
       <h1>{title}</h1>
       <ul>{SIDE.map((s) => <li key={s}><span className="token-bullet" aria-hidden="true" />{s}</li>)}</ul>
-      <TokenSlip id="CL-48213" spoken="C L 4 8 2 1 3" lines={[<strong key="a">Dr. Rajesh Iyer · Cardiology</strong>, "Wednesday, 10:30 AM", "Room OPD-310 · wheelchair arranged"]} />
+      <TokenSlip id="WN-48213" spoken="W N 4 8 2 1 3" lines={[<strong key="a">Dr. Rajesh Iyer · Cardiology</strong>, "Wednesday, 10:30 AM", "Room OPD-310 · wheelchair arranged"]} />
     </div>
   );
 }
@@ -22,7 +22,7 @@ export function Login() {
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
-  useEffect(() => { document.title = "Log in · CareLine Hospitals"; }, []);
+  useEffect(() => { document.title = "Log in · WellNest Hospitals"; }, []);
   async function submit(e: FormEvent) {
     e.preventDefault(); setBusy(true); setErr("");
     try {
@@ -33,7 +33,7 @@ export function Login() {
   }
   return (
     <div className="auth">
-      <Side title="Welcome back to CareLine" />
+      <Side title="Welcome back to WellNest" />
       <div className="auth-form">
         <h2>Log in</h2>
         <p>New here? <Link to={`/signup${qs.get("next") ? `?next=${encodeURIComponent(qs.get("next")!)}` : ""}`}>Create an account</Link>. If you've visited before, we'll find your record.</p>
@@ -61,7 +61,7 @@ export function Signup() {
   const [qs] = useSearchParams();
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => { document.title = "Create account · CareLine Hospitals"; }, []);
+  useEffect(() => { document.title = "Create account · WellNest Hospitals"; }, []);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setErr("");
     const body = Object.fromEntries(new FormData(e.currentTarget).entries());
@@ -105,7 +105,7 @@ export function Accept() {
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<any>(null);
-  useEffect(() => { document.title = "Accept your slot · CareLine Hospitals"; }, []);
+  useEffect(() => { document.title = "Accept your slot · WellNest Hospitals"; }, []);
   useEffect(() => {
     if (!code) { setErr("This link has no offer code. Open the link from your email or text message again."); return; }
     api<Offer>(`/api/waitlist/offer/${encodeURIComponent(code)}`).then((o) => { setOffer(o); setLeft(o.seconds_left); }).catch((e) => setErr(e.message));

@@ -15,7 +15,7 @@ from sqlalchemy import select, update
 
 from . import config, db
 
-log = logging.getLogger("careline.notify")
+log = logging.getLogger("wellnest.notify")
 _wake = threading.Event()
 FAKE_DOMAINS = ("@example.com", ".test", "@example.org")
 
@@ -56,7 +56,7 @@ def _send_one(row) -> tuple[str, str | None]:
     msg = EmailMessage()
     msg["From"] = config.EMAIL_FROM
     msg["To"] = row["to_address"]
-    msg["Subject"] = row["subject"] or "CareLine Hospitals"
+    msg["Subject"] = row["subject"] or "WellNest Hospitals"
     msg.set_content(row["body"] or "")
     try:
         if config.SMTP_PORT == 465:

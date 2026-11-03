@@ -58,9 +58,9 @@ Talkdesk provides a JS snippet (Chat Widget V2). We embed it on every website pa
     };
     document.head.appendChild(script);
   })(window, document, "tdWebchat",
-     { touchpointId: window.CARELINE_CONFIG.touchpointId, accountId: "", region: window.CARELINE_CONFIG.region },
+     { touchpointId: window.WELLNEST_CONFIG.touchpointId, accountId: "", region: window.WELLNEST_CONFIG.region },
      { enableEmoji: false, enableAttachments: false, enableResponsiveLayout: true,
-       styles: { chatTitle: "CareLine Assistant", chatSubtitle: "Bookings, reports, insurance" } });
+       styles: { chatTitle: "WellNest Assistant", chatSubtitle: "Bookings, reports, insurance" } });
 </script>
 ```
 - `touchpointId` and `region` come from config (env var → injected into `/config.js`). The team creates the touchpoint in Talkdesk later; until then show the widget area with a "chat coming soon" placeholder when the ID is empty.
@@ -72,7 +72,7 @@ Talkdesk provides a JS snippet (Chat Widget V2). We embed it on every website pa
 
 ## Voice
 - The team gets a phone number (from organisers), creates an Agentic Autopilot for the V2 orchestration, and builds a Studio voice flow: Incoming Call → Connect to Autopilot Voice → (escalation) Assignment and Dial.
-- Our implications: tool `message` must be speakable; keep lists to 3 items; read booking IDs in a speakable form (e.g. `CL-4821` spoken as "C L 4 8 2 1") by also returning `booking_id_spoken`.
+- Our implications: tool `message` must be speakable; keep lists to 3 items; read booking IDs in a speakable form (e.g. `WN-4821` spoken as "W N 4 8 2 1") by also returning `booking_id_spoken`.
 - The caller ID may reach the agent as a variable; we cannot rely on it. Phone + DOB verification stays the rule.
 
 ## Talkdesk REST APIs (optional, P2)

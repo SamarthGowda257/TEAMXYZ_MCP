@@ -18,7 +18,7 @@ from .services import ref
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
-log = logging.getLogger("careline")
+log = logging.getLogger("wellnest")
 
 
 def init_data() -> None:
@@ -31,6 +31,10 @@ def init_data() -> None:
         db.create_schema()
     if config.AUTO_SEED and not seed.is_seeded():
         log.info("Seeding demo data: %s", seed.seed())
+    try:
+        seed.migrate_brand()
+    except Exception as e:
+        log.warning("brand migration skipped: %s", e)
     ref.load()
     notify.start_sender()
 

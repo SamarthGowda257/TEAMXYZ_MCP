@@ -9,7 +9,7 @@ import "./styles/site.css";
 import "./styles/pages.css";
 import "./styles/app.css";
 
-try { if (localStorage.getItem("careline_size") === "lg") document.documentElement.dataset.size = "lg"; } catch { /* private mode */ }
+try { if (localStorage.getItem("wellnest_size") === "lg") document.documentElement.dataset.size = "lg"; } catch { /* private mode */ }
 
 // Smooth, inertial page scrolling (skipped for people who prefer reduced motion).
 if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {

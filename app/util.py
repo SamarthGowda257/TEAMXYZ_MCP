@@ -213,7 +213,7 @@ def spoken_code(code: str) -> str:
 
 
 def norm_code(text, prefix: str) -> str | None:
-    """'cl 48213', 'CL48213', '48213', 'ch-48213' -> 'CL-48213' for the given prefix."""
+    """'cl 48213', 'CL48213', '48213', 'ch-48213' -> 'WN-48213' for the given prefix."""
     t = re.sub(r"[^A-Za-z0-9]", "", clean(text)).upper()
     if not t:
         return None

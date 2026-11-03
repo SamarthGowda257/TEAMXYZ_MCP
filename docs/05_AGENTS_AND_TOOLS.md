@@ -6,8 +6,8 @@ The agents are configured by humans in Talkdesk. The tools are yours. This file 
 ```json
 {
   "ok": true,
-  "message": "Booked. Dr. Rajesh Iyer, Wednesday 4 November at 10:30 AM, room OPD-310, fee 1,200 rupees. Your booking ID is CL-4821.",
-  "data": { "booking_id": "CL-4821", "booking_id_spoken": "C L 4 8 2 1", "...": "..." },
+  "message": "Booked. Dr. Rajesh Iyer, Wednesday 4 November at 10:30 AM, room OPD-310, fee 1,200 rupees. Your booking ID is WN-4821.",
+  "data": { "booking_id": "WN-4821", "booking_id_spoken": "W N 4 8 2 1", "...": "..." },
   "related": [ { "kind": "coverage", "text": "Star Health covers this consultation with a 10% co-pay." } ],
   "error_code": null
 }

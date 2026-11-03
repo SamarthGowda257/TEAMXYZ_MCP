@@ -124,18 +124,18 @@ def caregiver_update(phone, dob, booking_id="") -> Result:
             return fail("not_allowed", f"Updates to {p['caregiver_name']} are switched off. Shall I switch them on?")
         q = select(A).where(A.c.patient_id == p["id"], A.c.status == "booked", A.c.appt_date >= config.today())
         if clean(booking_id):
-            q = q.where(A.c.booking_code == norm_code(booking_id, "CL"))
+            q = q.where(A.c.booking_code == norm_code(booking_id, "WN"))
         a = c.execute(q.order_by(A.c.appt_date, A.c.appt_time).limit(1)).mappings().first()
         if not a:
             return fail("not_found", "I couldn't find an upcoming booking to share.")
         who = REF.doctors[a["doctor_id"]]["name"] if a["doctor_id"] else REF.procedures[a["procedure_id"]]["name"]
         text = (f"{p['full_name']} has a visit with {who} on {human_date(a['appt_date'])} at {human_time(a['appt_time'])} "
-                f"(booking {a['booking_code']}) at CareLine Hospitals, Marathahalli.")
+                f"(booking {a['booking_code']}) at WellNest Hospitals, Marathahalli.")
         if p["caregiver_email"]:
             notify.queue(c, patient_id=p["id"], channel="email", template="caregiver_update", to=p["caregiver_email"],
-                         subject=f"Visit details for {p['full_name']}", body=f"Hello {p['caregiver_name']},\n\n{text}\n\nCareLine Hospitals")
+                         subject=f"Visit details for {p['full_name']}", body=f"Hello {p['caregiver_name']},\n\n{text}\n\nWellNest Hospitals")
         if p["caregiver_phone"]:
-            notify.queue(c, patient_id=p["id"], channel="sms", template="caregiver_update", to=p["caregiver_phone"], body="CareLine: " + text)
+            notify.queue(c, patient_id=p["id"], channel="sms", template="caregiver_update", to=p["caregiver_phone"], body="WellNest: " + text)
         pt.log(c, p["id"], "send_caregiver_update", a["booking_code"], True, f"Update to {p['caregiver_name']}")
     sent = mask_email(p["caregiver_email"]) if p["caregiver_email"] else "their mobile"
     return ok(f"Done. I've sent the visit details to {p['caregiver_name']} at {sent}.", sent_to=sent, caregiver=p["caregiver_name"])
@@ -175,7 +175,7 @@ def record_checkin(phone, dob, booking_id="", pain_score="", fever="", symptoms_
             return err
         a = None
         if clean(booking_id):
-            a = c.execute(select(A.c.id).where(A.c.booking_code == norm_code(booking_id, "CL"), A.c.patient_id == p["id"])).first()
+            a = c.execute(select(A.c.id).where(A.c.booking_code == norm_code(booking_id, "WN"), A.c.patient_id == p["id"])).first()
         cid = c.execute(insert(db.checkins).values(patient_id=p["id"], appointment_id=a[0] if a else None, pain_score=pain,
                                                    fever=fev, symptoms_worse=worse, notes=clean(notes)[:300] or None,
                                                    alert_raised=alert, created_at=config.now())).inserted_primary_key[0]
@@ -198,7 +198,7 @@ def submit_feedback(phone, rating, comment="", booking_id="") -> Result:
     A = db.appointments
     with db.engine.begin() as c:
         p = pt.get_by_phone(c, phone)
-        a = c.execute(select(A.c.id).where(A.c.booking_code == norm_code(booking_id, "CL"))).first() if clean(booking_id) else None
+        a = c.execute(select(A.c.id).where(A.c.booking_code == norm_code(booking_id, "WN"))).first() if clean(booking_id) else None
         fid = c.execute(insert(db.feedback).values(patient_id=p["id"] if p else None, appointment_id=a[0] if a else None, rating=r,
                                                    comment=clean(comment)[:500] or None, created_at=config.now())).inserted_primary_key[0]
     msg = "Thank you for the feedback." if r >= 4 else "Thank you for telling us. Our patient care team will look into it."

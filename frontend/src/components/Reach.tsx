@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { MessageCircle, PhoneCall } from "lucide-react";
 import { openChat, voiceNumber } from "../lib/chat";
 
-/** The main way to book: talk to the CareLine Assistant on Talkdesk (chat or phone). The form is the fallback. */
+/** The main way to book: talk to the WellNest Assistant on Talkdesk (chat or phone). The form is the fallback. */
 export function ReachButtons({ form = true, light = false, size = "" }: { form?: boolean; light?: boolean; size?: "" | "sm" }) {
   const v = voiceNumber();
   return (

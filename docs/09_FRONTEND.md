@@ -4,17 +4,17 @@
 - **No build step.** Plain HTML + CSS + JavaScript ES modules in `web/`, served by FastAPI. Nothing to compile on Render, nothing to break on demo day.
 - Supabase Auth from a pinned CDN build: `https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js` (or a version you verify exists). Config from `/config.js`.
 - One shared `web/js/api.js` that adds the access token to every `/api` call and handles 401 → login.
-- One shared `web/css/careline.css` with design tokens. No CSS framework required.
+- One shared `web/css/wellnest.css` with design tokens. No CSS framework required.
 
 ## Pages
 | Path | Login | Content |
 |---|---|---|
-| `/` | no | Hero ("Book, reschedule and get reports in under a minute, by chat, phone or web"), 3 actions (Book, Lab reports, Talk to us), departments grid, why CareLine, emergency band (call 108 / emergency 24×7) |
+| `/` | no | Hero ("Book, reschedule and get reports in under a minute, by chat, phone or web"), 3 actions (Book, Lab reports, Talk to us), departments grid, why WellNest, emergency band (call 108 / emergency 24×7) |
 | `/doctors` | no | Filter by department, language, day; doctor cards (photo placeholder initials, qualification, experience, days/hours, fee, languages) → "Book" |
 | `/insurance` | no | Accepted insurers, cashless vs reimbursement, documents, coverage checker (insurer + procedure → estimate) |
 | `/contact` | no | Address, hours, map link (link out, no iframe), phone, emergency |
 | `/login`, `/signup` | – | Supabase email + password. After signup: link step (phone + DOB) → `POST /api/me/link` |
-| `/portal` | yes | Greeting, next appointment card (with assistance badges), pending/ready reports, waitlist offers, quick actions, "Ask CareLine" (opens chat) |
+| `/portal` | yes | Greeting, next appointment card (with assistance badges), pending/ready reports, waitlist offers, quick actions, "Ask WellNest" (opens chat) |
 | `/portal/book` | yes | 3 steps: department or procedure → date + doctor + slot grid → confirm (shows fee, coverage estimate, instructions). Same service as the bot. |
 | `/portal/appointments` | yes | Upcoming/past tabs; reschedule; cancel (in-page confirm step, no `confirm()`); request wheelchair/escort |
 | `/portal/reports` | yes | Report list with status chips; report detail with results table and reference ranges; "Email me this" |
@@ -30,10 +30,10 @@ Panels: today's schedule by department (booked/free bars), live activity feed (b
 ## Talkdesk chat widget
 - Snippet from `02_TALKDESK_PRIMER.md`, loaded on every page by `web/js/chat.js`.
 - If `TALKDESK_TOUCHPOINT_ID` is empty: show a styled "Chat launches here" button that explains chat is being connected (no broken widget).
-- Custom launcher: our own "Ask CareLine" buttons call `webchat.open()`.
+- Custom launcher: our own "Ask WellNest" buttons call `webchat.open()`.
 - After login: `setContextParam({ patient_name, patient_phone, td_contact_person_identification: patient_phone })` on `onOpenWebchat` and `onConversationStart`; also `POST /api/session/warm`.
 - On logout: `webchat.reset()`.
-- Style the widget to match tokens: `chatThemeColor`, `chatTitle: "CareLine Assistant"`, `chatSubtitle: "Usually replies in seconds"`.
+- Style the widget to match tokens: `chatThemeColor`, `chatTitle: "WellNest Assistant"`, `chatSubtitle: "Usually replies in seconds"`.
 
 ## Design direction
 - Feel: a calm, trustworthy modern Indian hospital. Clinical clarity, warm and human, not sterile, not startup-flashy.

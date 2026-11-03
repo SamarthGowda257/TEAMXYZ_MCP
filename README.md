@@ -1,4 +1,4 @@
-# CareLine Hospitals · TeamXYZ (Talkdesk AI Hackday 2026)
+# WellNest Hospitals · TeamXYZ (Talkdesk AI Hackday 2026)
 
 An AI front desk for a (fictional) hospital in Bengaluru: patients book, reschedule, cancel, join waitlists, get lab
 reports and check insurance by **Talkdesk chat or voice**, or on the **website**. Every action lands in one database,

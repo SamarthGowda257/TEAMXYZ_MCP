@@ -5,7 +5,7 @@ import { session } from "./api";
 
 declare global {
   interface Window {
-    CARELINE_CONFIG?: { touchpointId: string; region: string; publicBaseUrl: string };
+    WELLNEST_CONFIG?: { touchpointId: string; region: string; publicBaseUrl: string };
     TalkdeskChatSDK?: (node: string, props: unknown) => any;
     webchat?: any;
   }
@@ -16,12 +16,12 @@ const listeners = new Set<() => void>();
 
 /** The phone number that reaches the Talkdesk AI receptionist (falls back to the hospital helpline). */
 export function voiceNumber(): { label: string; href: string } {
-  const n = (window.CARELINE_CONFIG as any)?.voiceNumber || "080 4000 1234";
+  const n = (window.WELLNEST_CONFIG as any)?.voiceNumber || "080 4000 1234";
   return { label: n, href: "tel:" + n.replace(/[^\d+]/g, "") };
 }
 
 export function chatConfigured(): boolean {
-  return !!window.CARELINE_CONFIG?.touchpointId;
+  return !!window.WELLNEST_CONFIG?.touchpointId;
 }
 
 function pushContext() {
@@ -58,7 +58,7 @@ export function openChat() {
 }
 
 export function loadChat() {
-  const cfg = window.CARELINE_CONFIG;
+  const cfg = window.WELLNEST_CONFIG;
   if (!cfg?.touchpointId || window.TalkdeskChatSDK || document.getElementById("tdWebchat")) return;
   const node = "tdWebchat";
   const div = document.createElement("div");
@@ -72,7 +72,7 @@ export function loadChat() {
     window.webchat = window.TalkdeskChatSDK(node, { touchpointId: cfg.touchpointId, accountId: "", region: cfg.region });
     window.webchat.init({
       enableEmoji: false, enableAttachments: false, enableResponsiveLayout: true,
-      styles: { chatTitle: "CareLine Assistant", chatSubtitle: "Bookings, reports, insurance", chatThemeColor: "#0A7C74" },
+      styles: { chatTitle: "WellNest Assistant", chatSubtitle: "Bookings, reports, insurance", chatThemeColor: "#0B5CAD" },
     });
     try {
       window.webchat.onOpenWebchat = () => { pushContext(); warm(); };

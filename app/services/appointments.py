@@ -237,7 +237,7 @@ def instructions_for(a: dict) -> str:
 
 
 def _get_booking(conn, booking_id, lock=False) -> dict | None:
-    code = norm_code(booking_id, "CL")
+    code = norm_code(booking_id, "WN")
     if not code:
         return None
     q = select(A).where(A.c.booking_code == code)
@@ -251,15 +251,15 @@ def _confirm_email(conn, patient, view, subject_prefix="Booking confirmed", extr
     body = (f"Dear {patient['full_name']},\n\n{subject_prefix}: {view['with']} ({view['department']})\n"
             f"Date: {view['date']}\nTime: {view['time']}\nRoom: {view['room']}\nFee: Rs {view['fee_inr']}\n"
             f"Booking ID: {view['booking_id']}\n\n{extra}Manage your bookings at {config.PUBLIC_BASE_URL}/portal\n\n"
-            "CareLine Hospitals, 42 Outer Ring Road, Marathahalli, Bengaluru.\nFor emergencies call 108.")
-    sms = f"CareLine: {subject_prefix} {view['booking_id']} {view['with']} {short_date(date.fromisoformat(view['date_iso']))} {view['time']}."
+            "WellNest Hospitals, 42 Outer Ring Road, Marathahalli, Bengaluru.\nFor emergencies call 108.")
+    sms = f"WellNest: {subject_prefix} {view['booking_id']} {view['with']} {short_date(date.fromisoformat(view['date_iso']))} {view['time']}."
     notify.email_and_sms(conn, patient=patient, template=subject_prefix.lower().replace(" ", "_"),
                          subject=f"{subject_prefix} - {view['booking_id']}", body=body, sms=sms)
     if patient.get("caregiver_consent") and patient.get("caregiver_email"):
         notify.queue(conn, patient_id=patient["id"], channel="email", template="caregiver_update",
                      to=patient["caregiver_email"], subject=f"Update for {patient['full_name']}: {subject_prefix}",
                      body=f"Hello {patient['caregiver_name']},\n\n{patient['full_name']}: {subject_prefix.lower()} with "
-                          f"{view['with']} on {view['date']} at {view['time']} (booking {view['booking_id']}).\n\nCareLine Hospitals")
+                          f"{view['with']} on {view['date']} at {view['time']} (booking {view['booking_id']}).\n\nWellNest Hospitals")
 
 
 # ------------------------------------------------------------------ book
@@ -334,9 +334,9 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
                     msg += f" Free: {'; '.join(alts[:3])}." if alts else " I can check another day or add you to the waitlist."
                     return fail("slot_taken", msg, alternatives=alts[:3], date_iso=d.isoformat())
                 vals = dict(doctor_id=chosen["id"])
-            code = pt.random_code("CL")
+            code = pt.random_code("WN")
             while c.execute(select(A.c.id).where(A.c.booking_code == code)).first():
-                code = pt.random_code("CL")
+                code = pt.random_code("WN")
             aid = c.execute(insert(A).values(booking_code=code, patient_id=patient["id"], appt_date=d, appt_time=hh,
                                              status="booked", reason=clean(reason)[:200] or (proc["name"] if proc else None),
                                              channel=channel, idempotency_key=key, created_at=config.now(),
@@ -446,8 +446,8 @@ def cancel(booking_id, phone="", date_of_birth="", reason="", channel="chat", ac
                actor, channel)
         notify.email_and_sms(c, patient=p, template="booking_cancelled", subject=f"Booking cancelled - {v['booking_id']}",
                              body=f"Dear {p['full_name']},\n\nYour booking {v['booking_id']} with {v['with']} on {v['date']} "
-                                  f"at {v['time']} is cancelled.\n\nBook again any time at {config.PUBLIC_BASE_URL}.\n\nCareLine Hospitals",
-                             sms=f"CareLine: booking {v['booking_id']} cancelled.")
+                                  f"at {v['time']} is cancelled.\n\nBook again any time at {config.PUBLIC_BASE_URL}.\n\nWellNest Hospitals",
+                             sms=f"WellNest: booking {v['booking_id']} cancelled.")
         offer = offer_slot(c, a["doctor_id"], a["appt_date"], a["appt_time"], exclude_patient=p["id"]) if a["doctor_id"] else None
     bb.invalidate(p["phone"])
     msg = f"Cancelled. Booking {v['booking_id']} with {v['with']} on {v['date']} at {v['time']} is cancelled."
@@ -622,8 +622,8 @@ def offer_slot(c, doctor_id, d: date, hh: str, exclude_patient=None, exclude_wai
                          body=f"Dear {w['full_name']},\n\nGood news: a slot opened with {doc['name']} ({doc['dept']}) on "
                               f"{human_date(d)} at {human_time(hh)}.\n\nWe are holding it for you until "
                               f"{human_time(expires.strftime('%H:%M'))}. Accept here: {link}\n\nOffer code: {code}\n\n"
-                              "You can also reply in chat with this code.\n\nCareLine Hospitals",
-                         sms=f"CareLine: slot with {doc['name']} {short_date(d)} {human_time(hh)} held 30 min. Accept: {link}",
+                              "You can also reply in chat with this code.\n\nWellNest Hospitals",
+                         sms=f"WellNest: slot with {doc['name']} {short_date(d)} {human_time(hh)} held 30 min. Accept: {link}",
                          key=f"offer:{code}")
     pt.log(c, w["patient_id"], "waitlist_offer", code, True, f"Offered {doc['name']} {d.isoformat()} {hh}", "system", None)
     bb.add(w["phone"], "waitlist_offer", f"A slot with {doc['name']} on {human_date(d)} at {human_time(hh)} is held for this "
@@ -678,7 +678,7 @@ def accept_offer(offer_code, phone, channel="chat", actor="agent") -> Result:
                 extra = (f" The next free slot with {doc['name']} is {human_date(nxt[0])} at {human_time(nxt[2][0])}." if nxt else
                          " You're still on the waitlist and we'll offer you the next opening.")
                 return fail("offer_expired", "Sorry, that offer has expired or the slot has gone." + extra)
-            code_b = pt.random_code("CL")
+            code_b = pt.random_code("WN")
             aid = c.execute(insert(A).values(booking_code=code_b, patient_id=p["id"], doctor_id=doc["id"], appt_date=o["appt_date"],
                                              appt_time=o["appt_time"], status="booked", reason="Waitlist booking",
                                              channel="waitlist", created_at=config.now(), updated_at=config.now())).inserted_primary_key[0]

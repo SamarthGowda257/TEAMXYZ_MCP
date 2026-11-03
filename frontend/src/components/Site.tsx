@@ -6,7 +6,7 @@ import { chatConfigured, onChatFallback, openChat, resetChat, voiceNumber } from
 import { useLoggedIn, useTextSize } from "../lib/hooks";
 import { CENTRES, HOSPITAL } from "../content";
 
-/** CareLine logo: a medical cross inside a rounded shield. */
+/** WellNest logo: a medical cross inside a rounded shield. */
 export function Mark({ size = 40 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true" className="mark">
@@ -47,9 +47,9 @@ export function SiteHeader() {
     <TopBar />
     <header className={scrolled ? "site-header scrolled" : "site-header"}>
       <div className="wrap bar">
-        <Link to="/" className="logo" aria-label="CareLine Hospitals, home">
+        <Link to="/" className="logo" aria-label="WellNest Hospitals, home">
           <Mark />
-          <span className="logo-text"><strong>CareLine</strong><small>Hospitals · Bengaluru</small></span>
+          <span className="logo-text"><strong>WellNest</strong><small>Hospitals · Bengaluru</small></span>
         </Link>
         <button className="menu-btn" aria-expanded={open} aria-controls="site-nav" onClick={() => setOpen(!open)}>
           {open ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}<span>{open ? "Close" : "Menu"}</span>
@@ -66,7 +66,7 @@ export function SiteHeader() {
           </button>
           {li ? (
             <>
-              <NavLink to="/portal" className="nav-strong">My CareLine</NavLink>
+              <NavLink to="/portal" className="nav-strong">My WellNest</NavLink>
               <button type="button" className="btn btn-quiet btn-sm" onClick={logout}>Log out</button>
             </>
           ) : (
@@ -95,7 +95,7 @@ export function SiteFooter() {
       </div>
       <div className="wrap footer-cols">
         <div className="footer-brand">
-          <Link to="/" className="logo"><Mark /><span className="logo-text"><strong>CareLine</strong><small>Hospitals · Bengaluru</small></span></Link>
+          <Link to="/" className="logo"><Mark /><span className="logo-text"><strong>WellNest</strong><small>Hospitals · Bengaluru</small></span></Link>
           <p>A 350-bed multi-speciality hospital caring for East Bengaluru since 2009: 14 departments, 24-hour emergency and an AI front desk on chat, phone and web.</p>
         </div>
         <div>
@@ -121,7 +121,7 @@ export function SiteFooter() {
       </div>
       <div className="footer-last">
         <div className="wrap fl-in">
-          <p>© {new Date().getFullYear()} CareLine Hospitals. A Talkdesk AI Hackday demo by TeamXYZ: the hospital, doctors and patients are fictional. A real deployment would need consent, retention rules and DPDP Act compliance.</p>
+          <p>© {new Date().getFullYear()} WellNest Hospitals. A Talkdesk AI Hackday demo by TeamXYZ: the hospital, doctors and patients are fictional. A real deployment would need consent, retention rules and DPDP Act compliance.</p>
           <p>The information on this site is general and is not medical advice.</p>
         </div>
       </div>
@@ -141,8 +141,8 @@ export function ChatFallback() {
         </button>
       )}
       {open && (
-        <div className="chat-panel" role="dialog" aria-label="CareLine Assistant">
-          <h2>CareLine Assistant</h2>
+        <div className="chat-panel" role="dialog" aria-label="WellNest Assistant">
+          <h2>WellNest Assistant</h2>
           <p>Our 24-hour AI assistant runs on Talkdesk and books, moves or cancels visits, finds your reports and checks insurance. The chat window is being connected on this site; until then, call it on <a href={voiceNumber().href}>{voiceNumber().label}</a>.</p>
           <div className="row">
             <Link className="btn btn-primary btn-sm" to="/portal/book" onClick={() => setOpen(false)}>Book online</Link>
