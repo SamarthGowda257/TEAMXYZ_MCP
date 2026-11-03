@@ -188,7 +188,8 @@ def rebuild_async() -> None:
                 for _ in range(400):
                     if embed_pending(BACKFILL_BATCH) == 0:
                         break
-                    time.sleep(BACKFILL_PAUSE_S)
+                    if emb.provider() == "gemini":      # pacing is for Google's per-minute limit only
+                        time.sleep(BACKFILL_PAUSE_S)
         except Exception as e:
             log.warning("search rebuild failed: %s", e)
     threading.Thread(target=run, name="search-rebuild", daemon=True).start()
@@ -250,10 +251,14 @@ def _search_pg(q, patient_id, ref_prefixes, k, conn, ignore=frozenset(), gate=Tr
         args["v"] = _vec_literal(vec)
         if patient_id is not None:     # exact scoring over this patient's rows only (an ANN index would post-filter)
             ctes.append(f"cand AS MATERIALIZED (SELECT d.id, d.embedding FROM search_docs d WHERE {scope} AND d.embedding IS NOT NULL)")
-            ctes.append(f"vec AS (SELECT id, 1 - (embedding <=> CAST(:v AS vector)) AS s, NULL::int AS n FROM cand ORDER BY embedding <=> CAST(:v AS vector) LIMIT {LEG_LIMIT})")
+            ctes.append(f"vec0 AS (SELECT id, 1 - (embedding <=> CAST(:v AS vector)) AS s, NULL::int AS n FROM cand ORDER BY embedding <=> CAST(:v AS vector) LIMIT {LEG_LIMIT})")
         else:
-            ctes.append(f"""vec AS (SELECT d.id, 1 - (d.embedding <=> CAST(:v AS vector)) AS s, NULL::int AS n FROM search_docs d
+            ctes.append(f"""vec0 AS (SELECT d.id, 1 - (d.embedding <=> CAST(:v AS vector)) AS s, NULL::int AS n FROM search_docs d
                 WHERE {scope} AND d.embedding IS NOT NULL ORDER BY d.embedding <=> CAST(:v AS vector) LIMIT {LEG_LIMIT})""")
+        # Only a meaningful similarity earns ranking credit. Without this floor, any passage that merely HAS a vector
+        # (e.g. the first batch embedded after a deploy) outranks the right keyword match through a near-zero cosine.
+        args["vfloor"] = config.SEARCH_VEC_FLOOR
+        ctes.append("vec AS (SELECT id, s, n FROM vec0 WHERE s >= :vfloor)")
         legs.append(("v", "vec"))
     mode = "hybrid" if vec is not None else ("keyword+fuzzy" if db.SEARCH["trgm"] else "keyword")
     if not legs:

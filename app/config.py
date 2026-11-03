@@ -58,6 +58,7 @@ EMBEDDINGS_MODEL = env("EMBEDDINGS_MODEL", "gemini-embedding-001")
 EMBEDDINGS_DIM = 768                      # fixed: the pgvector column is vector(768)
 EMBEDDINGS_TIMEOUT = float(env("EMBEDDINGS_TIMEOUT", "1.5"))   # seconds, for the query embedding in a live call
 SEARCH_MIN_SIM = float(env("SEARCH_MIN_SIM", "0.70"))          # cosine needed for a meaning-only match to count
+SEARCH_VEC_FLOOR = float(env("SEARCH_VEC_FLOOR", "0.50"))      # below this a vector match adds no ranking credit
 # Background embedding cap per day (IST). Gemini's free tier is roughly 1,000 requests/day per project, so this leaves
 # headroom for live query embeddings. Only natural-language text is embedded (knowledge passages and notes).
 EMBED_DAILY_BUDGET = int(env("EMBED_DAILY_BUDGET", "900"))
