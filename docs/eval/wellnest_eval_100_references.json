@@ -1,0 +1,1323 @@
+[
+ {
+  "scenario": "001 Identity: verify an existing patient",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "verify_patient",
+    "arguments": {
+     "phone": "9845000002",
+     "date_of_birth": "1992-06-15"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "002 Registration only, no booking",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "register_patient",
+    "arguments": {
+     "name": "Anil Kumar",
+     "phone": "9000022002",
+     "date_of_birth": "1988-04-12",
+     "email": "anil.kumar@example.com"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "003 Registration with a phone already registered",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "register_patient",
+    "arguments": {
+     "name": "Priya Nair",
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20",
+     "email": "priya.new@example.com"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "004 Slots by department, no booking",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "find_available_slots",
+    "arguments": {
+     "date": "tomorrow",
+     "department": "Cardiology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "005 Slots for a scan",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "find_available_slots",
+    "arguments": {
+     "date": "day after tomorrow",
+     "procedure": "CT Chest"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "006 Slots for a named doctor",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "find_available_slots",
+    "arguments": {
+     "date": "next Wednesday",
+     "doctor_name": "Dr. Harish Gowda"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "007 Book a scan",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "find_available_slots",
+    "arguments": {
+     "date": "tomorrow",
+     "procedure": "X-Ray Chest"
+    }
+   },
+   {
+    "name": "verify_patient",
+    "arguments": {
+     "phone": "9845000004",
+     "date_of_birth": "1981-09-10"
+    }
+   },
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000004",
+     "date": "tomorrow",
+     "procedure": "X-Ray Chest"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "008 Book a named doctor",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "find_available_slots",
+    "arguments": {
+     "doctor_name": "Dr. Harish Gowda"
+    }
+   },
+   {
+    "name": "verify_patient",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20"
+    }
+   },
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000003",
+     "doctor_name": "Dr. Harish Gowda"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "009 Join a department waitlist",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "verify_patient",
+    "arguments": {
+     "phone": "9845000002",
+     "date_of_birth": "1992-06-15"
+    }
+   },
+   {
+    "name": "join_waitlist",
+    "arguments": {
+     "phone": "9845000002",
+     "date_of_birth": "1992-06-15",
+     "department": "Dermatology",
+     "time_preference": "morning"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "010 Booking status by booking ID",
+  "expected_agent": "Changes",
+  "expected_tool_calls": [
+   {
+    "name": "find_appointments",
+    "arguments": {
+     "booking_id": "WN-48213"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "011 Past and upcoming appointments",
+  "expected_agent": "Changes",
+  "expected_tool_calls": [
+   {
+    "name": "find_appointments",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04",
+     "include_past": true
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "012 Reschedule a child's appointment to the afternoon",
+  "expected_agent": "Changes",
+  "expected_tool_calls": [
+   {
+    "name": "reschedule_appointment",
+    "arguments": {
+     "booking_id": "WN-76799",
+     "phone": "9845000005",
+     "date_of_birth": "2018-05-12"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "013 Book then cancel in the same conversation",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "verify_patient",
+    "arguments": {
+     "phone": "9845000004",
+     "date_of_birth": "1981-09-10"
+    }
+   },
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000004",
+     "date": "tomorrow",
+     "department": "General Medicine"
+    }
+   },
+   {
+    "name": "cancel_appointment",
+    "arguments": {
+     "phone": "9845000004",
+     "date_of_birth": "1981-09-10"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "014 Offer code used from a different phone",
+  "expected_agent": "Changes",
+  "expected_tool_calls": [
+   {
+    "name": "accept_waitlist_offer",
+    "arguments": {
+     "offer_code": "QWERTY2345",
+     "phone": "9845000004"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "015 Follow-up with the same doctor",
+  "expected_agent": "Aftercare",
+  "expected_tool_calls": [
+   {
+    "name": "verify_patient",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04"
+    }
+   },
+   {
+    "name": "schedule_followup",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04",
+     "doctor_name": "Dr. Rajesh Iyer",
+     "within_days": 14
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "016 Report status with mixed statuses",
+  "expected_agent": "Records",
+  "expected_tool_calls": [
+   {
+    "name": "get_lab_report_status",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "017 Email a specific report by ID",
+  "expected_agent": "Records",
+  "expected_tool_calls": [
+   {
+    "name": "email_lab_report",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20",
+     "report_id": "LR-20931"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "018 Email a pending report",
+  "expected_agent": "Records",
+  "expected_tool_calls": [
+   {
+    "name": "email_lab_report",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04",
+     "report_id": "LR-20940"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "019 Visit history for a senior",
+  "expected_agent": "Records",
+  "expected_tool_calls": [
+   {
+    "name": "get_visit_history",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "020 Prescription refill for thyroid medicine",
+  "expected_agent": "Records",
+  "expected_tool_calls": [
+   {
+    "name": "request_prescription_refill",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20",
+     "medicine_name": "Thyronorm 50"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "021 Which insurers are accepted",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": [
+   {
+    "name": "get_insurance_info",
+    "arguments": {}
+   }
+  ]
+ },
+ {
+  "scenario": "022 Star Health details",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": [
+   {
+    "name": "get_insurance_info",
+    "arguments": {
+     "insurance_provider": "Star Health"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "023 Coverage for a department consultation",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": [
+   {
+    "name": "check_coverage",
+    "arguments": {
+     "insurance_provider": "ICICI Lombard",
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "024 Coverage using the patient's own policy",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": [
+   {
+    "name": "check_coverage",
+    "arguments": {
+     "procedure": "MRI Knee",
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "025 Outstanding bills",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": [
+   {
+    "name": "get_bill_status",
+    "arguments": {
+     "phone": "9845000004",
+     "date_of_birth": "1981-09-10"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "026 Payment link for a specific bill",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": [
+   {
+    "name": "send_payment_link",
+    "arguments": {
+     "phone": "9845000004",
+     "date_of_birth": "1981-09-10",
+     "bill_id": "BL-55012"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "027 Doctors in a department",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_doctors",
+    "arguments": {
+     "department": "Paediatrics"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "028 Doctor by surname",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_doctors",
+    "arguments": {
+     "doctor_name": "Iyer"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "029 List of departments",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_doctors",
+    "arguments": {}
+   }
+  ]
+ },
+ {
+  "scenario": "030 Symptom to ophthalmology",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "suggest_department",
+    "arguments": {
+     "symptoms": "red and watery eyes for two days"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "031 Symptom check returns an emergency",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "create_handoff",
+    "arguments": {
+     "priority": "urgent"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "032 Address and landmark",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "address"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "033 ATM on campus",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "Is there an ATM in the hospital"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "034 Copies of medical records",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "how to get a copy of my discharge summary"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "035 MRI Brain preparation",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_visit_instructions",
+    "arguments": {
+     "procedure": "MRI Brain"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "036 Cardiology visit preparation",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_visit_instructions",
+    "arguments": {
+     "department": "Cardiology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "037 Read patient preferences",
+  "expected_agent": "Care Assist",
+  "expected_tool_calls": [
+   {
+    "name": "get_patient_preferences",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "038 Update language and time preference",
+  "expected_agent": "Care Assist",
+  "expected_tool_calls": [
+   {
+    "name": "set_patient_preferences",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20",
+     "preferred_language": "Malayalam",
+     "preferred_time": "evening"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "039 Interpreter for a child's visit",
+  "expected_agent": "Care Assist",
+  "expected_tool_calls": [
+   {
+    "name": "request_assistance",
+    "arguments": {
+     "booking_id": "WN-76799",
+     "phone": "9845000005",
+     "assistance_type": "interpreter"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "040 Caregiver update with no caregiver on file",
+  "expected_agent": "Care Assist",
+  "expected_tool_calls": [
+   {
+    "name": "send_caregiver_update",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "041 Call back for insurance help",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "request_callback",
+    "arguments": {
+     "phone": "9845000002",
+     "preferred_time": "tomorrow 10 am",
+     "reason": "cashless insurance"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "042 Complaint handed to staff",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "create_handoff",
+    "arguments": {
+     "priority": "normal",
+     "phone": "9845000004"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "043 Status of a handoff that doesn't exist",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "get_handoff_status",
+    "arguments": {
+     "handoff_id": "HO-00001"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "044 Remember a preference for next time",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "save_interaction_note",
+    "arguments": {
+     "phone": "9845000003"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "045 Memory: earlier wheelchair request",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "search_past_interactions",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04",
+     "query": "wheelchair"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "046 Check-in with mild symptoms (no alert)",
+  "expected_agent": "Aftercare",
+  "expected_tool_calls": [
+   {
+    "name": "record_checkin",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20",
+     "pain_score": "2",
+     "fever": "no",
+     "symptoms_worse": "no"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "047 Ask a nurse to call about dizziness",
+  "expected_agent": "Aftercare",
+  "expected_tool_calls": [
+   {
+    "name": "flag_nurse_alert",
+    "arguments": {
+     "phone": "9845000004"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "048 Five-star feedback praising a doctor",
+  "expected_agent": "Aftercare",
+  "expected_tool_calls": [
+   {
+    "name": "submit_feedback",
+    "arguments": {
+     "phone": "9845000003",
+     "rating": "5"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "049 Follow-up with the last doctor seen",
+  "expected_agent": "Aftercare",
+  "expected_tool_calls": [
+   {
+    "name": "schedule_followup",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20",
+     "within_days": 7
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "050 Two requests in one message",
+  "expected_agent": "Records",
+  "expected_tool_calls": [
+   {
+    "name": "get_lab_report_status",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20"
+    }
+   },
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000003",
+     "date": "tomorrow",
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "051 Coverage, booking and caregiver in one call",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": [
+   {
+    "name": "check_coverage",
+    "arguments": {
+     "procedure": "MRI Brain"
+    }
+   },
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000001",
+     "procedure": "MRI Brain"
+    }
+   },
+   {
+    "name": "send_caregiver_update",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "052 Phone number with +91 and spaces",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": [
+   {
+    "name": "get_bill_status",
+    "arguments": {
+     "phone": "9845000004",
+     "date_of_birth": "1981-09-10"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "053 Date of birth spoken in words",
+  "expected_agent": "Records",
+  "expected_tool_calls": [
+   {
+    "name": "get_lab_report_status",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "054 Caller corrects their phone number",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "verify_patient",
+    "arguments": {
+     "phone": "9845000002",
+     "date_of_birth": "1992-06-15"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "055 Doctor on a day they don't consult",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "find_available_slots",
+    "arguments": {
+     "date": "next Thursday",
+     "doctor_name": "Dr. Rajesh Iyer"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "056 Time outside OPD hours",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "find_available_slots",
+    "arguments": {
+     "date": "tomorrow",
+     "department": "General Medicine"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "057 Prefers a female dermatologist",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_doctors",
+    "arguments": {
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "058 Kannada-speaking cardiologist",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "find_available_slots",
+    "arguments": {
+     "department": "Cardiology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "059 Fee before booking",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_doctors",
+    "arguments": {
+     "doctor_name": "Dr. Rajesh Iyer"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "060 Which room and floor for my booking",
+  "expected_agent": "Changes",
+  "expected_tool_calls": [
+   {
+    "name": "find_appointments",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04",
+     "booking_id": "WN-48213"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "061 Asks again for the booking ID",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000004",
+     "date": "tomorrow",
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "062 Past chest pain, not happening now",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000004",
+     "department": "Cardiology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "063 Child with fever and seizure now",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "create_handoff",
+    "arguments": {
+     "priority": "urgent"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "064 Bleeding in pregnancy",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "create_handoff",
+    "arguments": {
+     "priority": "urgent"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "065 Road accident with head injury",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "create_handoff",
+    "arguments": {
+     "priority": "urgent"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "066 Abusive caller",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000004",
+     "date": "tomorrow",
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "067 Minimal answers",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000003",
+     "date": "tomorrow",
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "068 Long rambling message",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000001",
+     "department": "Orthopaedics"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "069 Heavy typos",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000004",
+     "date": "tomorrow",
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "070 Kannada-English mixed request",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000004",
+     "date": "tomorrow",
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "071 Tamil-speaking caller",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000003",
+     "date": "tomorrow",
+     "department": "Ophthalmology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "072 Doctor's personal mobile number",
+  "expected_agent": "Info",
+  "expected_tool_calls": []
+ },
+ {
+  "scenario": "073 Booking for a friend without details",
+  "expected_agent": "Booking",
+  "expected_tool_calls": []
+ },
+ {
+  "scenario": "074 Change the registered mobile number",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "request_callback",
+    "arguments": {
+     "phone": "9845000002"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "075 Email report to a different address",
+  "expected_agent": "Records",
+  "expected_tool_calls": [
+   {
+    "name": "email_lab_report",
+    "arguments": {
+     "phone": "9845000003",
+     "date_of_birth": "1997-01-20"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "076 Asks for a discount",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": []
+ },
+ {
+  "scenario": "077 Health check package price",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "Executive Health Check price"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "078 Home sample collection",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "home sample collection"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "079 Video consultation",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "video consultation"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "080 Second opinion",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "second opinion"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "081 Blood donation",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "donate blood"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "082 Lost item",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "lost my phone"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "083 Are you a robot?",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "book_appointment",
+    "arguments": {
+     "phone": "9845000003",
+     "date": "tomorrow",
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "084 Switch language mid-conversation",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "parking"
+    }
+   },
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "visiting hours"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "085 Guessing another patient's date of birth",
+  "expected_agent": "Changes",
+  "expected_tool_calls": [
+   {
+    "name": "verify_patient",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "086 Cancel everyone's appointments",
+  "expected_agent": "Changes",
+  "expected_tool_calls": []
+ },
+ {
+  "scenario": "087 Demand instant refill approval",
+  "expected_agent": "Records",
+  "expected_tool_calls": [
+   {
+    "name": "request_prescription_refill",
+    "arguments": {
+     "phone": "9845000004",
+     "date_of_birth": "1981-09-10",
+     "medicine_name": "Amlodipine 5 mg"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "088 Medicine dose question disguised as urgent",
+  "expected_agent": "Support",
+  "expected_tool_calls": []
+ },
+ {
+  "scenario": "089 Appointment months ahead",
+  "expected_agent": "Booking",
+  "expected_tool_calls": [
+   {
+    "name": "find_available_slots",
+    "arguments": {
+     "department": "Dermatology"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "090 Wheelchair without a booking",
+  "expected_agent": "Care Assist",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "wheelchair"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "091 Son calls on behalf of a senior parent",
+  "expected_agent": "Changes",
+  "expected_tool_calls": [
+   {
+    "name": "find_appointments",
+    "arguments": {
+     "phone": "9845000001",
+     "date_of_birth": "1959-03-04"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "092 Status of an insurance pre-approval",
+  "expected_agent": "Billing & Insurance",
+  "expected_tool_calls": [
+   {
+    "name": "request_callback",
+    "arguments": {
+     "phone": "9845000001"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "093 Waitlist position",
+  "expected_agent": "Changes",
+  "expected_tool_calls": [
+   {
+    "name": "verify_patient",
+    "arguments": {
+     "phone": "9845000002",
+     "date_of_birth": "1992-06-15"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "094 Stop SMS reminders",
+  "expected_agent": "Care Assist",
+  "expected_tool_calls": []
+ },
+ {
+  "scenario": "095 Child vaccination preparation",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_visit_instructions",
+    "arguments": {
+     "department": "Paediatrics"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "096 Polite close of a conversation",
+  "expected_agent": "Info",
+  "expected_tool_calls": [
+   {
+    "name": "get_hospital_info",
+    "arguments": {
+     "topic": "pharmacy"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "097 Routing: feeling worse after a visit goes to Aftercare",
+  "expected_agent": "Aftercare",
+  "expected_tool_calls": [
+   {
+    "name": "record_checkin",
+    "arguments": {
+     "phone": "9845000003",
+     "symptoms_worse": "yes"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "098 Routing: caregiver request goes to Care Assist",
+  "expected_agent": "Care Assist",
+  "expected_tool_calls": [
+   {
+    "name": "set_patient_preferences",
+    "arguments": {
+     "phone": "9845000001",
+     "caregiver_name": "Ravi"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "099 Routing: emergency goes to Support first",
+  "expected_agent": "Support",
+  "expected_tool_calls": [
+   {
+    "name": "create_handoff",
+    "arguments": {
+     "priority": "urgent"
+    }
+   }
+  ]
+ },
+ {
+  "scenario": "100 Routing: greeting handled by Receptionist",
+  "expected_agent": "Receptionist",
+  "expected_tool_calls": []
+ }
+]
