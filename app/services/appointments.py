@@ -15,7 +15,7 @@ from ..util import (Result, clean, fail, human_date, human_time, in_pref, norm_c
 from .. import events
 from . import blackboard as bb
 from . import patients as pt
-from .ref import (REF, DAY_FULL, days_text, doctor_card, doctors_in, find_department, find_doctor, find_doctors,
+from .ref import (REF, DAY_FULL, days_text, doctor_card, doctors_in, find_department, find_doctor, find_doctors, not_found_doctor_message,
                   find_procedure, hours_text)
 
 A, WL, WO = db.appointments, db.waitlist, db.waitlist_offers
@@ -124,8 +124,8 @@ def _pick_doctors(department, doctor_name) -> tuple[list[dict], dict | None, Res
                                   doctors=[x["name"] for x in m[:3]])
         dept = find_department(doctor_name)
         if not dept:
-            return [], None, fail("not_found", f"I couldn't find a doctor named {clean(doctor_name)}. "
-                                  "Tell me the department and I'll list the doctors.")
+            msg, sug = not_found_doctor_message(doctor_name)
+            return [], None, fail("not_found", msg, did_you_mean=sug)
         return doctors_in(dept["id"]), dept, None
     dept = find_department(department)
     if not dept:

@@ -8,7 +8,7 @@ from .. import config, db, notify
 from ..util import Result, clean, fail, human_date, human_time, mask_email, norm_code, ok, rupees, short_date
 from . import blackboard as bb
 from . import patients as pt
-from .ref import REF, coverage_rule, doctor_card, doctors_in, find_department, find_doctor, find_doctors, find_insurer, find_procedure
+from .ref import REF, coverage_rule, doctor_card, doctors_in, find_department, find_doctor, find_doctors, find_insurer, find_procedure, not_found_doctor_message
 
 LR = db.lab_reports
 DISCLAIMER = "This is not medical advice; a doctor will guide you."
@@ -249,7 +249,8 @@ def get_doctors(department="", doctor_name="") -> Result:
         if not m:
             dept = find_department(doctor_name)
             if not dept:
-                return fail("not_found", f"I couldn't find a doctor named {clean(doctor_name)}.")
+                msg, sug = not_found_doctor_message(doctor_name)
+                return fail("not_found", msg, did_you_mean=sug)
             m = doctors_in(dept["id"])
         cards = [doctor_card(d) for d in m[:5]]
         d = cards[0]

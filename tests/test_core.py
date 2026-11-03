@@ -195,3 +195,21 @@ def test_waitlist_accept_survives_booking_code_clash(monkeypatch):
     offer = pt.verify("9845000002", "1992-06-15").data["open_offer"]
     r = ap.accept_offer(offer["offer_code"], "9845000002")
     assert r.ok and r.data["booking_id"] == "WN-99998"
+
+
+def test_unknown_doctor_is_not_silently_swapped():
+    """Regression (Talkdesk test, 3 Nov): 'Dr. Samarth Gowda' (no such doctor) was matched to Dr. Harish Gowda."""
+    r = ap.find_slots("tomorrow", doctor_name="Dr. Samarth Gowda")
+    assert not r.ok and r.error_code == "not_found"
+    assert "don't have a Dr. Samarth Gowda" in r.message and "Harish Gowda" in r.message
+    from app.services import records
+    g = records.get_doctors(doctor_name="Samarth Gowda")
+    assert not g.ok and "Harish Gowda" in g.message
+
+
+def test_doctor_names_still_forgiving():
+    from app.services.ref import find_doctors
+    assert [d["name"] for d in find_doctors("Iyer")] == ["Dr. Rajesh Iyer"]
+    assert [d["name"] for d in find_doctors("rajesh iyyer")] == ["Dr. Rajesh Iyer"]      # typo
+    assert [d["name"] for d in find_doctors("Dr Harish Gowda")] == ["Dr. Harish Gowda"]
+    assert find_doctors("Samarth Gowda") == []

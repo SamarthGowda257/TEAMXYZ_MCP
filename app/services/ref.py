@@ -3,6 +3,7 @@
 Loaded once at startup and after a demo reset. Reads never hit the DB for these.
 """
 
+import difflib
 import re
 import threading
 from dataclasses import dataclass, field
@@ -116,8 +117,14 @@ def _name_tokens(name: str) -> list[str]:
     return [w for w in re.sub(r"[^a-z' ]", " ", name.lower().replace("dr.", " ").replace("dr ", " ")).split() if w]
 
 
-def find_doctors(text) -> list[dict]:
-    """Return doctors matching a name fragment (best matches first). Needs >= 3 letters."""
+def _word_fits(w: str, toks: list[str]) -> bool:
+    """A query word fits a doctor's name if it starts a name word ("raj" -> "rajesh") or is a small typo of one."""
+    if any(tok.startswith(w) for tok in toks):
+        return True
+    return len(w) >= 4 and any(difflib.SequenceMatcher(None, w, tok).ratio() >= 0.8 for tok in toks)
+
+
+def _doctor_scores(text) -> list[tuple[int, dict]]:
     t = clean(text).lower()
     t = re.sub(r"^(dr\.?|doctor)\s*", "", t).strip()
     if len(t) < 3:
@@ -126,21 +133,43 @@ def find_doctors(text) -> list[dict]:
     scored = []
     for d in REF.doctors.values():
         toks = _name_tokens(d["name"])
-        full = " ".join(toks)
-        if t == full or t == d["code"].lower():
+        if t == " ".join(toks) or t == d["code"].lower():
             score = 100
         elif all(any(tok.startswith(w) for tok in toks) for w in q):
             score = 50 + 10 * len(q)
+        elif all(_word_fits(w, toks) for w in q):
+            score = 45                                  # every word fits, allowing typos ("Iyyer")
         elif any(w in toks for w in q if len(w) >= 4):
-            score = 20
+            score = 20                                  # only shares a word ("Samarth Gowda" vs "Harish Gowda")
         else:
             continue
         scored.append((score, d))
     scored.sort(key=lambda x: -x[0])
+    return scored
+
+
+def find_doctors(text) -> list[dict]:
+    """Doctors whose name fits every word given (best matches first). A doctor who only shares one word, e.g. the
+    surname, is NOT a match: that is a different person, offered via suggest_doctors() instead."""
+    scored = [(s, d) for s, d in _doctor_scores(text) if s >= 45]
     if not scored:
         return []
     top = scored[0][0]
     return [d for s, d in scored if s == top]
+
+
+def suggest_doctors(text, limit: int = 3) -> list[dict]:
+    """Near misses for a name we don't have: doctors sharing a name word (e.g. the same surname)."""
+    return [d for s, d in _doctor_scores(text) if s < 45][:limit]
+
+
+def not_found_doctor_message(text) -> tuple[str, list[str]]:
+    name = re.sub(r"^(dr\.?|doctor)\s*", "", clean(text), flags=re.I).strip()
+    sug = suggest_doctors(text)
+    if sug:
+        opts = " or ".join(f"{d['name']} ({d['dept']})" for d in sug[:2])
+        return f"We don't have a Dr. {name} at WellNest. Did you mean {opts}?", [d["name"] for d in sug]
+    return f"I couldn't find a doctor named {name}. Tell me the department and I'll list the doctors.", []
 
 
 def find_doctor(text) -> dict | None:
