@@ -17,6 +17,7 @@ from . import config, db
 
 log = logging.getLogger("careline.notify")
 _wake = threading.Event()
+FAKE_DOMAINS = ("@example.com", ".test", "@example.org")
 
 
 def queue(conn, *, patient_id, channel: str, template: str, to: str | None, subject: str = "", body: str = "",
@@ -29,14 +30,16 @@ def queue(conn, *, patient_id, channel: str, template: str, to: str | None, subj
         if exists:
             return
     status = "queued" if channel == "email" else "simulated"
-    if channel == "email" and config.DEMO_EMAIL_OVERRIDE:
+    if channel == "email" and to.lower().endswith(FAKE_DOMAINS):
+        status = "simulated"          # seeded fake patients: never send real mail to invented addresses
+    elif channel == "email" and config.DEMO_EMAIL_OVERRIDE:
         body = f"[Demo: originally to {to}]\n\n" + body
         to = config.DEMO_EMAIL_OVERRIDE
     conn.execute(db.notifications.insert().values(
         patient_id=patient_id, channel=channel, template=template, to_address=to, subject=subject[:200],
         body=body, status=status, dedupe_key=dedupe_key, created_at=config.now(),
         sent_at=config.now() if status == "simulated" else None))
-    if channel == "email":
+    if status == "queued":
         _wake.set()
 
 

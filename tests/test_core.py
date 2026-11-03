@@ -110,3 +110,14 @@ def test_cancel_offers_slot_to_waitlist():
 def test_db_schema_has_double_booking_guard():
     idx = {i.name for i in db.appointments.indexes}
     assert "uq_doctor_slot_booked" in idx
+
+
+def test_fake_addresses_are_never_emailed():
+    from sqlalchemy import select
+    from app import notify
+    with db.engine.begin() as c:
+        notify.queue(c, patient_id=None, channel="email", template="t", to="someone.1@example.com", subject="s", body="b", dedupe_key="fake-1")
+        notify.queue(c, patient_id=None, channel="email", template="t", to="real.person@gmail.com", subject="s", body="b", dedupe_key="real-1")
+        rows = dict(c.execute(select(db.notifications.c.dedupe_key, db.notifications.c.status)
+                              .where(db.notifications.c.dedupe_key.in_(["fake-1", "real-1"]))).all())
+    assert rows == {"fake-1": "simulated", "real-1": "queued"}
