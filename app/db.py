@@ -1,0 +1,296 @@
+"""Database schema and engine. Postgres (Supabase) when DATABASE_URL is set, SQLite otherwise.
+
+The same SQLAlchemy Core schema runs on both. Integrity lives in the database:
+the partial unique indexes below make double booking impossible.
+"""
+
+from sqlalchemy import (JSON, Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, MetaData,
+                        String, Table, Text, create_engine, event, text)
+
+from . import config
+
+md = MetaData()
+
+
+def _id():
+    return Column("id", Integer, primary_key=True, autoincrement=True)
+
+
+def _ts(name="created_at"):
+    return Column(name, DateTime, nullable=False, default=config.now)
+
+
+departments = Table("departments", md, _id(),
+    Column("code", String(8), unique=True, nullable=False),
+    Column("name", String(60), unique=True, nullable=False),
+    Column("floor", String(20)), Column("description", Text))
+
+doctors = Table("doctors", md, _id(),
+    Column("code", String(10), unique=True, nullable=False),
+    Column("name", String(80), nullable=False),
+    Column("gender", String(10)),
+    Column("department_id", ForeignKey("departments.id"), nullable=False),
+    Column("qualification", String(80)), Column("experience_years", Integer),
+    Column("languages", String(200), nullable=False),          # comma separated
+    Column("fee_inr", Integer, nullable=False),
+    Column("room", String(12), nullable=False),
+    Column("consult_days", String(20), nullable=False),        # ISO weekdays "1,3,5"
+    Column("start_time", String(5), nullable=False), Column("end_time", String(5), nullable=False),
+    Column("slot_minutes", Integer, nullable=False, default=15),
+    Column("bio", Text))
+
+procedures = Table("procedures", md, _id(),
+    Column("code", String(20), unique=True, nullable=False),
+    Column("name", String(80), nullable=False),
+    Column("category", String(10), nullable=False),            # MRI CT XRAY USG CARDIO ENDO LAB PKG
+    Column("department_id", ForeignKey("departments.id")),
+    Column("price_inr", Integer, nullable=False),
+    Column("duration_minutes", Integer, nullable=False),
+    Column("preauth_required", Boolean, nullable=False, default=False),
+    Column("fasting_hours", Integer, default=0),
+    Column("instructions", Text))
+
+resources = Table("resources", md, _id(),
+    Column("name", String(40), nullable=False),
+    Column("category", String(10), nullable=False))
+
+insurers = Table("insurers", md, _id(),
+    Column("code", String(12), unique=True, nullable=False),
+    Column("name", String(60), nullable=False),
+    Column("mode", String(14), nullable=False),                # cashless / reimbursement / both
+    Column("tpa_name", String(60)), Column("documents", Text), Column("notes", Text))
+
+coverage_rules = Table("coverage_rules", md, _id(),
+    Column("insurer_id", ForeignKey("insurers.id"), nullable=False),
+    Column("procedure_id", ForeignKey("procedures.id")),
+    Column("department_id", ForeignKey("departments.id")),
+    Column("coverage", String(8), nullable=False),             # yes / partial / no
+    Column("copay_percent", Integer, default=0),
+    Column("cap_inr", Integer),
+    Column("preauth_required", Boolean, nullable=False, default=False),
+    Column("preauth_turnaround_hours", Integer, default=24))
+
+hospital_info = Table("hospital_info", md,
+    Column("topic", String(20), primary_key=True),
+    Column("content", Text, nullable=False))
+
+patients = Table("patients", md, _id(),
+    Column("patient_code", String(12), unique=True, nullable=False),
+    Column("full_name", String(80), nullable=False),
+    Column("phone", String(16), unique=True, nullable=False),  # E.164 +91XXXXXXXXXX
+    Column("date_of_birth", Date),
+    Column("gender", String(12)),
+    Column("email", String(120)),
+    Column("address", String(160)),
+    Column("preferred_language", String(20), default="English"),
+    Column("preferred_time", String(10), default="any"),
+    Column("insurer_id", ForeignKey("insurers.id")),
+    Column("policy_number", String(30)),
+    Column("caregiver_name", String(80)), Column("caregiver_relation", String(20)),
+    Column("caregiver_phone", String(16)), Column("caregiver_email", String(120)),
+    Column("caregiver_consent", Boolean, nullable=False, default=False),
+    Column("mobility_needs", String(120)),
+    Column("is_guest", Boolean, nullable=False, default=False),
+    Column("password_hash", String(200)),
+    Column("web_email", String(120), unique=True),             # website login email
+    _ts())
+
+verification_attempts = Table("verification_attempts", md, _id(),
+    Column("phone", String(16), nullable=False),
+    Column("success", Boolean, nullable=False), _ts("attempted_at"),
+    Index("ix_verif_phone_time", "phone", "attempted_at"))
+
+appointments = Table("appointments", md, _id(),
+    Column("booking_code", String(12), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("doctor_id", ForeignKey("doctors.id")),
+    Column("procedure_id", ForeignKey("procedures.id")),
+    Column("resource_id", ForeignKey("resources.id")),
+    Column("appt_date", Date, nullable=False),
+    Column("appt_time", String(5), nullable=False),
+    Column("status", String(12), nullable=False, default="booked"),  # booked cancelled completed no_show
+    Column("reason", String(200)),
+    Column("channel", String(10), nullable=False, default="chat"),   # chat voice web staff waitlist
+    Column("idempotency_key", String(80), unique=True),
+    _ts(), Column("updated_at", DateTime, default=config.now, onupdate=config.now),
+    Column("cancelled_at", DateTime), Column("cancel_reason", String(200)),
+    Index("ix_appt_patient", "patient_id", "status"),
+    Index("ix_appt_date", "appt_date", "status"))
+# the double-booking guards (one active booking per doctor slot / machine slot)
+Index("uq_doctor_slot_booked", appointments.c.doctor_id, appointments.c.appt_date, appointments.c.appt_time,
+      unique=True, postgresql_where=text("status = 'booked' AND doctor_id IS NOT NULL"),
+      sqlite_where=text("status = 'booked' AND doctor_id IS NOT NULL"))
+Index("uq_resource_slot_booked", appointments.c.resource_id, appointments.c.appt_date, appointments.c.appt_time,
+      unique=True, postgresql_where=text("status = 'booked' AND resource_id IS NOT NULL"),
+      sqlite_where=text("status = 'booked' AND resource_id IS NOT NULL"))
+
+assistance_requests = Table("assistance_requests", md, _id(),
+    Column("appointment_id", ForeignKey("appointments.id"), nullable=False),
+    Column("type", String(16), nullable=False),
+    Column("notes", String(200)), _ts())
+
+waitlist = Table("waitlist", md, _id(),
+    Column("code", String(12), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("department_id", ForeignKey("departments.id")),
+    Column("doctor_id", ForeignKey("doctors.id")),
+    Column("date_from", Date, nullable=False), Column("date_to", Date, nullable=False),
+    Column("time_preference", String(10), default="any"),
+    Column("urgent", Boolean, nullable=False, default=False),
+    Column("status", String(10), nullable=False, default="waiting"),  # waiting offered booked expired cancelled
+    _ts(), Index("ix_waitlist_status", "status", "date_from", "date_to"))
+
+waitlist_offers = Table("waitlist_offers", md, _id(),
+    Column("offer_code", String(16), unique=True, nullable=False),
+    Column("waitlist_id", ForeignKey("waitlist.id"), nullable=False),
+    Column("doctor_id", ForeignKey("doctors.id"), nullable=False),
+    Column("appt_date", Date, nullable=False), Column("appt_time", String(5), nullable=False),
+    Column("status", String(10), nullable=False, default="open"),     # open accepted expired superseded
+    Column("expires_at", DateTime, nullable=False),
+    Column("appointment_id", ForeignKey("appointments.id")), _ts())
+Index("uq_open_offer_per_slot", waitlist_offers.c.doctor_id, waitlist_offers.c.appt_date,
+      waitlist_offers.c.appt_time, unique=True,
+      postgresql_where=text("status = 'open'"), sqlite_where=text("status = 'open'"))
+
+lab_reports = Table("lab_reports", md, _id(),
+    Column("report_code", String(12), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("appointment_id", ForeignKey("appointments.id")),
+    Column("doctor_id", ForeignKey("doctors.id")),
+    Column("test_name", String(80), nullable=False),
+    Column("status", String(10), nullable=False),                    # pending ready collected
+    Column("ordered_at", DateTime, nullable=False),
+    Column("expected_at", DateTime), Column("ready_at", DateTime),
+    Column("summary", Text), Column("results", JSON),
+    Index("ix_lab_patient", "patient_id", "ordered_at"))
+
+prescriptions = Table("prescriptions", md, _id(),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("doctor_id", ForeignKey("doctors.id")),
+    Column("medicine_name", String(80), nullable=False),
+    Column("dosage", String(80)), Column("start_date", Date), Column("end_date", Date))
+
+prescription_requests = Table("prescription_requests", md, _id(),
+    Column("request_code", String(12), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("doctor_id", ForeignKey("doctors.id")),
+    Column("medicine_name", String(80), nullable=False),
+    Column("status", String(16), nullable=False, default="pending_doctor"), _ts())
+
+bills = Table("bills", md, _id(),
+    Column("bill_code", String(12), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("appointment_id", ForeignKey("appointments.id")),
+    Column("description", String(120)),
+    Column("amount_inr", Integer, nullable=False),
+    Column("insurer_paid_inr", Integer, default=0),
+    Column("status", String(16), nullable=False),                    # due paid partially_paid waived
+    Column("due_date", Date), _ts(), Index("ix_bill_patient", "patient_id", "status"))
+
+handoffs = Table("handoffs", md, _id(),
+    Column("handoff_code", String(12), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id")),
+    Column("phone", String(16)),
+    Column("priority", String(8), nullable=False),
+    Column("reason_code", String(20)),
+    Column("summary", Text, nullable=False),
+    Column("status", String(10), nullable=False, default="open"),
+    Column("assigned_to", String(60)), _ts())
+
+callbacks = Table("callbacks", md, _id(),
+    Column("callback_code", String(12), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id")),
+    Column("phone", String(16), nullable=False),
+    Column("preferred_time", String(60)), Column("reason", String(200)),
+    Column("status", String(10), nullable=False, default="queued"), _ts())
+
+checkins = Table("checkins", md, _id(),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("appointment_id", ForeignKey("appointments.id")),
+    Column("pain_score", Integer), Column("fever", Boolean), Column("symptoms_worse", Boolean),
+    Column("notes", String(300)), Column("alert_raised", Boolean, nullable=False, default=False), _ts())
+
+nurse_alerts = Table("nurse_alerts", md, _id(),
+    Column("patient_id", ForeignKey("patients.id")),
+    Column("phone", String(16)),
+    Column("reason", String(300), nullable=False),
+    Column("status", String(10), nullable=False, default="open"), _ts())
+
+feedback = Table("feedback", md, _id(),
+    Column("patient_id", ForeignKey("patients.id")),
+    Column("appointment_id", ForeignKey("appointments.id")),
+    Column("rating", Integer), Column("comment", String(500)), _ts())
+
+interaction_notes = Table("interaction_notes", md, _id(),
+    Column("patient_id", ForeignKey("patients.id")),
+    Column("phone", String(16), nullable=False),
+    Column("channel", String(10)),
+    Column("summary", String(500), nullable=False),
+    Column("topics", String(200)), Column("outcome", String(120)), _ts(),
+    Index("ix_notes_patient", "patient_id", "created_at"))
+
+resolutions = Table("resolutions", md, _id(),
+    Column("patient_id", ForeignKey("patients.id")),
+    Column("actor", String(30), nullable=False),     # agent / web / job:reminders / system
+    Column("action", String(40), nullable=False),
+    Column("ref", String(20)),
+    Column("ok", Boolean, nullable=False),
+    Column("summary", String(300)),
+    Column("channel", String(10)), _ts(),
+    Index("ix_res_patient", "patient_id", "created_at"), Index("ix_res_time", "created_at"))
+
+notifications = Table("notifications", md, _id(),
+    Column("patient_id", ForeignKey("patients.id")),
+    Column("channel", String(10), nullable=False),   # email sms whatsapp voice_call
+    Column("template", String(30), nullable=False),
+    Column("to_address", String(120), nullable=False),
+    Column("subject", String(200)), Column("body", Text),
+    Column("status", String(10), nullable=False, default="queued"),  # queued sent failed simulated
+    Column("dedupe_key", String(80), unique=True),
+    Column("attempts", Integer, nullable=False, default=0),
+    Column("error", String(300)), _ts(), Column("sent_at", DateTime),
+    Index("ix_notif_status", "status", "created_at"))
+
+
+# ------------------------------------------------------------------ engine
+def _make_engine():
+    url = config.DATABASE_URL
+    if url:
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+        if url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        # prepare_threshold=None: required behind Supabase's transaction pooler (PgBouncer mode)
+        return create_engine(url, pool_size=5, max_overflow=5, pool_pre_ping=True, pool_recycle=300,
+                             connect_args={"prepare_threshold": None, "connect_timeout": 10})
+    eng = create_engine(f"sqlite:///{config.DB_PATH}", connect_args={"check_same_thread": False, "timeout": 15})
+
+    @event.listens_for(eng, "connect")
+    def _pragmas(con, _):
+        cur = con.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.close()
+    return eng
+
+
+engine = _make_engine()
+IS_POSTGRES = engine.dialect.name == "postgresql"
+
+
+def create_schema():
+    md.create_all(engine)
+
+
+def drop_schema():
+    md.drop_all(engine)
+
+
+def db_ok() -> bool:
+    try:
+        with engine.connect() as c:
+            c.execute(text("select 1"))
+        return True
+    except Exception:
+        return False
