@@ -31,6 +31,7 @@ SECRET_KEY = env("SECRET_KEY") or hashlib.sha256(f"careline-session:{MCP_TOKEN}"
 PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", "https://teamxyz-mcp.onrender.com").rstrip("/")
 TALKDESK_TOUCHPOINT_ID = env("TALKDESK_TOUCHPOINT_ID")
 TALKDESK_REGION = env("TALKDESK_REGION", "td-us-1")
+TALKDESK_VOICE_NUMBER = env("TALKDESK_VOICE_NUMBER")      # the Talkdesk number that reaches the AI receptionist
 DEMO_PASSWORD = env("DEMO_PASSWORD", "CareLine@2026")
 
 # --- email ---

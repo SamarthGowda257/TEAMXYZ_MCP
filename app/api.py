@@ -124,7 +124,7 @@ def login(b: Login):
 # ------------------------------------------------------------------ public
 @router.get("/config.js")
 def config_js():
-    cfg = {"touchpointId": config.TALKDESK_TOUCHPOINT_ID, "region": config.TALKDESK_REGION,
+    cfg = {"touchpointId": config.TALKDESK_TOUCHPOINT_ID, "region": config.TALKDESK_REGION, "voiceNumber": config.TALKDESK_VOICE_NUMBER,
            "publicBaseUrl": config.PUBLIC_BASE_URL, "hospital": config.HOSPITAL_NAME}
     return Response(f"window.CARELINE_CONFIG = {json.dumps(cfg)};", media_type="application/javascript",
                     headers={"Cache-Control": "no-cache"})

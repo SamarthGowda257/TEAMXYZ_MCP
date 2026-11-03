@@ -4,6 +4,8 @@ import { ArrowRight, CheckCircle2, Clock, Mail, MapPin, Phone, Stethoscope } fro
 import { api, rupees, type DoctorCard } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { ErrorNote, Loading } from "../components/Bits";
+import { ReachButtons } from "../components/Reach";
+import { openChat } from "../lib/chat";
 import { Icon } from "../components/Icon";
 import { CENTRES, FACILITIES, HOSPITAL, MILESTONES, PACKAGES, STATS, VISITOR_INFO } from "../content";
 
@@ -71,7 +73,10 @@ export function Doctors() {
                   <div><dt>Languages</dt><dd>{d.languages}</dd></div>
                 </dl>
                 <div className="doc-foot"><span>Consultation <strong>{rupees(d.fee_inr)}</strong></span>
-                  <Link className="btn btn-primary btn-sm" to={`/portal/book?doctor=${encodeURIComponent(d.name)}`}>Book appointment</Link></div>
+                  <span className="row">
+                    <button type="button" className="btn btn-primary btn-sm" onClick={openChat}>Chat to book</button>
+                    <Link className="btn btn-quiet btn-sm" to={`/portal/book?doctor=${encodeURIComponent(d.name)}`}>Book online</Link>
+                  </span></div>
               </div>
             </li>
           ))}
@@ -241,7 +246,7 @@ export function Specialities() {
                 <ul className="spec-treats">{c.treats.map((t) => <li key={t}><CheckCircle2 size={18} aria-hidden="true" />{t}</li>)}</ul>
                 {team.length > 0 && <p className="spec-team"><Stethoscope size={18} aria-hidden="true" /> {team.map((d) => d.name).join(", ")}</p>}
                 <div className="row">
-                  <Link className="btn btn-primary btn-sm" to={`/portal/book`}>Book a consultation</Link>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={openChat}>Chat to book</button>
                   <Link className="btn btn-quiet btn-sm" to={`/doctors?department=${encodeURIComponent(c.dept)}`}>See doctors</Link>
                 </div>
               </section>
@@ -263,7 +268,7 @@ export function Specialities() {
             <div key={p.code} className={i === 1 ? "pk pk-main" : "pk"}>
               <h3>{p.name}</h3><p className="pk-price">{rupees(p.price)} <span>{p.tests}</span></p>
               <ul>{p.items.map((it) => <li key={it}><CheckCircle2 size={18} aria-hidden="true" />{it}</li>)}</ul>
-              <Link className={i === 1 ? "btn btn-primary" : "btn btn-quiet"} to="/portal/book">Book this check-up</Link>
+              <button type="button" className={i === 1 ? "btn btn-primary" : "btn btn-quiet"} onClick={openChat}>Book with the assistant</button>
             </div>
           ))}
         </div>
@@ -279,6 +284,7 @@ export function Visitors() {
     <>
       <PageHero crumb="Patients & visitors" title="Patients and visitors" lead="Everything you need to know before your visit: timings, what to bring, parking, visiting rules and your rights as a patient." />
       <div className="wrap page">
+        <div className="assist-banner"><div><h2 className="serif">Book, move or cancel a visit in one conversation</h2><p>Our AI assistant on Talkdesk answers the website chat and our phone line 24 hours.</p></div><ReachButtons /></div>
         <div className="visit-cards">{VISITOR_INFO.map((v) => <section key={v.title} className="contact-item"><h3>{v.title}</h3><p>{v.text}</p></section>)}</div>
         <div className="two-col">
           <div className="prose">

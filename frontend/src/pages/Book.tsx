@@ -5,6 +5,7 @@ import { ErrorNote, Loading, TokenSlip } from "../components/Bits";
 import { DateStrip, SlotGrid } from "./Portal";
 import { api, istDay, longDate, newKey, rupees, type DoctorCard, type Me, type Slot } from "../lib/api";
 import { useApi } from "../lib/hooks";
+import { ReachButtons } from "../components/Reach";
 
 type Target = { kind: "dept" | "doctor" | "proc"; value: string; label: string };
 type Choice = { doctor?: string; time: string; label: string; fee: number; room?: string };
@@ -76,6 +77,11 @@ function BookFlow({ me }: { me: Me }) {
   const step = !target ? 1 : !choice ? 2 : 3;
   return (
     <div className="book">
+      <div className="assist-banner compact">
+        <div><h2>Quickest: just tell the CareLine Assistant</h2><p>"Heart doctor on Wednesday morning" on chat or phone. It checks you, books a real slot and sends your booking ID.</p></div>
+        <ReachButtons form={false} size="sm" />
+      </div>
+      <p className="or-line"><span>or pick a slot yourself</span></p>
       <ol className="steps" aria-label="Booking steps">
         <li aria-current={step === 1 ? "step" : undefined}>What</li>
         <li aria-current={step === 2 ? "step" : undefined}>When</li>

@@ -14,6 +14,12 @@ declare global {
 let patient: { name: string; phone: string } | null = null;
 const listeners = new Set<() => void>();
 
+/** The phone number that reaches the Talkdesk AI receptionist (falls back to the hospital helpline). */
+export function voiceNumber(): { label: string; href: string } {
+  const n = (window.CARELINE_CONFIG as any)?.voiceNumber || "080 4000 1234";
+  return { label: n, href: "tel:" + n.replace(/[^\d+]/g, "") };
+}
+
 export function chatConfigured(): boolean {
   return !!window.CARELINE_CONFIG?.touchpointId;
 }

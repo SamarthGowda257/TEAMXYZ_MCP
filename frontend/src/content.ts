@@ -83,3 +83,25 @@ export const MILESTONES = [
   { year: "2023", text: "Second MRI and CT, 12-station dialysis unit" },
   { year: "2026", text: "AI front desk on chat and phone, powered by Talkdesk" },
 ];
+
+// Stock photographs (Unsplash licence), used as atmosphere for this fictional hospital.
+// Swap any URL for the team's own photos (put files in frontend/public/img/ and use "/img/name.jpg").
+const U = (id: string, w = 1400) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=75`;
+export const IMAGES = {
+  hero: U("1519494026892-80bbd2d6fd0d", 1600),          // doctor in a bright hospital corridor
+  team: U("1582750433449-648ed127bb54"),               // clinicians talking
+  consult: U("1576091160550-2173dba999ef"),            // doctor with stethoscope and tablet
+  building: U("1586773860418-d37222d8fce3"),           // hospital exterior
+  ward: U("1516549655169-df83a0774514"),               // hospital room
+  lab: U("1579154204601-01588f351e67"),                // laboratory
+  scan: U("1559757175-5700dde675bc"),                  // MRI / imaging
+  care: U("1631815588090-d4bfec5b1ccb"),               // nurse with patient
+};
+export const CENTRE_IMAGES: Record<string, string> = {
+  heart: U("1628348068343-c6a848d2b6dd", 900),
+  neuro: U("1559757175-5700dde675bc", 900),
+  ortho: U("1530026405186-ed1f139313f8", 900),
+  mother: U("1555252333-9f8e92e65df9", 900),
+  gastro: U("1579154204601-01588f351e67", 900),
+  kidney: U("1631217868264-e5b90bb7e133", 900),
+};

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Ambulance, Clock, Mail, MapPin, Menu, MessageCircle, Phone, X } from "lucide-react";
 import { session } from "../lib/api";
-import { chatConfigured, onChatFallback, openChat, resetChat } from "../lib/chat";
+import { chatConfigured, onChatFallback, openChat, resetChat, voiceNumber } from "../lib/chat";
 import { useLoggedIn, useTextSize } from "../lib/hooks";
 import { CENTRES, HOSPITAL } from "../content";
 
@@ -32,13 +32,20 @@ function TopBar() {
 export function SiteHeader() {
   const li = useLoggedIn();
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const f = () => setScrolled(window.scrollY > 40);
+    window.addEventListener("scroll", f, { passive: true }); f();
+    return () => window.removeEventListener("scroll", f);
+  }, []);
   const [lg, setLg] = useTextSize();
   const nav = useNavigate();
   const logout = () => { session.set(null); resetChat(); nav("/"); };
   return (
-    <header className="site-header">
-      <a className="skip" href="#main">Skip to content</a>
-      <TopBar />
+    <>
+    <a className="skip" href="#main">Skip to content</a>
+    <TopBar />
+    <header className={scrolled ? "site-header scrolled" : "site-header"}>
       <div className="wrap bar">
         <Link to="/" className="logo" aria-label="CareLine Hospitals, home">
           <Mark />
@@ -65,12 +72,15 @@ export function SiteHeader() {
           ) : (
             <>
               <NavLink to="/login" className="nav-strong">Patient login</NavLink>
-              <Link className="btn btn-primary btn-sm" to="/portal/book">Book appointment</Link>
             </>
           )}
+          <button type="button" className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); setOpen(false); openChat(); }}>
+            <MessageCircle size={17} aria-hidden="true" /> Chat to book
+          </button>
         </nav>
       </div>
     </header>
+    </>
   );
 }
 
@@ -133,7 +143,7 @@ export function ChatFallback() {
       {open && (
         <div className="chat-panel" role="dialog" aria-label="CareLine Assistant">
           <h2>CareLine Assistant</h2>
-          <p>Our 24-hour chat assistant is being connected. Meanwhile you can book online or call our helpline on <a href={HOSPITAL.phoneHref}>{HOSPITAL.phone}</a>.</p>
+          <p>Our 24-hour AI assistant runs on Talkdesk and books, moves or cancels visits, finds your reports and checks insurance. The chat window is being connected on this site; until then, call it on <a href={voiceNumber().href}>{voiceNumber().label}</a>.</p>
           <div className="row">
             <Link className="btn btn-primary btn-sm" to="/portal/book" onClick={() => setOpen(false)}>Book online</Link>
             <button type="button" className="btn btn-quiet btn-sm" onClick={() => setOpen(false)}>Close</button>

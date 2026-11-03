@@ -1,7 +1,7 @@
 /*
   CareLine design tokens: a clean hospital look (user brief, 3 Nov).
   White pages, medical blue, a soft blue tint for bands, red reserved for emergency.
-  Poppins for headings, Atkinson Hyperlegible for text (readable for older patients).
+  DM Serif Display for headlines, Manrope for everything else.
 */
 :root {
   --bg: #ffffff;
@@ -31,18 +31,19 @@
   --line: #e6edf5;
   --control: #b8c6d8;
 
-  --font-display: "Poppins", "Atkinson Hyperlegible", system-ui, sans-serif;
-  --font-text: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "DM Serif Display", Georgia, "Times New Roman", serif;
+  --font-display: "Manrope Variable", "Manrope", system-ui, sans-serif;
+  --font-text: "Manrope Variable", "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   --step-small: 0.9375rem;
   --step-body: 1.0625rem;
   --step-lead: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
-  --step-head: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
-  --step-hero: clamp(2.3rem, 1.6rem + 2.8vw, 3.6rem);
+  --step-head: clamp(2rem, 1.4rem + 2.2vw, 3.25rem);
+  --step-hero: clamp(2.5rem, 1.5rem + 3.4vw, 4.6rem);
 
   --radius: 14px;
-  --margin: clamp(16px, 5vw, 80px);
-  --max: 1240px;
+  --margin: clamp(16px, 4.5vw, 88px);
+  --max: 1520px;
   --shadow: 0 1px 2px rgba(13, 34, 64, .05), 0 8px 24px rgba(13, 34, 64, .07);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   color-scheme: light;
@@ -52,10 +53,14 @@
 @media (max-width: 860px) { :root { --margin: 16px; } }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+html { -webkit-text-size-adjust: 100%; }
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.serif { font-family: var(--font-serif); font-weight: 400; letter-spacing: -0.01em; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font-family: var(--font-text); font-size: var(--step-body); line-height: 1.6;
+  font-family: var(--font-text); font-size: var(--step-body); line-height: 1.65; font-weight: 450;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   font-variant-numeric: tabular-nums;
 }
 ::selection { background: var(--accent); color: #fff; }
@@ -63,7 +68,7 @@ body {
 a { color: var(--accent); text-underline-offset: 0.2em; }
 a:hover { color: var(--accent-deep); }
 img { max-width: 100%; display: block; }
-h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; margin: 0; text-wrap: balance; color: var(--ink); }
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin: 0; text-wrap: balance; color: var(--ink); }
 p { margin: 0; text-wrap: pretty; }
 button { font: inherit; color: inherit; }
 input, select, textarea { font: inherit; color: var(--ink); caret-color: var(--accent); }
@@ -78,7 +83,7 @@ input, select, textarea { font: inherit; color: var(--ink); caret-color: var(--a
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 48px; padding: 12px 24px; border: 1.5px solid transparent; border-radius: 10px; cursor: pointer; text-decoration: none;
-  font-family: var(--font-display); font-weight: 600; font-size: 1rem; letter-spacing: 0; white-space: nowrap;
+  font-family: var(--font-display); font-weight: 700; font-size: 1rem; letter-spacing: -0.005em; white-space: nowrap; border-radius: 999px;
   transition: background-color .18s, color .18s, border-color .18s, transform .18s var(--ease-out);
 }
 .btn:active { transform: translateY(1px); }
@@ -106,8 +111,8 @@ input, select, textarea { font: inherit; color: var(--ink); caret-color: var(--a
 .check input { width: 22px; height: 22px; accent-color: var(--accent); }
 
 /* motion */
-.js .rise:not(.in) { opacity: 0; transform: translateY(18px); }
-.js .rise.in { transition: opacity .6s var(--ease-out), transform .6s var(--ease-out); transition-delay: var(--d, 0ms); }
+.js .rise:not(.in) { opacity: 0; transform: translateY(28px); }
+.js .rise.in { transition: opacity .9s var(--ease-out), transform .9s var(--ease-out); transition-delay: var(--d, 0ms); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   .js .rise:not(.in) { opacity: 1; transform: none; }

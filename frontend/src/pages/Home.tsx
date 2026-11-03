@@ -1,160 +1,175 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, CalendarCheck, CheckCircle2, ClipboardList, FileText, MessageCircle, Phone, Quote, Search, ShieldCheck,
-  Siren, Stethoscope } from "lucide-react";
-import { api, istDay, rupees, shortDate, type DoctorCard } from "../lib/api";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
+import { ArrowRight, ArrowUpRight, BellRing, CalendarCheck, CheckCircle2, FileText, Languages, MessageCircle, PhoneCall,
+  ShieldCheck, Siren, Sparkles, Stethoscope, UserRoundCheck } from "lucide-react";
+import { api, rupees, type DoctorCard } from "../lib/api";
 import { useApi, useReveal } from "../lib/hooks";
-import { openChat } from "../lib/chat";
-import { HospitalArt } from "../components/HospitalArt";
+import { openChat, voiceNumber } from "../lib/chat";
 import { Icon } from "../components/Icon";
-import { CENTRES, FACILITIES, HOSPITAL, PACKAGES, STATS, STORIES, TIPS } from "../content";
+import { Photo } from "../components/Photo";
+import { ReachButtons } from "../components/Reach";
+import { CENTRES, CENTRE_IMAGES, FACILITIES, HOSPITAL, IMAGES, PACKAGES, STATS, STORIES, TIPS } from "../content";
 
-// ------------------------------------------------------------------ hero with quick appointment
-const DEPTS = ["Cardiology", "Orthopaedics", "General Medicine", "Paediatrics", "Gynaecology & Obstetrics", "Dermatology", "ENT",
-  "Neurology", "Ophthalmology", "Gastroenterology", "Pulmonology", "Endocrinology", "Nephrology"];
-type Next = { doctor: string; date: string; label: string; fee: number; time: string } | null;
+// ------------------------------------------------------------------ hero: the conversation is the booking
+const SCRIPT: { who: "me" | "bot"; text: string }[] = [
+  { who: "me", text: "Hi, I need a heart doctor this Wednesday morning." },
+  { who: "bot", text: "Dr. Rajesh Iyer, Cardiology, is free on Wednesday 4 November at 10:00 AM and 11:15 AM. The fee is ₹1,200. Which suits you?" },
+  { who: "me", text: "10 AM please. 98450 00001, born 4 March 1959." },
+  { who: "bot", text: "Thank you, Shanthamma, you're verified. Booked for 10:00 AM, room OPD-310. Your booking ID is CL-48213. I've also arranged wheelchair help at entrance B." },
+];
 
-async function nextFree(dept: string, from: number): Promise<Next> {
-  for (let off = from; off < from + 5; off++) {
-    const r = await api<any>(`/api/slots?date=${istDay(off)}&department=${encodeURIComponent(dept)}`);
-    let best: Next = null;
-    for (const d of r.doctors) {
-      const s = d.slots[0];
-      if (s && (!best || s.time < best.time)) best = { doctor: d.name, date: r.date_iso, label: s.label, fee: d.fee_inr, time: s.time };
-    }
-    if (best) return best;
-  }
-  return null;
+function LiveChat() {
+  const [n, setN] = useState(1);
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(SCRIPT.length); return; }
+    let i = 1;
+    const tick = () => {
+      if (i >= SCRIPT.length) { window.setTimeout(() => { i = 1; setN(1); tick(); }, 6000); return; }
+      setTyping(SCRIPT[i].who === "bot");
+      window.setTimeout(() => { i += 1; setTyping(false); setN(i); tick(); }, SCRIPT[i].who === "bot" ? 1700 : 1300);
+    };
+    const t = window.setTimeout(tick, 900);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <div className="live-chat" aria-label="Example: booking with the CareLine Assistant">
+      <div className="lc-head">
+        <span className="lc-avatar"><Sparkles size={18} aria-hidden="true" /></span>
+        <div><strong>CareLine Assistant</strong><span><i className="lc-dot" /> Online now · on Talkdesk</span></div>
+      </div>
+      <div className="lc-body" aria-live="off">
+        {SCRIPT.slice(0, n).map((m, i) => <p key={i} className={`bubble ${m.who}`}>{m.text}</p>)}
+        {typing && <p className="bubble bot typing" aria-hidden="true"><i /><i /><i /></p>}
+      </div>
+      <button type="button" className="lc-input" onClick={openChat}>Type your message… <span>Send</span></button>
+    </div>
+  );
 }
 
 function Hero() {
-  const nav = useNavigate();
-  const [dept, setDept] = useState("Cardiology");
-  const [day, setDay] = useState("0");
-  const [res, setRes] = useState<Next | "none" | "loading" | "error" | undefined>();
-  async function check(e: FormEvent) {
-    e.preventDefault();
-    setRes("loading");
-    try { const n = await nextFree(dept, Number(day)); setRes(n || "none"); } catch { setRes("error"); }
-  }
   return (
     <section className="hero">
-      <div className="wrap hero-in">
+      <div className="hero-grid">
         <div className="hero-copy">
-          <p className="hero-kicker"><ShieldCheck size={18} aria-hidden="true" /> Trusted multi-speciality care in Marathahalli since 2009</p>
-          <h1>Expert doctors. Gentle care. Close to home.</h1>
-          <p className="hero-lead">CareLine Hospitals brings 45 senior specialists, 24-hour emergency care and advanced diagnostics together under one roof, and lets you book, reschedule or get your reports in a minute by chat, phone or online.</p>
-          <div className="hero-actions">
-            <Link className="btn btn-primary" to="/portal/book"><CalendarCheck size={18} aria-hidden="true" /> Book appointment</Link>
-            <Link className="btn btn-quiet" to="/doctors"><Search size={18} aria-hidden="true" /> Find a doctor</Link>
+          <p className="eyebrow-pill"><ShieldCheck size={16} aria-hidden="true" /> Multi-speciality hospital · Marathahalli, Bengaluru</p>
+          <h1 className="serif">Exceptional care,<br /><em>one conversation away.</em></h1>
+          <p className="hero-lead">Tell our 24-hour assistant what you need, in your own words, on chat or on the phone. It finds the right specialist, books a real slot and sends your booking ID in under a minute.</p>
+          <ReachButtons />
+          <div className="hero-trust">
+            <div><strong>45</strong><span>senior specialists</span></div>
+            <div><strong>24×7</strong><span>emergency &amp; assistant</span></div>
+            <div><strong>8</strong><span>languages spoken</span></div>
           </div>
-          <ul className="hero-points">
-            <li><CheckCircle2 size={18} aria-hidden="true" /> 10 insurers, mostly cashless</li>
-            <li><CheckCircle2 size={18} aria-hidden="true" /> Reports online the same day</li>
-            <li><CheckCircle2 size={18} aria-hidden="true" /> Senior citizen desk</li>
-          </ul>
         </div>
-        <div className="hero-visual">
-          <HospitalArt />
-          <form className="quick-card" onSubmit={check} aria-labelledby="qa-h">
-            <h2 id="qa-h">Quick appointment</h2>
-            <div className="qa-row">
-              <div className="field"><label htmlFor="qa-dept">Speciality</label>
-                <select id="qa-dept" className="input" value={dept} onChange={(e) => { setDept(e.target.value); setRes(undefined); }}>
-                  {DEPTS.map((d) => <option key={d}>{d}</option>)}</select></div>
-              <div className="field"><label htmlFor="qa-day">From</label>
-                <select id="qa-day" className="input" value={day} onChange={(e) => { setDay(e.target.value); setRes(undefined); }}>
-                  <option value="0">Today</option><option value="1">Tomorrow</option><option value="3">In 3 days</option><option value="7">Next week</option></select></div>
-            </div>
-            <div aria-live="polite" className="qa-result">
-              {res === "loading" && <p className="muted-line">Checking the OPD schedule…</p>}
-              {res === "error" && <p className="error-text">Couldn't check right now. Please try again.</p>}
-              {res === "none" && <p>Fully booked for these days. <Link to="/portal/waitlist">Join the waitlist</Link> and we'll message you when a slot opens.</p>}
-              {res && typeof res === "object" && (
-                <div className="qa-found">
-                  <p><strong>{res.doctor}</strong><br />{shortDate(res.date)} at {res.label} · Consultation {rupees(res.fee)}</p>
-                  <button type="button" className="btn btn-primary btn-sm"
-                    onClick={() => nav(`/portal/book?doctor=${encodeURIComponent(res.doctor)}&date=${res.date}&time=${res.time}`)}>Book this slot</button>
-                </div>
-              )}
-            </div>
-            {(!res || res === "error") && <button className="btn btn-primary qa-btn">Check earliest slot <ArrowRight size={18} aria-hidden="true" /></button>}
-          </form>
+        <div className="hero-media">
+          <Photo src={IMAGES.hero} alt="A doctor walking through a bright hospital corridor" className="hero-photo" eager />
+          <LiveChat />
         </div>
       </div>
     </section>
   );
 }
 
-// ------------------------------------------------------------------ quick links
-function QuickLinks() {
-  const items = [
-    { to: "/portal/book", icon: CalendarCheck, title: "Book an appointment", text: "Choose a doctor, day and time" },
-    { to: "/doctors", icon: Stethoscope, title: "Find a doctor", text: "45 specialists, 8 languages" },
-    { to: "/portal/reports", icon: FileText, title: "Lab reports", text: "View or email your results" },
-    { to: "/specialities#packages", icon: ClipboardList, title: "Health check-ups", text: "Packages from ₹2,499" },
+// ------------------------------------------------------------------ insurers marquee
+const INSURERS = ["Star Health", "HDFC ERGO", "ICICI Lombard", "Niva Bupa", "Care Health", "Aditya Birla Health", "Tata AIG", "Bajaj Allianz", "CGHS", "ECHS"];
+function Marquee() {
+  return (
+    <section className="marquee" aria-label="Insurers we accept">
+      <p>Cashless with</p>
+      <div className="mq-track"><div className="mq-row">{[...INSURERS, ...INSURERS].map((n, i) => <span key={i} aria-hidden={i >= INSURERS.length}>{n}</span>)}</div></div>
+    </section>
+  );
+}
+
+// ------------------------------------------------------------------ how booking works (Talkdesk-first)
+function HowItWorks() {
+  const ref = useReveal<HTMLElement>();
+  const v = voiceNumber();
+  const steps = [
+    { icon: MessageCircle, title: "Say what you need", text: "\"Skin doctor tomorrow evening\", \"move my MRI\", \"is my thyroid report ready?\" In English, Hindi, Kannada and more." },
+    { icon: UserRoundCheck, title: "We confirm it's you", text: "For anything about your records, the assistant checks your mobile number and date of birth with the hospital system." },
+    { icon: CalendarCheck, title: "It's done, in real time", text: "Real slots from our doctors' schedules. Your booking ID is read out and sent by email and SMS." },
+    { icon: BellRing, title: "We keep you posted", text: "Reminders a day and two hours before, and a waitlist that offers you the next cancelled slot." },
   ];
   return (
-    <section className="quick-links" aria-label="Quick links">
-      <div className="wrap ql-grid">
-        {items.map(({ to, icon: I, title, text }) => (
-          <Link key={title} to={to} className="ql"><span className="ql-icon"><I size={24} aria-hidden="true" /></span><span><strong>{title}</strong><small>{text}</small></span></Link>
-        ))}
-        <a href="tel:108" className="ql ql-alert"><span className="ql-icon"><Siren size={24} aria-hidden="true" /></span><span><strong>Emergency 24×7</strong><small>Call 108 or come to entrance B</small></span></a>
-      </div>
-    </section>
-  );
-}
-
-function Stats() {
-  return (
-    <section className="stats" aria-label="CareLine in numbers">
-      <div className="wrap stats-grid">
-        {STATS.map((s) => <div key={s.label} className="stat"><strong>{s.value}</strong><span>{s.label}</span></div>)}
-      </div>
-    </section>
-  );
-}
-
-function About() {
-  const ref = useReveal<HTMLElement>();
-  return (
-    <section className="section" ref={ref} aria-labelledby="about-h">
-      <div className="wrap about-grid">
-        <div className="rise">
-          <p className="section-label">About CareLine</p>
-          <h2 id="about-h">A neighbourhood hospital with the depth of a medical centre</h2>
-          <p className="section-lead">CareLine Hospitals opened on Outer Ring Road in 2009 with one promise: that families in East Bengaluru should not have to cross the city for serious care. Today our 350-bed hospital treats more than 1,200 outpatients every day across 14 specialities.</p>
-          <p>Our doctors work in teams around the patient: a cardiologist, physician and dietitian review a heart patient together, and every admitted patient has a named nurse. We publish our prices, explain insurance before treatment, and keep you informed in the language you are most comfortable with.</p>
-          <Link className="text-link" to="/about">More about our hospital <ArrowRight size={16} aria-hidden="true" /></Link>
+    <section className="section how" ref={ref} aria-labelledby="how-h">
+      <div className="wrap">
+        <div className="split-head">
+          <h2 id="how-h" className="serif rise">Booking at CareLine is a conversation, not a queue</h2>
+          <p className="rise" style={{ ["--d" as string]: "80ms" }}>Our AI front desk runs on <strong>Talkdesk</strong>, the same platform large contact centres use. It answers the website chat and our phone line {v.label}, day and night, and hands you to a person whenever you ask.</p>
         </div>
-        <ul className="value-list rise" style={{ ["--d" as string]: "100ms" }}>
-          <li><strong>Patient first</strong><span>Clear explanations, published prices and no unnecessary tests.</span></li>
-          <li><strong>Safe by design</strong><span>Identity checks before every change to your booking or records.</span></li>
-          <li><strong>Always reachable</strong><span>An AI front desk on chat and phone 24 hours, with a person a tap away.</span></li>
-          <li><strong>Care for every age</strong><span>Paediatric, adult and dedicated senior citizen services.</span></li>
-        </ul>
+        <ol className="how-steps">
+          {steps.map((s, i) => (
+            <li key={s.title} className="rise" style={{ ["--d" as string]: `${120 + i * 90}ms` }}>
+              <span className="how-num">{i + 1}</span>
+              <span className="how-icon"><s.icon size={26} aria-hidden="true" /></span>
+              <h3>{s.title}</h3><p>{s.text}</p>
+            </li>
+          ))}
+        </ol>
+        <div className="how-cta rise">
+          <div className="channel">
+            <MessageCircle size={28} aria-hidden="true" />
+            <div><strong>Website chat</strong><span>Bottom-right of every page</span></div>
+            <button type="button" className="btn btn-primary btn-sm" onClick={openChat}>Start chat</button>
+          </div>
+          <div className="channel">
+            <PhoneCall size={28} aria-hidden="true" />
+            <div><strong>Phone, 24 hours</strong><span>The same assistant answers {v.label}</span></div>
+            <a className="btn btn-quiet btn-sm" href={v.href}>Call now</a>
+          </div>
+          <div className="channel channel-alt">
+            <CalendarCheck size={28} aria-hidden="true" />
+            <div><strong>Prefer a form?</strong><span>Pick a doctor and a time yourself</span></div>
+            <Link className="btn btn-quiet btn-sm" to="/portal/book">Book online</Link>
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
+// ------------------------------------------------------------------ numbers
+function Numbers() {
+  const ref = useRef<HTMLElement>(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setOn(true); io.disconnect(); } }, { threshold: 0.3 });
+    io.observe(el); return () => io.disconnect();
+  }, []);
+  return (
+    <section className="numbers" ref={ref} aria-label="CareLine in numbers">
+      <Photo src={IMAGES.building} alt="Hospital building exterior" icon="Hospital" className="numbers-bg" />
+      <div className="wrap numbers-grid">
+        {STATS.map((s) => <div key={s.label} className={on ? "num-item on" : "num-item"}><strong className="serif">{s.value}</strong><span>{s.label}</span></div>)}
+      </div>
+    </section>
+  );
+}
+
+// ------------------------------------------------------------------ centres with photos
 function Centres() {
   const ref = useReveal<HTMLElement>();
   return (
-    <section className="section tinted" ref={ref} aria-labelledby="centres-h">
+    <section className="section" ref={ref} aria-labelledby="centres-h">
       <div className="wrap">
-        <div className="section-head">
-          <div><p className="section-label">Centres of excellence</p><h2 id="centres-h">Specialised care, led by senior consultants</h2></div>
-          <Link className="btn btn-quiet btn-sm" to="/specialities">All 14 specialities</Link>
+        <div className="split-head">
+          <h2 id="centres-h" className="serif rise">Centres of excellence</h2>
+          <p className="rise">Six specialist centres where surgeons, physicians, nurses and therapists work as one team around you. <Link to="/specialities">See all 14 specialities <ArrowRight size={16} aria-hidden="true" /></Link></p>
         </div>
-        <div className="centre-grid">
+        <div className="centre-mosaic">
           {CENTRES.map((c, i) => (
-            <Link key={c.key} to={`/specialities#${c.key}`} className="centre rise" style={{ ["--d" as string]: `${i * 60}ms` }}>
-              <span className="centre-icon"><Icon name={c.icon} size={28} /></span>
-              <h3>{c.name}</h3>
-              <p>{c.summary}</p>
-              <span className="centre-more">Learn more <ArrowRight size={16} aria-hidden="true" /></span>
+            <Link key={c.key} to={`/specialities#${c.key}`} className={`tile rise tile-${i}`} style={{ ["--d" as string]: `${i * 70}ms` }}>
+              <Photo src={CENTRE_IMAGES[c.key]} alt="" icon={c.icon} className="tile-photo" />
+              <div className="tile-shade" aria-hidden="true" />
+              <div className="tile-text">
+                <span className="tile-icon"><Icon name={c.icon} size={22} /></span>
+                <h3>{c.name}</h3>
+                <p>{c.summary}</p>
+                <span className="tile-more">Explore <ArrowUpRight size={16} aria-hidden="true" /></span>
+              </div>
             </Link>
           ))}
         </div>
@@ -163,102 +178,113 @@ function Centres() {
   );
 }
 
-function Facilities() {
+// ------------------------------------------------------------------ why CareLine (photo + facilities)
+function WhyUs() {
   const ref = useReveal<HTMLElement>();
   return (
-    <section className="section" ref={ref} aria-labelledby="fac-h">
-      <div className="wrap">
-        <div className="section-head"><div><p className="section-label">Facilities</p><h2 id="fac-h">Everything you need, under one roof</h2></div></div>
-        <div className="fac-grid">
-          {FACILITIES.map((f, i) => (
-            <div key={f.title} className="fac rise" style={{ ["--d" as string]: `${i * 60}ms` }}>
-              <span className="fac-icon"><Icon name={f.icon} size={26} /></span>
-              <div><h3>{f.title}</h3><p>{f.text}</p></div>
-            </div>
-          ))}
+    <section className="section why" ref={ref} aria-labelledby="why-h">
+      <div className="wrap why-grid">
+        <div className="why-media rise">
+          <Photo src={IMAGES.care} alt="A nurse caring for a patient" icon="Accessibility" className="why-photo" />
+          <div className="why-badge"><Siren size={22} aria-hidden="true" /><div><strong>Emergency in 5 minutes</strong><span>Triage time at entrance B, round the clock</span></div></div>
         </div>
-      </div>
-    </section>
-  );
-}
-
-function FrontDesk() {
-  const ref = useReveal<HTMLElement>();
-  return (
-    <section className="section tinted" ref={ref} aria-labelledby="fd-h">
-      <div className="wrap fd-grid">
-        <div className="rise">
-          <p className="section-label">Patient services</p>
-          <h2 id="fd-h">Our front desk never closes</h2>
-          <p className="section-lead">Talk to the CareLine Assistant on our website chat or on the phone, at any hour. It books with real doctors' schedules, never gives medical advice, and passes you to a person whenever you ask.</p>
-          <ul className="check-list">
-            <li><CheckCircle2 size={20} aria-hidden="true" /> Book, reschedule or cancel, after checking your mobile number and date of birth</li>
-            <li><CheckCircle2 size={20} aria-hidden="true" /> Fully booked? Join the waitlist and get the next cancelled slot within minutes</li>
-            <li><CheckCircle2 size={20} aria-hidden="true" /> Ask if your lab report is ready and have it emailed securely</li>
-            <li><CheckCircle2 size={20} aria-hidden="true" /> Check what your insurance covers before an MRI or CT</li>
-            <li><CheckCircle2 size={20} aria-hidden="true" /> Chest pain or breathlessness? It tells you to call 108 and connects a staff member at once</li>
+        <div>
+          <h2 id="why-h" className="serif rise">Everything a family needs, under one roof</h2>
+          <p className="lead rise">Since {HOSPITAL.founded}, CareLine has grown from a 120-bed neighbourhood hospital into a 350-bed medical centre, so patients in Marathahalli, Whitefield and Bellandur no longer cross the city for serious care.</p>
+          <ul className="fac-list">
+            {FACILITIES.map((f, i) => (
+              <li key={f.title} className="rise" style={{ ["--d" as string]: `${i * 60}ms` }}>
+                <span className="fac-ic"><Icon name={f.icon} size={22} /></span>
+                <div><strong>{f.title}</strong><span>{f.text}</span></div>
+              </li>
+            ))}
           </ul>
-          <div className="hero-actions">
-            <button type="button" className="btn btn-primary" onClick={openChat}><MessageCircle size={18} aria-hidden="true" /> Chat with us</button>
-            <a className="btn btn-quiet" href={HOSPITAL.phoneHref}><Phone size={18} aria-hidden="true" /> {HOSPITAL.phone}</a>
-          </div>
-        </div>
-        <div className="chat-demo rise" style={{ ["--d" as string]: "120ms" }} aria-label="Example conversation">
-          <div className="cd-head"><span className="cd-dot" aria-hidden="true" /> CareLine Assistant · online</div>
-          <p className="msg me">I need a heart doctor on Wednesday morning.</p>
-          <p className="msg bot">Sure. On Wednesday 4 November, Dr. Rajesh Iyer is free at 10:00 AM and 11:15 AM. The consultation fee is 1,200 rupees. Which time suits you?</p>
-          <p className="msg me">10 AM please. My number is 98450 00001.</p>
-          <p className="msg bot">Booked. Dr. Rajesh Iyer, Wednesday 4 November at 10:00 AM, room OPD-310. Your booking ID is CL-48213. A confirmation is on its way by email.</p>
         </div>
       </div>
     </section>
   );
 }
 
-const FEATURED = ["Dr. Rajesh Iyer", "Dr. Kavya Reddy", "Dr. Kiran Shetty", "Dr. Lakshmi Nair"];
+// ------------------------------------------------------------------ doctors (horizontal, drag/scroll)
+const FEATURED = ["Dr. Rajesh Iyer", "Dr. Kavya Reddy", "Dr. Kiran Shetty", "Dr. Lakshmi Nair", "Dr. Harish Gowda", "Dr. Nandini Rao", "Dr. Priya Mehta", "Dr. Divya Bhat"];
+const TINTS = ["#e8f2fd", "#e7f6f1", "#fff4dc", "#eef1fb", "#fdecef", "#e9f7fb"];
 
 function Doctors() {
   const { data } = useApi<DoctorCard[]>("/api/doctors");
   const ref = useReveal<HTMLElement>();
-  const docs = (data || []).filter((d) => FEATURED.includes(d.name));
+  const docs = FEATURED.map((n) => (data || []).find((d) => d.name === n)).filter(Boolean) as DoctorCard[];
   const initials = (n: string) => n.replace("Dr. ", "").split(" ").map((w) => w[0]).slice(0, 2).join("");
   return (
-    <section className="section" ref={ref} aria-labelledby="doc-h">
+    <section className="section tinted" ref={ref} aria-labelledby="doc-h">
       <div className="wrap">
-        <div className="section-head">
-          <div><p className="section-label">Our doctors</p><h2 id="doc-h">Meet some of our specialists</h2></div>
-          <Link className="btn btn-quiet btn-sm" to="/doctors">View all doctors</Link>
+        <div className="split-head">
+          <h2 id="doc-h" className="serif rise">Meet our specialists</h2>
+          <p className="rise">Senior consultants with 5 to 30 years of experience, who speak your language. <Link to="/doctors">Find a doctor <ArrowRight size={16} aria-hidden="true" /></Link></p>
         </div>
-        <div className="doc-feature">
-          {docs.map((d, i) => (
-            <article key={d.name} className="doc-card rise" style={{ ["--d" as string]: `${i * 60}ms` }}>
-              <div className="doc-photo" aria-hidden="true"><span>{initials(d.name)}</span><Stethoscope size={22} /></div>
-              <h3>{d.name}</h3>
+      </div>
+      <div className="doc-rail" tabIndex={0} aria-label="Featured doctors, scroll sideways">
+        {docs.map((d, i) => (
+          <article key={d.name} className="doc-card">
+            <div className="doc-portrait" style={{ background: TINTS[i % TINTS.length] }} aria-hidden="true">
+              <span className="serif">{initials(d.name)}</span><Stethoscope size={22} />
+            </div>
+            <div className="doc-info">
               <p className="doc-dept">{d.department}</p>
-              <p className="doc-qual">{d.qualification} · {d.experience_years} years</p>
-              <p className="doc-time">{d.days}<br />{d.hours}</p>
-              <Link className="btn btn-quiet btn-sm" to={`/portal/book?doctor=${encodeURIComponent(d.name)}`}>Book appointment</Link>
-            </article>
-          ))}
-        </div>
+              <h3>{d.name}</h3>
+              <p className="doc-qual">{d.qualification}</p>
+              <p className="doc-time">{d.days} · {d.hours}</p>
+              <p className="doc-lang"><Languages size={15} aria-hidden="true" /> {d.languages}</p>
+              <button type="button" className="btn btn-quiet btn-sm" onClick={openChat}>Ask to book with {d.name.split(" ").slice(-1)[0]}</button>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
 }
 
+// ------------------------------------------------------------------ stories
+function Stories() {
+  const ref = useReveal<HTMLElement>();
+  const [i, setI] = useState(0);
+  const s = STORIES[i];
+  return (
+    <section className="section stories" ref={ref} aria-labelledby="st-h">
+      <div className="wrap stories-grid">
+        <div className="rise">
+          <h2 id="st-h" className="serif">In our patients' words</h2>
+          <div className="st-tabs" role="tablist" aria-label="Patient stories">
+            {STORIES.map((x, k) => <button key={x.name} role="tab" type="button" aria-selected={k === i} onClick={() => setI(k)}>{x.name}</button>)}
+          </div>
+        </div>
+        <figure className="st-quote rise" key={i} style={{ ["--d" as string]: "80ms" }}>
+          <blockquote className="serif">“{s.text}”</blockquote>
+          <figcaption><strong>{s.name}</strong> · {s.place} · {s.dept}</figcaption>
+        </figure>
+      </div>
+    </section>
+  );
+}
+
+// ------------------------------------------------------------------ packages
 function Packages() {
   const ref = useReveal<HTMLElement>();
   return (
-    <section className="section tinted" ref={ref} aria-labelledby="pk-h" id="packages">
+    <section className="section" ref={ref} aria-labelledby="pk-h" id="packages">
       <div className="wrap">
-        <div className="section-head"><div><p className="section-label">Preventive health</p><h2 id="pk-h">Health check-up packages</h2></div></div>
+        <div className="split-head">
+          <h2 id="pk-h" className="serif rise">Preventive health check-ups</h2>
+          <p className="rise">Most reports the same day, reviewed with a physician. Ask the assistant to book one, or call us.</p>
+        </div>
         <div className="pk-grid">
           {PACKAGES.map((p, i) => (
-            <div key={p.code} className={i === 1 ? "pk pk-main rise" : "pk rise"} style={{ ["--d" as string]: `${i * 80}ms` }}>
+            <div key={p.code} className={i === 1 ? "pk pk-main rise" : "pk rise"} style={{ ["--d" as string]: `${i * 90}ms` }}>
+              {i === 1 && <span className="pk-flag">Most chosen</span>}
               <h3>{p.name}</h3>
-              <p className="pk-price">{rupees(p.price)} <span>{p.tests}</span></p>
+              <p className="pk-price serif">{rupees(p.price)}</p>
+              <p className="pk-tests">{p.tests}</p>
               <ul>{p.items.map((it) => <li key={it}><CheckCircle2 size={18} aria-hidden="true" />{it}</li>)}</ul>
-              <Link className={i === 1 ? "btn btn-primary" : "btn btn-quiet"} to="/portal/book">Book this check-up</Link>
+              <button type="button" className={i === 1 ? "btn btn-primary" : "btn btn-quiet"} onClick={openChat}>Book with the assistant</button>
             </div>
           ))}
         </div>
@@ -267,65 +293,45 @@ function Packages() {
   );
 }
 
-function Stories() {
-  const ref = useReveal<HTMLElement>();
-  return (
-    <section className="section" ref={ref} aria-labelledby="st-h">
-      <div className="wrap">
-        <div className="section-head"><div><p className="section-label">Patient stories</p><h2 id="st-h">What our patients say</h2></div></div>
-        <div className="story-grid">
-          {STORIES.map((s, i) => (
-            <figure key={s.name} className="story rise" style={{ ["--d" as string]: `${i * 80}ms` }}>
-              <Quote size={28} aria-hidden="true" />
-              <blockquote>{s.text}</blockquote>
-              <figcaption><strong>{s.name}</strong><span>{s.place} · {s.dept}</span></figcaption>
-            </figure>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Tips() {
+// ------------------------------------------------------------------ health library + portal
+function Library() {
   const ref = useReveal<HTMLElement>();
   return (
     <section className="section tinted" ref={ref} aria-labelledby="tp-h">
-      <div className="wrap">
-        <div className="section-head"><div><p className="section-label">Health library</p><h2 id="tp-h">Health tips from our doctors</h2></div></div>
-        <div className="tip-grid">
-          {TIPS.map((t, i) => (
-            <article key={t.title} className="tip rise" style={{ ["--d" as string]: `${i * 80}ms` }}>
-              <span className="tip-tag">{t.tag}</span><h3>{t.title}</h3><p>{t.text}</p>
-            </article>
-          ))}
+      <div className="wrap lib-grid">
+        <div>
+          <h2 id="tp-h" className="serif rise">From our doctors</h2>
+          <div className="tips">
+            {TIPS.map((t, i) => (
+              <article key={t.title} className="tip rise" style={{ ["--d" as string]: `${i * 80}ms` }}>
+                <span className="tip-tag">{t.tag}</span><h3>{t.title}</h3><p>{t.text}</p>
+              </article>
+            ))}
+          </div>
         </div>
+        <aside className="portal-promo rise" style={{ ["--d" as string]: "120ms" }}>
+          <Photo src={IMAGES.lab} alt="Laboratory technician at work" icon="FlaskConical" className="promo-photo" />
+          <div className="promo-text">
+            <FileText size={26} aria-hidden="true" />
+            <h3>Your reports, the moment they're ready</h3>
+            <p>See lab results with normal ranges, your visits and your waitlist in My CareLine. Or just ask the assistant, "is my report ready?"</p>
+            <Link className="btn btn-primary btn-sm" to="/login">Open My CareLine</Link>
+          </div>
+        </aside>
       </div>
     </section>
   );
 }
 
-const FAQ = [
-  ["How do I book an appointment?", "Book online in under a minute, chat with the CareLine Assistant on this site, or call 080 4000 1234 at any hour. You'll get a booking ID and an email confirmation."],
-  ["Can someone else cancel my appointment?", "No. Cancelling or moving a visit needs your registered mobile number and your date of birth, checked by the hospital system."],
-  ["Which insurance do you accept?", "Star Health, HDFC ERGO, ICICI Lombard, Niva Bupa, Care Health, Aditya Birla, Tata AIG, Bajaj Allianz, CGHS and ECHS. Most are cashless; our TPA desk handles pre-approvals."],
-  ["How do I get my lab report?", "Most reports are ready the same day. Log in to see them with normal ranges, or ask the assistant to email a summary to your registered address."],
-  ["Is the emergency department open at night?", "Yes, 24 hours, every day, at entrance B. For a life-threatening emergency call 108 first."],
-];
-
-function Faq() {
+// ------------------------------------------------------------------ emergency + callback
+function Emergency() {
   return (
-    <section className="section" aria-labelledby="faq-h">
-      <div className="wrap faq-grid">
-        <div><p className="section-label">Questions</p><h2 id="faq-h">Frequently asked questions</h2>
-          <p className="section-lead">Can't find your answer? Chat with us or call {HOSPITAL.phone}.</p></div>
-        <div className="faq-list">
-          {FAQ.map(([q, a], i) => (
-            <details key={q} name="faq" open={i === 0} className="faq-item">
-              <summary>{q}<i aria-hidden="true" /></summary><p>{a}</p>
-            </details>
-          ))}
-        </div>
+    <section className="emergency-band" aria-labelledby="em-h">
+      <div className="wrap em-in">
+        <Siren size={40} aria-hidden="true" />
+        <div><h2 id="em-h">Chest pain, breathlessness, stroke signs or heavy bleeding?</h2>
+          <p>Don't wait for an appointment. Call 108 now or come to emergency entrance B, open 24 hours. If you tell our assistant, it says the same and connects a staff member at once.</p></div>
+        <a className="btn btn-white" href="tel:108">Call 108</a>
       </div>
     </section>
   );
@@ -343,20 +349,25 @@ function Callback() {
     } catch (err: any) { setState({ err: err.message }); }
   }
   return (
-    <section className="section callback" aria-labelledby="cb-h">
+    <section className="section" aria-labelledby="cb-h">
       <div className="wrap cb-grid">
         <div>
-          <h2 id="cb-h">Request a call back</h2>
-          <p className="section-lead">Questions about surgery costs, admissions or a second opinion? Leave your number and our patient care team will call you, Monday to Saturday, 8 AM to 8 PM.</p>
+          <h2 id="cb-h" className="serif">Rather we call you?</h2>
+          <p className="lead">Leave your number for surgery estimates, admissions or a second opinion. Our patient care team calls back Monday to Saturday, 8 AM to 8 PM.</p>
+          <ReachButtons form={false} size="sm" />
         </div>
         <form className="cb-form" onSubmit={submit} noValidate>
-          <div className="field"><label htmlFor="cb-name">Your name</label><input id="cb-name" name="name" className="input" autoComplete="name" /></div>
-          <div className="field"><label htmlFor="cb-phone">Mobile number</label><input id="cb-phone" name="phone" className="input" inputMode="tel" autoComplete="tel" required /></div>
-          <div className="field"><label htmlFor="cb-time">Best time to call</label>
-            <select id="cb-time" name="preferred_time" className="input" defaultValue="Today, as soon as possible">
-              <option>Today, as soon as possible</option><option>Tomorrow morning</option><option>Tomorrow afternoon</option><option>After 6 PM</option></select></div>
-          <div className="field"><label htmlFor="cb-reason">What is it about?</label><input id="cb-reason" name="reason" className="input" placeholder="e.g. knee replacement cost" /></div>
-          <button className="btn btn-primary" disabled={state.busy}>{state.busy ? "Sending…" : "Request call back"}</button>
+          <div className="two">
+            <div className="field"><label htmlFor="cb-name">Your name</label><input id="cb-name" name="name" className="input" autoComplete="name" /></div>
+            <div className="field"><label htmlFor="cb-phone">Mobile number</label><input id="cb-phone" name="phone" className="input" inputMode="tel" autoComplete="tel" required /></div>
+          </div>
+          <div className="two">
+            <div className="field"><label htmlFor="cb-time">Best time</label>
+              <select id="cb-time" name="preferred_time" className="input" defaultValue="Today, as soon as possible">
+                <option>Today, as soon as possible</option><option>Tomorrow morning</option><option>Tomorrow afternoon</option><option>After 6 PM</option></select></div>
+            <div className="field"><label htmlFor="cb-reason">About</label><input id="cb-reason" name="reason" className="input" placeholder="e.g. knee replacement cost" /></div>
+          </div>
+          <button className="btn btn-primary" disabled={state.busy}>{state.busy ? "Sending…" : "Request a call back"}</button>
           <p className={state.err ? "error-text" : "ok-text"} aria-live="polite">{state.ok || state.err}</p>
         </form>
       </div>
@@ -365,21 +376,20 @@ function Callback() {
 }
 
 export default function Home() {
-  useEffect(() => { document.title = "CareLine Hospitals, Bengaluru · Multi-speciality hospital in Marathahalli"; }, []);
+  useEffect(() => { document.title = "CareLine Hospitals, Bengaluru · Book by chat or phone, 24 hours"; }, []);
   return (
     <>
       <Hero />
-      <QuickLinks />
-      <Stats />
-      <About />
+      <Marquee />
+      <HowItWorks />
+      <Numbers />
       <Centres />
-      <Facilities />
-      <FrontDesk />
+      <WhyUs />
       <Doctors />
-      <Packages />
       <Stories />
-      <Tips />
-      <Faq />
+      <Packages />
+      <Library />
+      <Emergency />
       <Callback />
     </>
   );

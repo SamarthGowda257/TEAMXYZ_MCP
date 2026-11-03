@@ -1,7 +1,7 @@
-import { Accessibility, Ambulance, Baby, BedDouble, Bone, Brain, Droplets, FlaskConical, HeartPulse, Microscope, Pill, ScanLine,
+import { Accessibility, Ambulance, Baby, BedDouble, Bone, Brain, Droplets, FlaskConical, HeartPulse, Hospital, Microscope, Pill, ScanLine,
   Stethoscope, type LucideProps } from "lucide-react";
 
-const MAP = { Accessibility, Ambulance, Baby, BedDouble, Bone, Brain, Droplets, FlaskConical, HeartPulse, Microscope, Pill, ScanLine, Stethoscope };
+const MAP = { Accessibility, Ambulance, Baby, BedDouble, Bone, Brain, Droplets, FlaskConical, HeartPulse, Hospital, Microscope, Pill, ScanLine, Stethoscope };
 
 /** Named hospital icon from the content file (one outline icon set: lucide). */
 export function Icon({ name, ...rest }: { name: string } & LucideProps) {
