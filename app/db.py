@@ -294,6 +294,24 @@ def fallback_to_sqlite(reason: str) -> None:
 
 def create_schema():
     md.create_all(engine)
+    if IS_POSTGRES:
+        lock_down()
+
+
+def lock_down() -> None:
+    """Supabase exposes tables in the public schema through its REST API (anon key).
+    Enable Row Level Security with no policies so that API sees nothing. Our server connects as the
+    table owner (postgres), which bypasses RLS, so the app keeps full access. Idempotent."""
+    with engine.begin() as c:
+        for name in md.tables:
+            c.execute(text(f'ALTER TABLE "{name}" ENABLE ROW LEVEL SECURITY'))
+        c.execute(text("""
+            DO $$ BEGIN
+              IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+                EXECUTE 'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated';
+                EXECUTE 'REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated';
+              END IF;
+            END $$;"""))
 
 
 def drop_schema():
