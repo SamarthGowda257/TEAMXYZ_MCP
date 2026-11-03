@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { SiteLayout } from "./components/Site";
 import Home from "./pages/Home";
-import { Contact, Doctors, Insurance } from "./pages/Public";
+import { About, Contact, Doctors, Insurance, Specialities, Visitors } from "./pages/Public";
 import { Accept, Login, Signup } from "./pages/Auth";
 import { Appointments, Overview, Profile, Reports, Waitlist } from "./pages/Portal";
 import { Book } from "./pages/Book";
@@ -27,6 +27,9 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/doctors" element={<Doctors />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/specialities" element={<Specialities />} />
+              <Route path="/visitors" element={<Visitors />} />
               <Route path="/insurance" element={<Insurance />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/login" element={<Login />} />

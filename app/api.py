@@ -579,7 +579,7 @@ def web_callback(b: CallbackReq):
 
 # ------------------------------------------------------------------ pages (React app built into web/dist)
 DIST = WEB / "dist"
-PAGES = ["/", "/doctors", "/insurance", "/contact", "/login", "/signup", "/portal", "/portal/book", "/portal/appointments",
+PAGES = ["/", "/about", "/specialities", "/visitors", "/doctors", "/insurance", "/contact", "/login", "/signup", "/portal", "/portal/book", "/portal/appointments",
          "/portal/reports", "/portal/profile", "/portal/waitlist", "/waitlist/accept", "/dashboard", "/pay"]
 
 

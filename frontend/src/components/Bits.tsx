@@ -19,7 +19,6 @@ export function TokenSlip({ id, spoken, lines, tone = "card" }: { id: string; sp
   return (
     <div className={`token-slip token-shape tone-${tone}`} data-ui>
       <div className="slip-id">
-        <span className="sr-only">Booking ID</span>
         <span className="slip-no" aria-label={spoken ? `Booking ID ${spoken}` : undefined}>{id}</span>
       </div>
       <div className="slip-perf" aria-hidden="true" />
