@@ -158,10 +158,8 @@ def verify(phone, dob) -> Result:
     if snap["upcoming"]:
         u = snap["upcoming"][0]
         bits.append(f"Your next visit is with {u['with']} on {u['date']} at {u['time']}, booking ID {u['booking_id']}.")
-    if snap.get("waitlist"):
-        w = snap["waitlist"][0]
-        bits.append(f"You're on the waitlist for {w['for']} until {w['until']}; we'll send you an offer by SMS and email "
-                    "as soon as a slot opens.")
+    # Waitlist entries stay in data only: reading them out unasked was flagged as oversharing by the
+    # evaluation's guardrail judge; "am I on the waitlist" is answered by find_appointments.
     if snap["ready_reports"]:
         bits.append(f"You have {snap['ready_reports']} report ready to view." if snap["ready_reports"] == 1
                     else f"You have {snap['ready_reports']} reports ready to view.")

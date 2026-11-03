@@ -376,44 +376,45 @@ its line in the Conditions.
 
 ---
 
-## 10. Evaluation tuning (v4 dataset, 3 Nov)
-Talkdesk scores **Tool Call Accuracy** like RAGAS: the list of tools called in the whole conversation must equal
-the reference list exactly (one extra, missing or repeated call = 0), then each reference input is compared as an
-exact string. So agents must call one predictable tool per request and copy values as the patient said them.
+## 10. Evaluation tuning (from the v4 run, 3 Nov)
+How Talkdesk scores (matches RAGAS): **Tool Call Accuracy** needs the list of tools called in the conversation to
+equal the reference list exactly (any extra call, including a knowledge lookup, gives 0), then compares each
+reference input as exact text. **Instruction Adherence** checks every reply against the agent's own instruction
+text, so instructions must not contradict each other.
 
-**All specialists: replace the TOOLS block at the end of the instructions with:**
+### 10.1 Turn off Knowledge Management (biggest Tool Call Accuracy fix)
+Session 011 shows "Knowledge referred" twice before `find_available_slots`. Every agent has **Advanced settings →
+Use Knowledge Management**. Turn it **off on all 9 agents** (our tools hold every fact), then panel Save → top Save.
+
+### 10.2 Receptionist: replace the STYLE and RELAY paragraphs with
 ```
-TOOLS (strict): For each patient request call exactly ONE of your tools, once. Never call a tool just to check first (no verify_patient, find_appointments or get_patient_preferences before another tool): every tool that takes the mobile number and date of birth checks identity itself and its reply says what to do if something is wrong. Never call get_weekday_for_date_internal or any date helper; pass dates exactly as the patient said them. Copy values into tool inputs exactly as the patient said them (same words and spelling); never reformat phone numbers, dates of birth or names. If a tool fails, relay its message; call it again only if the patient gives new details.
+STYLE: Plain spoken words, no markdown, bullet lists or emojis. Keep your own words brief.
+
+RELAY: When a specialist answers, relay its message completely and in the same order: keep every doctor, time, date, fee, room, booking ID, amount and any disclaimer such as "this is not medical advice". Never shorten it into a summary. If the patient is not using English, translate it, keeping names, IDs, dates, times, rooms and amounts exactly the same. For booking IDs on voice, say each character, e.g. "W N 4 8 2 1 3".
 ```
-**Receptionist: add**
+and add
 ```
-TOOLS: Never call any tool yourself, including date or weekday helpers; route to a specialist, which passes dates as said.
-LANGUAGE: If the patient mixes Kannada, Hindi, Tamil or Malayalam with English, reply in that language written in English letters for the whole conversation.
+SYMPTOMS: When a patient describes symptoms that are not an emergency, always send them to the Info Agent; never name a department yourself.
+TOOLS: Never call any tool yourself, including date or weekday helpers.
 ```
-**Booking Agent: add**
+(Session 045 lost Instruction Adherence for a 3-sentence reply under the old "1 to 2 sentences" rule; 005 dropped
+the times and fees; 039 named Dermatology without the disclaimer, likely without calling a tool.)
+
+### 10.3 Conditions: replace lines 2 and 3 with
 ```
-- To join a waitlist, call join_waitlist directly (no slot search first).
-- To book: call find_available_slots once, offer the times, and after a clear yes call book_appointment once with the date of the chosen slot. Pass date_of_birth to book_appointment; never call verify_patient before booking.
-- If the patient says they are new, call register_patient directly. Use verify_patient only when the patient just asks you to check their details.
+2. Booking Agent: wants a NEW appointment, test or scan, wants free slots, is a new patient who needs registering, or wants to JOIN or be added to a waitlist (this needs no existing booking).
+3. Changes Agent: wants to see, cancel or reschedule an EXISTING booking, asks whether they are on a waitlist, or has a waitlist OFFER CODE from an email or SMS to accept.
 ```
-**Changes Agent: add**
+(Session 014: "put me on the waitlist" went to Changes, which demanded a booking ID and refused.)
+
+### 10.4 All specialists: replace the TOOLS block with
 ```
-- For "my appointments", "is my booking confirmed", "my last visit" or "am I on the waitlist", call find_appointments once: it answers all of these.
-- For cancel or reschedule, call cancel_appointment or reschedule_appointment directly with the booking ID, mobile and date of birth, even if the booking may not be theirs; the server decides and its reply says why.
+TOOLS: Call only the tools this request needs, each once. Do not call a tool just to check first (no verify_patient, find_appointments or get_patient_preferences before another tool): tools that take the mobile number and date of birth check identity themselves, and their reply says what to do if something is wrong. Never call date or weekday helpers; pass dates exactly as the patient said them. Copy values into tool inputs exactly as the patient said them; never reformat phone numbers, dates of birth or names. If a tool fails, relay its message; call it again only if the patient gives new details. Return the tool's message in full.
 ```
-**Records Agent: add**
-```
-- For "is my report ready" or a question about result values, call get_lab_report_status once and never read out values.
-```
-**Info Agent: add**
-```
-- Pass the patient's question as topic, or their symptoms as symptoms, word for word exactly as they wrote it, including punctuation. Do not shorten or rephrase it.
-```
-**Support Agent: add**
-```
-- When the patient asks for a person, call create_handoff with priority normal and handoff_reason requested_human before any transfer.
-```
-**Care Assist Agent: add**
-```
-- send_caregiver_update checks the caregiver and consent itself: call it directly, never get_patient_preferences first.
-```
+
+### 10.5 Agent additions (keep from before)
+- **Booking:** "To join a waitlist, call join_waitlist directly; no existing booking or slot search is needed. To book: call find_available_slots once, offer the times, and after a clear yes call book_appointment once with the date of the chosen slot, passing date_of_birth; never call verify_patient before booking. If the patient says they are new, call register_patient directly."
+- **Changes:** "For 'my appointments', 'is my booking confirmed', 'my last visit' or 'am I on the waitlist', call find_appointments once. For cancel or reschedule, call the tool directly with booking ID, mobile and date of birth; the server decides. Joining a waitlist is the Booking Agent's job, never ask for a booking ID for it."
+- **Info:** "For symptoms call suggest_department and return its full message including the disclaimer."
+- **Care Assist:** "send_caregiver_update checks the caregiver, consent and booking itself: call it directly with the booking ID if given."
+- **Support:** "When the patient asks for a person, call create_handoff with priority normal and handoff_reason requested_human before any transfer."
