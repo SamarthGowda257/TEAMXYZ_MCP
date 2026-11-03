@@ -35,3 +35,4 @@ htmlcov/
 # Frontend build tooling and design-inspector output
 frontend/node_modules/
 .taste-skill/inspect/
+preview/
