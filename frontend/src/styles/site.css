@@ -334,7 +334,7 @@ h2.serif { line-height: 1.08; }
 .crumbs a { color: var(--muted); }
 .page-hero h1 { font-family: var(--font-serif); font-weight: 400; font-size: clamp(2.4rem, 1.6rem + 3vw, 4.2rem); line-height: 1.05; letter-spacing: -0.015em; }
 .page-hero p { color: var(--muted); font-size: var(--step-lead); margin-top: 16px; max-width: 64ch; }
-.page { padding: 56px 0 104px; }
+.page { padding-top: 56px; padding-bottom: 104px; }
 .page-head { display: none; }
 .tile-photo .photo-fallback { background: radial-gradient(120% 120% at 85% 0%, #2f7fd0 0%, #0b5cad 45%, #062e5e 100%); }
 .tile:nth-child(even) .tile-photo .photo-fallback { background: radial-gradient(120% 120% at 15% 0%, #1d9a8c 0%, #0b5cad 55%, #062e5e 100%); }

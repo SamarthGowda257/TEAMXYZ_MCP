@@ -109,6 +109,7 @@ export function SiteFooter() {
           <Link to="/portal/reports">Lab reports</Link>
           <Link to="/insurance">Insurance &amp; TPA</Link>
           <Link to="/visitors">Visitor information</Link>
+          <Link to="/architecture">How WellNest works</Link>
           <Link to="/portal">Patient login</Link>
         </div>
         <div className="footer-contact">

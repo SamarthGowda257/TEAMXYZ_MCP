@@ -7,6 +7,8 @@ import { Accept, Login, Signup } from "./pages/Auth";
 import { Appointments, Overview, Profile, Reports, Waitlist } from "./pages/Portal";
 import { Book } from "./pages/Book";
 import { Dashboard, Pay } from "./pages/Dashboard";
+import { Architecture } from "./pages/Architecture";
+import { Checkin } from "./pages/Checkin";
 import { loadChat } from "./lib/chat";
 
 function ScrollTop() {
@@ -45,6 +47,8 @@ export default function App() {
               <Route path="/portal/profile" element={<Profile />} />
               <Route path="/waitlist/accept" element={<Accept />} />
               <Route path="/pay" element={<Pay />} />
+              <Route path="/architecture" element={<Architecture />} />
+              <Route path="/checkin" element={<Checkin />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </SiteLayout>

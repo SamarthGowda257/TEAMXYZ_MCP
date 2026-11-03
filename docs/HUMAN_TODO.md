@@ -39,7 +39,7 @@ Numbered so we can refer to them ("done with 3"). Tick the box when done.
 
 ## Uptime / cron (cron-job.org or UptimeRobot, free)
 9. [ ] GET `https://teamxyz-mcp.onrender.com/health` every 5 min (stops Render sleeping).
-10. [ ] POST `https://teamxyz-mcp.onrender.com/jobs/run?token=<JOBS_TOKEN>` every 1 min (reminders + waitlist offer expiry).
+10. [x] POST `https://teamxyz-mcp.onrender.com/jobs/run?token=<JOBS_TOKEN>` every 1 min (reminders, waitlist offer expiry, visit close-out, aftercare check-ins). Done: returns `{"ok":true,...}`.
 
 ## Talkdesk (V2 changes that affect the existing bot)
 > Full copy-paste build sheet: **docs/TALKDESK_SETUP.md** (agents, instructions, conditions, skill mappings, variables, test script).

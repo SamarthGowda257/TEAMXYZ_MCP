@@ -8,7 +8,9 @@ One Python process on Render (`python server.py`):
 | `/` and pages | Patient website (React, built into `web/dist`): home, doctors, insurance, visit us, login/signup, portal (overview, book, appointments, lab reports, waitlist, profile), waitlist accept page |
 | `/dashboard?token=` | Live front-desk dashboard: OPD fill, activity by channel, waitlist offers, handoffs, outbox, per-tool latency |
 | `/api/...` | Website + dashboard API (same services as the tools) |
-| `/jobs/run?token=` | Reminders (24 h email+SMS, 2 h call) and waitlist offer expiry |
+| `/jobs/run?token=` | Reminders (24 h email+SMS, 2 h call), waitlist offer expiry, closes past visits, day-2 aftercare check-in email |
+| `/checkin?t=` | Post-visit check-in form from the aftercare email (signed 7-day link, no login); pain ≥ 7, fever or "worse" raises a nurse alert |
+| `/architecture` | Public "How WellNest works" page with live status from `/health` |
 | `/ops/reset-demo?token=` | Rebuild demo data relative to today (about 3 s) |
 | `/health` | Uptime + DB check |
 

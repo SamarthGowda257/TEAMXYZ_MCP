@@ -162,7 +162,8 @@ def flag_nurse_alert(phone, reason, patient=None, conn=None) -> Result:
               alert_id=f"NA-{10000 + aid}")
 
 
-def record_checkin(phone, dob, booking_id="", pain_score="", fever="", symptoms_worse="", notes="") -> Result:
+def record_checkin(phone, dob, booking_id="", pain_score="", fever="", symptoms_worse="", notes="",
+                   patient_id=None, appointment_id=None, channel="chat") -> Result:
     try:
         pain = int(float(clean(pain_score))) if clean(pain_score) else None
     except ValueError:
@@ -173,18 +174,21 @@ def record_checkin(phone, dob, booking_id="", pain_score="", fever="", symptoms_
     alert = bool((pain is not None and pain >= 7) or fev or worse)
     A = db.appointments
     with db.engine.begin() as c:
-        p, err = pt.check_identity(c, phone, dob)
-        if err:
-            return err
-        a = None
-        if clean(booking_id):
+        if patient_id:                       # website check-in link (signed token) already identifies the patient
+            p = pt.get_by_id(c, patient_id)
+        else:
+            p, err = pt.check_identity(c, phone, dob)
+            if err:
+                return err
+        a = (appointment_id,) if appointment_id else None
+        if clean(booking_id) and not a:
             a = c.execute(select(A.c.id).where(A.c.booking_code == norm_code(booking_id, "WN"), A.c.patient_id == p["id"])).first()
         cid = c.execute(insert(db.checkins).values(patient_id=p["id"], appointment_id=a[0] if a else None, pain_score=pain,
                                                    fever=fev, symptoms_worse=worse, notes=clean(notes)[:300] or None,
                                                    alert_raised=alert, created_at=config.now())).inserted_primary_key[0]
         if alert:
             flag_nurse_alert(p["phone"], f"Check-in warning: pain {pain}, fever {fev}, worse {worse}. {clean(notes)[:150]}", p, c)
-        pt.log(c, p["id"], "record_checkin", f"CI-{10000 + cid}", True, f"Check-in, alert={alert}")
+        pt.log(c, p["id"], "record_checkin", f"CI-{10000 + cid}", True, f"Check-in, alert={alert}", channel=channel)
     if alert:
         return ok("Thank you. Because of your answers, a nurse will call you shortly. If you feel much worse, call 108.",
                   checkin_id=f"CI-{10000 + cid}", alert_raised=True)

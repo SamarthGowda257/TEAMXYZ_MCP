@@ -517,6 +517,35 @@ def _job_auth(token: str = Query(default=""), x_jobs_token: str = Header(default
         raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Jobs token required."})
 
 
+def close_past_visits() -> int:
+    """Visits whose time has passed are marked completed (front-desk check-in is out of scope for the demo)."""
+    A = db.appointments
+    cutoff = config.now() - timedelta(hours=2)
+    with db.engine.begin() as c:
+        r = c.execute(update(A).where(A.c.status == "booked", A.c.appt_date < cutoff.date()).values(status="completed"))
+        return r.rowcount or 0
+
+
+def run_aftercare() -> int:
+    """Two days after a doctor visit, email a link to a short post-visit check-in form (once per visit)."""
+    A, P = db.appointments, db.patients
+    day = config.today() - timedelta(days=2)
+    n = 0
+    with db.engine.begin() as c:
+        rows = c.execute(select(A, P.c.full_name, P.c.email, P.c.phone).join(P, P.c.id == A.c.patient_id).where(
+            A.c.status == "completed", A.c.appt_date == day, A.c.doctor_id.isnot(None)).limit(200)).mappings().all()
+        for r in rows:
+            v = ap._appt_view(dict(r))
+            link = f"{config.PUBLIC_BASE_URL}/checkin?t={sign_token({'cid': r['id'], 'pid': r['patient_id']}, 7 * 24 * 3600)}"
+            notify.queue(c, patient_id=r["patient_id"], channel="email", template="aftercare_checkin", to=r["email"],
+                         subject=f"How are you feeling after your visit with {v['with']}?",
+                         body=f"Dear {r['full_name']},\n\nWe hope you're feeling better after your visit with {v['with']} on {v['date']}.\n"
+                              f"Please take 30 seconds to tell us how you are: {link}\n\nIf you feel much worse, call 108.\n\nWellNest Hospitals",
+                         dedupe_key=f"aftercare:{r['booking_code']}")
+            n += 1
+    return n
+
+
 def run_reminders() -> int:
     A, P = db.appointments, db.patients
     now = config.now()
@@ -549,8 +578,11 @@ def jobs_run():
     t0 = time.perf_counter()
     expired = ap.expire_offers()
     reminders = run_reminders()
+    closed = close_past_visits()
+    aftercare = run_aftercare()
     sent = notify.flush(50)
-    return {"ok": True, "offers_expired": expired, "reminders_queued": reminders, "emails_processed": sent,
+    return {"ok": True, "offers_expired": expired, "reminders_queued": reminders, "visits_completed": closed,
+            "aftercare_checkins_queued": aftercare, "emails_processed": sent,
             "ms": round((time.perf_counter() - t0) * 1000)}
 
 
@@ -593,6 +625,42 @@ def ops_system():
     return {"blackboard": bb.stats(), "events": events.snapshot(), "today": workers.todays_counts(), "registry": reg_sample}
 
 
+# ------------------------------------------------------------------ post-visit check-in (link from the day-2 email)
+def _checkin_visit(t: str):
+    body = read_token(t)
+    if not body or "cid" not in body:
+        raise HTTPException(404, detail={"error_code": "not_found", "message": "This check-in link has expired. You can tell us how you are by chat or phone."})
+    with db.engine.connect() as c:
+        a = c.execute(select(db.appointments).where(db.appointments.c.id == body["cid"],
+                                                     db.appointments.c.patient_id == body["pid"])).mappings().first()
+        p = pt.get_by_id(c, body["pid"])
+    if not a or not p:
+        raise HTTPException(404, detail={"error_code": "not_found", "message": "We couldn't find that visit."})
+    return dict(a), p
+
+
+@router.get("/api/checkin/{t}")
+def checkin_info(t: str):
+    a, p = _checkin_visit(t)
+    v = ap._appt_view(a)
+    return {"ok": True, "first_name": p["full_name"].split()[0], "with": v["with"], "department": v["department"], "date": v["date"]}
+
+
+class CheckinReq(BaseModel):
+    pain_score: str = ""
+    fever: str = ""
+    symptoms_worse: str = ""
+    notes: str = ""
+
+
+@router.post("/api/checkin/{t}", dependencies=[limited("accept")])
+def checkin_submit(t: str, b: CheckinReq):
+    from .services import support as sp
+    a, p = _checkin_visit(t)
+    return out(sp.record_checkin("", "", "", b.pain_score, b.fever, b.symptoms_worse, b.notes,
+                                 patient_id=p["id"], appointment_id=a["id"], channel="web"))
+
+
 # ------------------------------------------------------------------ call-back form (website)
 class CallbackReq(BaseModel):
     name: str = ""
@@ -610,7 +678,7 @@ def web_callback(b: CallbackReq):
 
 # ------------------------------------------------------------------ pages (React app built into web/dist)
 DIST = WEB / "dist"
-PAGES = ["/", "/about", "/specialities", "/visitors", "/doctors", "/insurance", "/contact", "/login", "/signup", "/portal", "/portal/book", "/portal/appointments",
+PAGES = ["/", "/about", "/architecture", "/checkin", "/specialities", "/visitors", "/doctors", "/insurance", "/contact", "/login", "/signup", "/portal", "/portal/book", "/portal/appointments",
          "/portal/reports", "/portal/profile", "/portal/waitlist", "/waitlist/accept", "/dashboard", "/pay"]
 
 
