@@ -583,7 +583,7 @@ def jobs_run():
     sent = notify.flush(50)
     from . import search
     search.sync()
-    embedded = search.embed_pending(200)       # steady backfill within the embeddings free tier
+    embedded = search.embed_pending(search.BACKFILL_BATCH)   # paced backfill, inside the free tier's per-minute limit
     return {"ok": True, "offers_expired": expired, "reminders_queued": reminders, "visits_completed": closed,
             "aftercare_checkins_queued": aftercare, "emails_processed": sent, "search_rows_embedded": embedded,
             "ms": round((time.perf_counter() - t0) * 1000)}

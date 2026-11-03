@@ -106,6 +106,9 @@ def main(a):
         print(f"\nCosine of the correct passage: min {ps[0]:.3f}  25th pct {ps[len(ps) // 4]:.3f}  median {statistics.median(ps):.3f}")
         print(f"Best cosine for off-topic questions: max {max(neg_sims or [0]):.3f}")
         print("SEARCH_MIN_SIM gates meaning-only matches: set it just above the off-topic max and below most correct ones.")
+    e = (d.get("status") or {}).get("embeddings", {})
+    print(f"\nEmbeddings: provider {e.get('provider')}  queries sent {e.get('query_calls')}  cache hits {e.get('query_cache_hits')}  "
+          f"errors {e.get('errors')}  last limit hit: {e.get('last_quota') or 'none'}")
     failed = False
     if a.min_hit3 and h3 < a.min_hit3:
         print(f"FAIL: hit@3 {h3:.0%} < {a.min_hit3:.0%}")

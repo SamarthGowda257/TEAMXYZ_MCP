@@ -34,13 +34,15 @@ jobs:
           nohup python server.py > server.log 2>&1 &
           for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 2; done
           curl -s localhost:8000/health | grep '"search":"hybrid"'
-          for i in $(seq 1 36); do
+          for i in $(seq 1 30); do
             s=$(curl -s "localhost:8000/api/ops/system?token=ci-token" | python -c "import json,sys; s=json.load(sys.stdin)['search']; e=s['embeddings']; print(s.get('kb_embedded',0), s.get('kb_total',0), e['breaker_open'], e['last_quota'], '|', e['last_error'])")
             echo "kb_embedded kb_total breaker quota | error: $s"
             set -- $s; [ "$1" -gt 0 ] && [ "$1" -ge "$2" ] && break
             [ "$3" = "True" ] && echo "Gemini refused (see error above); evaluating without the meaning leg" && break
             sleep 5
           done
+          echo "Waiting 65 s so the evaluation's questions get a fresh per-minute quota"
+          sleep 65
         env:
           MCP_BEARER_TOKEN: ci-token
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wellnest

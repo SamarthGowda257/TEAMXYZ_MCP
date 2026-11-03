@@ -42,6 +42,8 @@ LEG_LIMIT = 20           # meaning leg depth
 # Knowledge passages (~95) are embedded eagerly; a patient's notes only when that patient shows up (verified, session
 # warm-up, new note), because the free tier allows roughly 1,000 embeddings a day and most patients never call.
 EMBED_KINDS = "('kb', 'note')"
+BACKFILL_BATCH = 25
+BACKFILL_PAUSE_S = 20
 KW_LIMIT = 100           # keyword legs go deeper: common words tie across many passages
 _embed_lock = threading.Lock()
 _status_cache: tuple[float, dict] | None = None
@@ -181,9 +183,12 @@ def rebuild_async() -> None:
             sync_kb()
             sync()
             if vector_ready():
-                for _ in range(50):              # up to ~10k rows per start, at the provider's pace
-                    if embed_pending(200) == 0:
+                # Paced: Gemini's free tier counts each text against ~100 requests per minute, shared with live
+                # questions. 25 texts every 20 s (75/min) leaves room for callers; the cache makes restarts free.
+                for _ in range(400):
+                    if embed_pending(BACKFILL_BATCH) == 0:
                         break
+                    time.sleep(BACKFILL_PAUSE_S)
         except Exception as e:
             log.warning("search rebuild failed: %s", e)
     threading.Thread(target=run, name="search-rebuild", daemon=True).start()
