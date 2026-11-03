@@ -37,6 +37,8 @@ def init_data() -> None:
         log.warning("brand migration skipped: %s", e)
     ref.load()
     notify.start_sender()
+    from . import events
+    events.start_workers()
 
 
 class BearerTokenMiddleware:

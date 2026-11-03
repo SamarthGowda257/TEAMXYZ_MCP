@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .. import config, db, notify
 from ..util import (Result, clean, fail, human_date, human_time, in_pref, norm_code, norm_phone, norm_time_pref, ok,
                     parse_date, parse_time, rupees, short_date, spoken_code)
+from .. import events
 from . import blackboard as bb
 from . import patients as pt
 from .ref import (REF, DAY_FULL, days_text, doctor_card, doctors_in, find_department, find_doctor, find_doctors,
@@ -349,6 +350,7 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
     except IntegrityError:
         return fail("slot_taken", "Sorry, that slot was just taken by someone else. Shall I check the next free time?")
     bb.invalidate(patient["phone"])
+    events.publish("appointment.created", patient_id=patient["id"], booking_id=code, channel=channel)
     bb.add(patient["phone"], "booking", f"Booked {view['with']} on {view['date']} at {view['time']}, ID {code}.", 5, code)
     return _booked_result(patient, a)
 
@@ -450,6 +452,9 @@ def cancel(booking_id, phone="", date_of_birth="", reason="", channel="chat", ac
                              sms=f"WellNest: booking {v['booking_id']} cancelled.")
         offer = offer_slot(c, a["doctor_id"], a["appt_date"], a["appt_time"], exclude_patient=p["id"]) if a["doctor_id"] else None
     bb.invalidate(p["phone"])
+    events.publish("appointment.cancelled", patient_id=p["id"], booking_id=v["booking_id"], channel=channel)
+    if offer:
+        events.publish("waitlist.offered", patient_id=offer["patient_id"], offer_code=offer["offer_code"])
     msg = f"Cancelled. Booking {v['booking_id']} with {v['with']} on {v['date']} at {v['time']} is cancelled."
     short = f"Cancelled booking {v['booking_id']}."
     if offer:
@@ -504,9 +509,13 @@ def reschedule(booking_id, new_date, new_time, phone="", date_of_birth="", docto
             pt.log(c, p["id"], "reschedule_appointment", v["booking_id"], True, f"Moved to {v['date']} {v['time']}", actor, channel)
             _confirm_email(c, p, v, subject_prefix="Booking rescheduled")
             offer = offer_slot(c, *old, exclude_patient=p["id"]) if old[0] else None
+            moved_code = v["booking_id"]
     except IntegrityError:
         return fail("slot_taken", "Sorry, that slot was just taken. Shall I check another time?")
     bb.invalidate(p["phone"])
+    events.publish("appointment.rescheduled", patient_id=p["id"], booking_id=moved_code, channel=channel)
+    if offer:
+        events.publish("waitlist.offered", patient_id=offer["patient_id"], offer_code=offer["offer_code"])
     msg = (f"Rescheduled. Booking {v['booking_id']} is now with {v['with']} on {v['date']} at {v['time']}, "
            f"room {v['room']}, fee {rupees(v['fee_inr'])}.")
     if offer:
@@ -625,6 +634,7 @@ def offer_slot(c, doctor_id, d: date, hh: str, exclude_patient=None, exclude_wai
                               "You can also reply in chat with this code.\n\nWellNest Hospitals",
                          sms=f"WellNest: slot with {doc['name']} {short_date(d)} {human_time(hh)} held 30 min. Accept: {link}",
                          key=f"offer:{code}")
+    bb.invalidate(w["phone"])
     pt.log(c, w["patient_id"], "waitlist_offer", code, True, f"Offered {doc['name']} {d.isoformat()} {hh}", "system", None)
     bb.add(w["phone"], "waitlist_offer", f"A slot with {doc['name']} on {human_date(d)} at {human_time(hh)} is held for this "
            f"patient until {human_time(expires.strftime('%H:%M'))}, offer code {code}.", 2, code, ttl=OFFER_MINUTES * 60)
@@ -691,6 +701,7 @@ def accept_offer(offer_code, phone, channel="chat", actor="agent") -> Result:
     except IntegrityError:
         return fail("offer_expired", "Sorry, that slot has just been taken. You're still on the waitlist.")
     bb.invalidate(p["phone"])
+    events.publish("waitlist.accepted", patient_id=p["id"], booking_id=code_b, channel=channel)
     return _booked_result(p, a)
 
 

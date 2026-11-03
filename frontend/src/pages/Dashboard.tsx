@@ -7,6 +7,14 @@ import { session } from "../lib/api";
 type Summary = { date: string; now: string; email_mode: string; db: string;
   summary: Record<string, number>; schedule: { department: string; booked: number; capacity: number }[] };
 type Feed = { activity: any[]; offers: any[]; handoffs: any[]; outbox: any[]; nurse_alerts: any[] };
+type RegItem = { state: string; level: string; source: string; age_s: number };
+type SystemInfo = {
+  blackboard: { backend: string; patients_in_memory: number; cache_hit_rate: number | null; hits: number; misses: number };
+  events: { backend: string; published: number; processed: number; failed: number; dead_lettered: number; lag_ms_last: number;
+            worker_alive: boolean; pending?: number; stream_length?: number; dlq_length?: number; recent: { type: string; at: string; status: string }[] };
+  today: Record<string, number>;
+  registry: Record<string, Record<string, RegItem>>;
+};
 type Metrics = { tools: { tool: string; count: number; errors: number; p50_ms: number; p95_ms: number }[]; p50_ms: number; p95_ms: number; total_calls: number; uptime_s: number };
 
 const ACTION: Record<string, string> = {
@@ -31,6 +39,7 @@ export function Dashboard() {
   const [s, setS] = useState<Summary | null>(null);
   const [f, setF] = useState<Feed | null>(null);
   const [m, setM] = useState<Metrics | null>(null);
+  const [sys, setSys] = useState<SystemInfo | null>(null);
   const [stamp, setStamp] = useState("");
   const seen = useRef<Set<string>>(new Set());
   const [fresh, setFresh] = useState<Set<string>>(new Set());
@@ -46,6 +55,7 @@ export function Dashboard() {
       const nu = new Set(seen.current.size ? keys.filter((k) => !seen.current.has(k)) : []);
       keys.forEach((k) => seen.current.add(k));
       setFresh(nu); setS(a); setF(b); setM(c); setBad(false); session.setOps(token);
+      get<SystemInfo>("/api/ops/system", token).then(setSys).catch(() => {});
       setStamp(new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit" }));
     } catch (e: any) { if (e.message === "unauthorized") { setBad(true); session.setOps(null); } }
   }, [token]);
@@ -125,6 +135,42 @@ export function Dashboard() {
           <ul className="rows">{f?.outbox.map((n, i) => (
             <li key={i}><div><span>{n.template.replace(/_/g, " ")}</span><span className="row-sub">{n.channel === "voice_call" ? "reminder call" : n.channel} to {n.to} · {n.at}</span></div><Pill status={n.status} /></li>
           ))}</ul>
+        </section>
+
+        <section className="panel span-all" aria-labelledby="sys-h">
+          <div className="panel-top"><h2 id="sys-h" className="panel-h">Blackboard &amp; event stream</h2>
+            <span className="row-sub">{sys ? `${sys.blackboard.backend === "connected" ? "Redis" : sys.blackboard.backend} · ${sys.events.backend}` : "…"}</span></div>
+          {sys && (
+            <>
+              <div className="sys-kpis">
+                <div><span>Context cache hit rate</span><strong>{sys.blackboard.cache_hit_rate != null ? `${Math.round(sys.blackboard.cache_hit_rate * 100)}%` : "–"}</strong><em>{sys.blackboard.hits} hits · {sys.blackboard.misses} misses</em></div>
+                <div><span>Patients in working memory</span><strong>{sys.blackboard.patients_in_memory}</strong></div>
+                <div><span>Events processed</span><strong>{sys.events.processed}</strong><em>of {sys.events.published} published · lag {sys.events.lag_ms_last} ms</em></div>
+                <div><span>Pending / dead-lettered</span><strong className={sys.events.dead_lettered || sys.events.failed ? "neg" : ""}>{sys.events.pending ?? 0} / {sys.events.dlq_length ?? sys.events.dead_lettered}</strong>
+                  <em>{sys.events.worker_alive ? "workers running" : "workers stalled"}</em></div>
+              </div>
+              <div className="sys-grid">
+                <div>
+                  <h3 className="sys-h">Context registry (demo patients)</h3>
+                  {Object.keys(sys.registry).length ? (
+                    <table className="table compact">
+                      <thead><tr><th scope="col">Patient</th><th scope="col">Item</th><th scope="col">Level</th><th scope="col">State</th><th scope="col">Source</th><th scope="col" className="num">Age</th></tr></thead>
+                      <tbody>{Object.entries(sys.registry).flatMap(([who, items]) => Object.entries(items).slice(0, 5).map(([k, v]) => (
+                        <tr key={who + k}><th scope="row">{who}</th><td>{k}</td><td>{v.level}</td>
+                          <td><Pill status={v.state === "READY" ? "ready" : v.state === "LOADING" ? "queued" : v.state === "ERROR" ? "failed" : "expired"}>{v.state}</Pill></td>
+                          <td>{v.source}</td><td className="num">{v.age_s < 60 ? `${v.age_s}s` : `${Math.round(v.age_s / 60)}m`}</td></tr>)))}</tbody>
+                    </table>
+                  ) : <p className="quiet">Verify a demo patient (chat or phone) and their context appears here within a second.</p>}
+                </div>
+                <div>
+                  <h3 className="sys-h">Latest events</h3>
+                  <ul className="rows">{sys.events.recent.slice(0, 8).map((e, i) => (
+                    <li key={i}><div><span>{e.type}</span><span className="row-sub">{e.at}</span></div><Pill status={e.status === "processed" ? "sent" : "queued"}>{e.status}</Pill></li>
+                  ))}</ul>
+                </div>
+              </div>
+            </>
+          )}
         </section>
 
         <section className="panel" aria-labelledby="lat-h">

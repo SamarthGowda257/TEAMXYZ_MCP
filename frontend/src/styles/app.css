@@ -205,3 +205,16 @@
 .flash { animation: flash 2.4s var(--ease-out); }
 @keyframes flash { 0% { background: var(--field-3); } 100% { background: transparent; } }
 .rows li.is-urgent > div > span:first-child { color: var(--alert); font-weight: 700; }
+
+/* blackboard + events panel */
+.sys-kpis { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--border); border-radius: 12px; }
+.sys-kpis > div { padding: 14px 16px; display: grid; gap: 2px; border-left: 1px solid var(--border); }
+.sys-kpis > div:first-child { border-left: 0; }
+.sys-kpis span { color: var(--muted); font-size: 0.85rem; font-weight: 700; }
+.sys-kpis strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.sys-kpis strong.neg { color: var(--alert); }
+.sys-kpis em { font-style: normal; color: var(--muted); font-size: 0.82rem; }
+.sys-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; }
+.sys-h { font-size: 0.95rem; margin-bottom: 8px; }
+@media (max-width: 900px) { .sys-kpis { grid-template-columns: 1fr 1fr; } .sys-kpis > div:nth-child(3) { border-left: 0; } .sys-grid { grid-template-columns: 1fr; } }
+.span-all { grid-column: 1 / -1; }

@@ -81,6 +81,7 @@ def email_report(phone, dob, report_id="", patient_id=None, actor="agent", chann
         if r["status"] == "ready":
             c.execute(update(LR).where(LR.c.id == r["id"]).values(status="collected"))
         pt.log(c, p["id"], "email_lab_report", r["report_code"], True, f"Emailed {r['test_name']}", actor, channel)
+    bb.invalidate(p["phone"])
     masked = mask_email(p["email"])
     return ok(f"Done. I've emailed your {r['test_name']} report summary to {masked}, with a link to view it securely in the portal.",
               sent_to=masked, report_id=r["report_code"])

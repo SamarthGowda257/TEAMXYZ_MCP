@@ -9,6 +9,7 @@ from sqlalchemy import and_, func, insert, select, update
 from .. import config, db
 from ..util import (Result, age_on, clean, fail, human_date, human_time, mask_email, mask_phone, norm_phone, ok,
                     parse_dob, split_list, yes_no)
+from .. import events
 from . import blackboard as bb
 from .ref import REF
 
@@ -75,6 +76,19 @@ def check_identity(conn, phone, dob) -> tuple[dict | None, Result | None]:
     return p, None
 
 
+def current_offer(conn, patient_id) -> dict | None:
+    """An open, unexpired waitlist offer for this patient (always read from the database)."""
+    WO, WL = db.waitlist_offers, db.waitlist
+    offer = conn.execute(select(WO.c.offer_code, WO.c.doctor_id, WO.c.appt_date, WO.c.appt_time, WO.c.expires_at)
+                         .join(WL, WL.c.id == WO.c.waitlist_id).where(WL.c.patient_id == patient_id, WO.c.status == "open",
+                                                                      WO.c.expires_at > config.now())).mappings().first()
+    if not offer:
+        return None
+    return {"offer_code": offer["offer_code"], "doctor": REF.doctors[offer["doctor_id"]]["name"],
+            "date": human_date(offer["appt_date"]), "time": human_time(offer["appt_time"]),
+            "held_until": human_time(offer["expires_at"].strftime("%H:%M"))}
+
+
 def snapshot(conn, p: dict) -> dict:
     A, D = db.appointments, db.doctors
     t = config.today()
@@ -93,15 +107,7 @@ def snapshot(conn, p: dict) -> dict:
         who = REF.doctors[a["doctor_id"]]["name"] if a["doctor_id"] else REF.procedures[a["procedure_id"]]["name"]
         upcoming.append({"booking_id": a["booking_code"], "date": human_date(a["appt_date"]),
                          "time": human_time(a["appt_time"]), "with": who})
-    WO, WL = db.waitlist_offers, db.waitlist
-    offer = conn.execute(select(WO.c.offer_code, WO.c.doctor_id, WO.c.appt_date, WO.c.appt_time, WO.c.expires_at)
-                         .join(WL, WL.c.id == WO.c.waitlist_id).where(WL.c.patient_id == p["id"], WO.c.status == "open",
-                                                                      WO.c.expires_at > config.now())).mappings().first()
-    open_offer = None
-    if offer:
-        open_offer = {"offer_code": offer["offer_code"], "doctor": REF.doctors[offer["doctor_id"]]["name"],
-                      "date": human_date(offer["appt_date"]), "time": human_time(offer["appt_time"]),
-                      "held_until": human_time(offer["expires_at"].strftime("%H:%M"))}
+    open_offer = current_offer(conn, p["id"])
     ins = REF.insurers.get(p["insurer_id"]) if p["insurer_id"] else None
     return {"open_offer": open_offer, "patient_ref": p["patient_code"], "name": p["full_name"], "age": age_on(p["date_of_birth"]),
             "is_senior": is_senior(p), "upcoming": upcoming, "pending_reports": pending, "ready_reports": ready,
@@ -116,8 +122,13 @@ def verify(phone, dob) -> Result:
         p, err = check_identity(c, phone, dob)
         if err:
             return err
-        snap = snapshot(c, p)
-    bb.put_snapshot(p["phone"], snap)
+        snap = bb.get_snapshot(p["phone"])          # blackboard P1 hit: identity was still checked above
+        if not snap:
+            snap = snapshot(c, p)
+            bb.put_snapshot(p["phone"], snap)
+        else:
+            snap["open_offer"] = current_offer(c, p["id"])   # time-critical: never trust the cache for offers
+    events.publish("patient.verified", patient_id=p["id"])
     if snap["is_senior"]:
         bb.add(p["phone"], "senior", f"{p['full_name']} is a senior patient; keep replies short and offer morning slots"
                + (f"; mobility: {p['mobility_needs']}" if p["mobility_needs"] else "") + ".", 3)
@@ -235,7 +246,8 @@ def set_preferences(phone, dob, preferred_language="", preferred_time="", caregi
             return fail("invalid_input", "What would you like to update: language, preferred time, caregiver or mobility needs?")
         c.execute(update(P).where(P.c.id == p["id"]).values(**vals))
         log(c, p["id"], "set_patient_preferences", p["patient_code"], True, "Updated " + ", ".join(changed), actor, channel)
-    bb.invalidate(p["phone"])
+    bb.invalidate(p["phone"], "p1", "p2")
+    events.publish("preferences.updated", patient_id=p["id"])
     if vals.get("mobility_needs"):
         bb.add(p["phone"], "mobility", f"Mobility need on file: {vals['mobility_needs']}.", 3)
     return ok("Saved. " + (", ".join(changed).capitalize() + "." if changed else "Details updated."), **{

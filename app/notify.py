@@ -41,6 +41,8 @@ def queue(conn, *, patient_id, channel: str, template: str, to: str | None, subj
         sent_at=config.now() if status == "simulated" else None))
     if status == "queued":
         _wake.set()
+    from . import events
+    events.publish("notification.queued", channel=channel, template=template, status=status)
 
 
 def email_and_sms(conn, *, patient: dict, template: str, subject: str, body: str, sms: str, key: str | None = None):
@@ -100,6 +102,10 @@ def _loop():
         except Exception as e:
             log.warning("email sender error: %s", e)
             time.sleep(5)
+
+
+def wake() -> None:
+    _wake.set()
 
 
 def start_sender() -> None:

@@ -7,6 +7,7 @@ from sqlalchemy import insert, or_, select
 from .. import config, db, notify
 from ..util import (Result, clean, fail, human_date, human_time, mask_email, norm_code, norm_phone, ok, split_list,
                     yes_no)
+from .. import events
 from . import blackboard as bb
 from . import patients as pt
 from .ref import REF
@@ -26,6 +27,7 @@ def create_handoff(summary, priority="normal", phone="", reason_code="", channel
         c.execute(insert(db.handoffs).values(handoff_code=code, patient_id=p["id"] if p else None, phone=p_norm, priority=pr,
                                              reason_code=rc[:20], summary=summ, status="open", created_at=config.now()))
         pt.log(c, p["id"] if p else None, "create_handoff", code, True, f"{pr} handoff: {summ[:120]}", "agent", channel)
+    events.publish("handoff.created", priority=pr, handoff_id=code)
     if p_norm:
         bb.add(p_norm, "handoff", f"{'Urgent' if pr == 'urgent' else 'A'} handoff to a person is open ({code}); do not continue with bookings.", 0, code)
     if pr == "urgent":
@@ -73,7 +75,8 @@ def save_note(phone, summary, topics="", outcome="", channel="chat") -> Result:
                                                             topics=pt.topics_text(topics) or None,
                                                             outcome=clean(outcome)[:120] or None,
                                                             created_at=config.now())).inserted_primary_key[0]
-    bb.invalidate(p_norm)
+    bb.invalidate(p_norm, "p1", "p3")
+    events.publish("interaction.noted", patient_id=p["id"] if p else None)
     return ok("Noted for next time.", note_id=f"NT-{10000 + nid}")
 
 

@@ -140,3 +140,39 @@ def test_api_login_rate_limited_and_headers():
     assert codes[:10] == [401] * 10 and codes[10] == 429
     r = c.get("/health")
     assert "frame-ancestors 'none'" in r.headers["content-security-policy"] and r.headers["x-frame-options"] == "DENY"
+
+
+def test_store_falls_back_to_memory_when_redis_is_down(monkeypatch):
+    from app import config
+    from app import store as st
+    monkeypatch.setattr(config, "REDIS_URL", "redis://127.0.0.1:1/0")   # nothing listens there
+    s = st.Store()
+    assert "down" in s.status
+    s.set_json("t:x", {"a": 1}, 60)
+    assert s.get_json("t:x") == {"a": 1}
+
+
+def test_blackboard_registry_and_levels():
+    from app.services import blackboard as bb
+    bb.put_snapshot("9845000002", {"name": "Arjun"})
+    bb.add("9845000002", "coverage", "Star covers MRI.", 1, "MRI-KNEE")
+    reg = bb.registry("9845000002")
+    assert reg["snapshot"]["state"] == "READY" and reg["snapshot"]["level"] == "P1"
+    assert reg["coverage"]["level"] == "P0"
+    assert bb.related("98450 00002", ref="MRI-KNEE")[0]["kind"] == "coverage"
+    bb.invalidate("9845000002")
+    assert bb.get_snapshot("9845000002") is None and bb.registry("9845000002")["snapshot"]["state"] == "MISSING"
+
+
+def test_events_are_processed_in_process():
+    import time
+    from app import events
+    seen = []
+    events.on("test.ping")(lambda e: seen.append(e["n"]))
+    events.start_workers()
+    events.publish("test.ping", n=7)
+    for _ in range(50):
+        if seen:
+            break
+        time.sleep(0.05)
+    assert seen == [7]

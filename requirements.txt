@@ -8,3 +8,6 @@ uvicorn[standard]==0.54.0
 # Database: SQLite built in; Postgres (Supabase) via psycopg 3 when DATABASE_URL is set
 SQLAlchemy==2.1.6
 psycopg[binary]==3.3.7
+
+# Blackboard + event streams (Render Key Value / Upstash). Optional: without REDIS_URL everything runs in-process
+redis==5.2.1

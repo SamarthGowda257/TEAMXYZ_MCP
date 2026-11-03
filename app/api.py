@@ -414,11 +414,8 @@ def my_bills(cp: CurrentPatient = Depends(current_patient)):
 @router.post("/api/session/warm")
 def warm(cp: CurrentPatient = Depends(current_patient)):
     """Called when the logged-in patient opens the chat widget: pre-build their snapshot."""
-    with db.engine.connect() as c:
-        p = pt.get_by_id(c, cp.id)
-        if p["date_of_birth"]:
-            bb.put_snapshot(p["phone"], pt.snapshot(c, p))
-    metrics.cache(False)
+    from . import events
+    events.publish("session.warm", patient_id=cp.id)
     return {"ok": True}
 
 
@@ -569,7 +566,31 @@ def reset_demo():
 def health():
     return {"ok": True, "service": "WellNest Hospitals MCP + web", "version": config.VERSION, "db": db.db_ok(),
             "db_kind": "postgres" if db.IS_POSTGRES else "sqlite", "db_error": db.DB_ERROR, "db_target": db.db_target() if db.DB_ERROR else None, "time_ist": config.now().isoformat(),
-            "email": "smtp" if config.EMAIL_ENABLED else "simulated"}
+            "email": "smtp" if config.EMAIL_ENABLED else "simulated", "blackboard": _store_status(), "events": _events_backend()}
+
+
+def _store_status():
+    from .store import store
+    return store.status
+
+
+def _events_backend():
+    from . import events
+    return events.backend()
+
+
+@router.get("/api/ops/system", dependencies=[Depends(ops_auth)])
+def ops_system():
+    """Blackboard, context registry and event-stream health for the dashboard."""
+    from . import events, workers
+    reg_sample = {}
+    if True:
+        for name, phone in [("Shanthamma K", "+919845000001"), ("Arjun Mehta", "+919845000002"), ("Priya Nair", "+919845000003")]:
+            reg = bb.registry(phone)
+            if reg:
+                reg_sample[name] = {k: {"state": v["state"], "level": v["level"], "source": v.get("source", ""),
+                                        "age_s": int(time.time() - v.get("fetched_at", time.time()))} for k, v in reg.items()}
+    return {"blackboard": bb.stats(), "events": events.snapshot(), "today": workers.todays_counts(), "registry": reg_sample}
 
 
 # ------------------------------------------------------------------ call-back form (website)

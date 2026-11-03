@@ -19,6 +19,7 @@ PORT = int(env("PORT", "8000"))
 
 # --- database: Postgres when DATABASE_URL is set, otherwise a local SQLite file ---
 DATABASE_URL = env("DATABASE_URL")
+REDIS_URL = env("REDIS_URL")            # Render Key Value / Upstash; empty = in-process memory and queue
 DB_PATH = env("DB_PATH", str(ROOT / "wellnest.db"))
 AUTO_SEED = env("AUTO_SEED", "true").lower() != "false"
 
