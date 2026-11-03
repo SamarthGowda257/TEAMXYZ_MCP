@@ -48,6 +48,7 @@
 }
 
 :root[data-size="lg"] { font-size: 118.75%; }
+@media (max-width: 860px) { :root { --margin: 16px; } }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {

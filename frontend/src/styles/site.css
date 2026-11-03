@@ -252,7 +252,7 @@
 .footer-h { font-size: 1rem; letter-spacing: -0.01em; color: var(--muted); margin-bottom: 4px; }
 .footer-contact { gap: 16px !important; }
 .footer-last { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-top: 56px; }
-.footer-last p { color: var(--muted); font-size: var(--step-small); max-width: 70ch; }
+.footer-last p { color: var(--muted); font-size: 1rem; max-width: 60ch; }
 @media (max-width: 860px) {
   .site-footer { padding: 48px 16px 96px; }
   .footer-mark { height: 22svh; min-height: 140px; } .footer-mark span { font-size: 11vw; border-radius: 6px 6px 3px 3px; }

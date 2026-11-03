@@ -10,6 +10,7 @@ function Side({ title }: { title: string }) {
     <div className="auth-side">
       <h1>{title}</h1>
       <ul>{SIDE.map((s) => <li key={s}><span className="token-bullet" aria-hidden="true" />{s}</li>)}</ul>
+      <TokenSlip id="CL-48213" spoken="C L 4 8 2 1 3" lines={[<strong key="a">Dr. Rajesh Iyer · Cardiology</strong>, "Wednesday, 10:30 AM", "Room OPD-310 · wheelchair arranged"]} />
     </div>
   );
 }

@@ -8,7 +8,7 @@
                 font-weight: 600; font-size: 1.4rem; color: var(--ink); }
 .doc-body { min-width: 0; flex: 1; display: grid; gap: 6px; }
 .doc h2 { font-size: 1.45rem; letter-spacing: -0.025em; }
-.doc-meta { color: var(--muted); font-size: 0.95rem; }
+.doc-meta { color: var(--muted); font-size: 1rem; }
 .doc-when { font-size: 1rem; }
 .doc-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
 .doc-fee { font-family: var(--font-display); font-weight: 600; font-size: 1.3rem; }
@@ -29,8 +29,8 @@
 .ins-table th, .ins-table td { text-align: left; vertical-align: top; padding: 14px 12px 14px 0; border-bottom: 1px solid var(--border); }
 .ins-table thead th { font-size: var(--step-small); color: var(--muted); font-weight: 700; }
 .ins-table tbody th { font-weight: 700; white-space: nowrap; }
-.ins-table td:last-child { color: var(--muted); font-size: 0.95rem; }
-.muted-note { color: var(--muted); margin-top: 20px; font-size: 0.95rem; max-width: 60ch; }
+.ins-table td:last-child { color: var(--muted); }
+.muted-note { color: var(--muted); margin-top: 20px; max-width: 60ch; }
 @media (max-width: 900px) { .ins-grid { grid-template-columns: 1fr; } .ins-check { padding: 30px 26px; }
   .ins-table thead { display: none; } .ins-table tr { display: grid; padding: 12px 0; border-bottom: 1px solid var(--border); }
   .ins-table th, .ins-table td { border: 0; padding: 2px 0; } }
@@ -56,7 +56,8 @@
 .auth-form form { margin-top: 28px; }
 .auth-form .btn { margin-top: 24px; width: 100%; }
 .auth-alt { margin-top: 20px; }
-.demo-note { margin-top: 28px; background: var(--surface); border-radius: 12px; padding: 16px 18px; font-size: 0.95rem; }
+.demo-note { margin-top: 28px; background: var(--surface); border-radius: 12px; padding: 16px 18px; }
+.auth-side .token-slip { max-width: 520px; color: var(--ink); }
 .demo-note button { background: none; border: 0; padding: 0; color: var(--accent-deep); text-decoration: underline; font-weight: 700; cursor: pointer; }
 @media (max-width: 860px) { .auth { grid-template-columns: 1fr; } .auth-side { padding: 44px 16px; } .auth-form { padding: 40px 16px 72px; } }
 

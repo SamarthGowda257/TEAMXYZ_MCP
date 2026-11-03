@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { MapPin } from "lucide-react";
 import { api, rupees, type DoctorCard } from "../lib/api";
-import { useApi } from "../lib/hooks";
+import { useApi, useReveal } from "../lib/hooks";
 import { ErrorNote, Loading } from "../components/Bits";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -21,11 +21,12 @@ export function Doctors() {
     (!dept || d.department === dept) && (!lang || d.languages.includes(lang)) &&
     (!day || (d.day_codes || []).includes(DAYS.indexOf(day) + 1))), [all.data, dept, lang, day]);
   const initials = (n: string) => n.replace("Dr. ", "").split(" ").map((w) => w[0]).slice(0, 2).join("");
+  const ref = useReveal<HTMLDivElement>();
   return (
-    <div className="page">
+    <div className="page" ref={ref}>
       <div className="page-head">
-        <h1>Our doctors</h1>
-        <p>{all.data ? `${all.data.length} specialists` : "Specialists"} across {depts.data?.length || 14} departments. Filter by the language you speak or the day you can come in.</p>
+        <h1 className="rise">Our doctors</h1>
+        <p className="rise" style={{ ["--d" as string]: "80ms" }}>{all.data ? `${all.data.length} specialists` : "Specialists"} across {depts.data?.length || 14} departments. Filter by the language you speak or the day you can come in.</p>
       </div>
       <form className="filters" onSubmit={(e) => e.preventDefault()} aria-label="Filter doctors">
         <div className="field"><label htmlFor="f-dept">Department</label>
@@ -46,7 +47,7 @@ export function Doctors() {
       {all.error && <ErrorNote message={all.error} onRetry={all.reload} />}
       <ul className="doc-grid">
         {list.map((d) => (
-          <li key={d.code} className="doc">
+          <li key={d.code} className="doc" data-ui>
             <span className="doc-initials token-shape" style={{ background: FIELD(d.name) }} aria-hidden="true">{initials(d.name)}</span>
             <div className="doc-body">
               <h2>{d.name}</h2>
@@ -86,14 +87,15 @@ export function Insurance() {
       setRes({ msg: r.message, d: r.data });
     } catch (err: any) { setRes({ err: err.message }); } finally { setBusy(false); }
   }
+  const ref = useReveal<HTMLDivElement>();
   return (
-    <div className="page">
+    <div className="page" ref={ref}>
       <div className="page-head">
-        <h1>Insurance, before the bill</h1>
-        <p>Ten insurers, most of them cashless. Check what your plan pays for a scan or a consultation, and whether it needs pre-approval.</p>
+        <h1 className="rise">Insurance, before the bill</h1>
+        <p className="rise" style={{ ["--d" as string]: "80ms" }}>Ten insurers, most of them cashless. Check what your plan pays for a scan or a consultation, and whether it needs pre-approval.</p>
       </div>
       <div className="ins-grid">
-        <form className="ins-check token-shape" onSubmit={check}>
+        <form className="ins-check token-shape rise" style={{ ["--d" as string]: "160ms" }} onSubmit={check} data-ui>
           <h2>What will I pay?</h2>
           <div className="field"><label htmlFor="c-ins">Insurer</label>
             <select id="c-ins" name="insurer" className="input" required>{ins.data?.map((i) => <option key={i.code}>{i.name}</option>)}</select></div>
@@ -114,7 +116,7 @@ export function Insurance() {
             )}
           </div>
         </form>
-        <div className="ins-table-wrap">
+        <div className="ins-table-wrap rise" style={{ ["--d" as string]: "220ms" }}>
           <h2>Accepted insurers</h2>
           <table className="ins-table">
             <thead><tr><th scope="col">Insurer</th><th scope="col">How it works</th><th scope="col">Bring</th></tr></thead>
@@ -133,11 +135,12 @@ const TITLES: Record<string, string> = { address: "Address", hours: "Opening hou
 export function Contact() {
   useEffect(() => { document.title = "Visit us · CareLine Hospitals"; }, []);
   const info = useApi<Record<string, string>>("/api/hospital-info");
+  const ref = useReveal<HTMLDivElement>();
   return (
-    <div className="page">
+    <div className="page" ref={ref}>
       <div className="page-head">
-        <h1>Visit CareLine</h1>
-        <p>On Outer Ring Road in Marathahalli, next to the multiplex. Outpatient clinics run Monday to Saturday; emergency never closes.</p>
+        <h1 className="rise">Visit CareLine</h1>
+        <p className="rise" style={{ ["--d" as string]: "80ms" }}>On Outer Ring Road in Marathahalli, next to the multiplex. Outpatient clinics run Monday to Saturday; emergency never closes.</p>
       </div>
       {info.error && <ErrorNote message={info.error} onRetry={info.reload} />}
       <div className="visit-grid">
@@ -145,7 +148,7 @@ export function Contact() {
           <MapPin size={28} aria-hidden="true" /><strong>42 Outer Ring Road, Marathahalli</strong><span>Open directions in Google Maps</span>
         </a>
         {info.data && Object.keys(TITLES).filter((k) => info.data![k]).map((k) => (
-          <section key={k} className={k === "emergency" ? "visit-card is-alert" : "visit-card"}>
+          <section key={k} className={k === "emergency" ? "visit-card is-alert rise" : "visit-card rise"}>
             <h2>{TITLES[k]}</h2><p>{info.data![k]}</p>
           </section>
         ))}
