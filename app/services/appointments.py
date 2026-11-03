@@ -4,6 +4,7 @@ Slot model: a doctor's grid comes from their schedule; a slot is free when there
 and no open waitlist offer holding it. The partial unique index on appointments is the final guard.
 """
 
+import re
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import and_, func, insert, or_, select, update
@@ -101,6 +102,15 @@ def free_for_procedure(conn, p: dict, d: date, pref: str = "any") -> list[tuple[
     return out
 
 
+_EARLIEST = re.compile(r"^\s*$|next (available|free|consulting|open)|earliest|soonest|first (available|free)|as soon as|asap|"
+                       r"any ?(day|date|time)|whenever|next slot|nearest", re.I)
+
+
+def _wants_earliest(text) -> bool:
+    """'next available', 'earliest', 'his next consulting day', or no date at all -> search forward for a free day."""
+    return bool(_EARLIEST.search(clean(text)))
+
+
 def _resolve_date(text, field="date") -> tuple[date | None, Result | None]:
     d = parse_date(text)
     if not d:
@@ -146,15 +156,31 @@ def find_slots(date_text, department="", doctor_name="", time_preference="", pro
         proc = find_procedure(procedure) if clean(procedure) else None
         if clean(procedure) and not proc:
             return fail("not_found", f"I couldn't find a test called {clean(procedure)}. We do MRI, CT, X-Ray, ultrasound, ECG, echo and lab tests.")
-        d, err = _resolve_date(date_text)
-        if err:
-            return err
+        earliest = _wants_earliest(date_text)
+        if earliest:
+            d = config.today() if config.now().hour < 19 else config.today() + timedelta(days=1)
+        else:
+            d, err = _resolve_date(date_text)
+            if err:
+                return err
+        docs, dept = [], None
+        if not proc:
+            docs, dept, err = _pick_doctors(department, doctor_name)
+            if err:
+                return err
+        if earliest:                       # jump to the first day that actually has a free slot
+            if proc:
+                for k in range(14):
+                    if free_for_procedure(c, proc, d + timedelta(days=k), pref):
+                        d = d + timedelta(days=k)
+                        break
+            else:
+                nxt = next_available(c, docs, d, pref)
+                if nxt:
+                    d = nxt[0]
         base = {"date_iso": d.isoformat(), "weekday": DAY_FULL[d.isoweekday() - 1], "time_preference": pref}
         if proc:
             return _proc_slots(c, proc, d, pref, base)
-        docs, dept, err = _pick_doctors(department, doctor_name)
-        if err:
-            return err
         free = free_for_doctors(c, docs, d, pref)
         notes = [r for x in docs if (r := doctor_unavailable_reason(x, d))]
         out_docs = []
@@ -397,21 +423,29 @@ def find_appointments(phone="", date_of_birth="", booking_id="", include_past=""
         p, err = pt.check_identity(c, phone, date_of_birth)
         if err:
             return err
-        q = select(A).where(A.c.patient_id == p["id"])
-        if past:
-            q = q.where(A.c.appt_date < config.today()).order_by(A.c.appt_date.desc(), A.c.appt_time.desc())
-        else:
-            q = q.where(A.c.status == "booked", A.c.appt_date >= config.today()).order_by(A.c.appt_date, A.c.appt_time)
-        rows = [dict(r) for r in c.execute(q.limit(3)).mappings()]
-    views = [_appt_view(r) for r in rows]
-    if not views:
-        return ok("You have no past visits on record." if past else "You have no upcoming bookings. Would you like to book one?",
-                  appointments=[])
-    parts = [f"{v['with']} on {v['date']} at {v['time']}, ID {v['booking_id']}" for v in views]
-    lead = "Your recent visits: " if past else ("Your upcoming booking: " if len(views) == 1 else "Your upcoming bookings: ")
-    return Result(True, pt.say(p, lead + "; ".join(parts) + ".", lead + parts[0] + "."),
-                  {"appointments": [{k: v[k] for k in ("booking_id", "with", "date", "date_iso", "time", "room", "status")}
-                                    for v in views]}, related=bb.related(p["phone"]))
+        base = select(A).where(A.c.patient_id == p["id"])
+        up = [dict(r) for r in c.execute(base.where(A.c.status == "booked", A.c.appt_date >= config.today())
+                                         .order_by(A.c.appt_date, A.c.appt_time).limit(3)).mappings()]
+        old = [dict(r) for r in c.execute(base.where(A.c.appt_date < config.today())
+                                          .order_by(A.c.appt_date.desc(), A.c.appt_time.desc()).limit(3)).mappings()] if past else []
+    up_v, old_v = [_appt_view(r) for r in up], [_appt_view(r) for r in old]
+    fmt = lambda v: f"{v['with']} on {v['date']} at {v['time']}, ID {v['booking_id']}"
+    keys = ("booking_id", "with", "date", "date_iso", "time", "room", "status")
+    data = {"appointments": [{k: v[k] for k in keys} for v in up_v]}
+    if past:
+        data["past_visits"] = [{k: v[k] for k in keys} for v in old_v]
+    if not up_v and not old_v:
+        return ok("You have no upcoming bookings and no past visits on record." if past
+                  else "You have no upcoming bookings. Would you like to book one?", **data)
+    bits = []
+    if up_v:
+        bits.append(("Your upcoming booking: " if len(up_v) == 1 else "Your upcoming bookings: ") + "; ".join(fmt(v) for v in up_v) + ".")
+    elif past:
+        bits.append("You have no upcoming bookings.")
+    if old_v:
+        bits.append("Your recent visits: " + "; ".join(fmt(v) for v in old_v) + ".")
+    short = " ".join(bits) if past else bits[0]     # asked for past visits: never shorten them away
+    return Result(True, pt.say(p, " ".join(bits), short), data, related=bb.related(p["phone"]))
 
 
 # ------------------------------------------------------------------ cancel / reschedule

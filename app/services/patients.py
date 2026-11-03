@@ -76,6 +76,21 @@ def check_identity(conn, phone, dob) -> tuple[dict | None, Result | None]:
     return p, None
 
 
+def active_waitlist(conn, patient_id) -> list[dict]:
+    """Waitlist entries still waiting for this patient (always read from the database)."""
+    WL = db.waitlist
+    rows = conn.execute(select(WL.c.code, WL.c.doctor_id, WL.c.department_id, WL.c.date_from, WL.c.date_to)
+                        .where(WL.c.patient_id == patient_id, WL.c.status == "waiting", WL.c.date_to >= config.today())
+                        .order_by(WL.c.date_from).limit(3)).mappings().all()
+    out = []
+    for r in rows:
+        doc = REF.doctors.get(r["doctor_id"]) if r["doctor_id"] else None
+        dept = REF.departments.get(r["department_id"]) if r["department_id"] else None
+        out.append({"waitlist_id": r["code"], "for": doc["name"] if doc else (dept["name"] if dept else "any doctor"),
+                    "until": human_date(r["date_to"])})
+    return out
+
+
 def current_offer(conn, patient_id) -> dict | None:
     """An open, unexpired waitlist offer for this patient (always read from the database)."""
     WO, WL = db.waitlist_offers, db.waitlist
@@ -128,6 +143,7 @@ def verify(phone, dob) -> Result:
             bb.put_snapshot(p["phone"], snap)
         else:
             snap["open_offer"] = current_offer(c, p["id"])   # time-critical: never trust the cache for offers
+        snap["waitlist"] = active_waitlist(c, p["id"])       # live, like offers
     events.publish("patient.verified", patient_id=p["id"])
     if snap["is_senior"]:
         bb.add(p["phone"], "senior", f"{p['full_name']} is a senior patient; keep replies short and offer morning slots"
@@ -142,6 +158,10 @@ def verify(phone, dob) -> Result:
     if snap["upcoming"]:
         u = snap["upcoming"][0]
         bits.append(f"Your next visit is with {u['with']} on {u['date']} at {u['time']}, booking ID {u['booking_id']}.")
+    if snap.get("waitlist"):
+        w = snap["waitlist"][0]
+        bits.append(f"You're on the waitlist for {w['for']} until {w['until']}; we'll send you an offer by SMS and email "
+                    "as soon as a slot opens.")
     if snap["ready_reports"]:
         bits.append(f"You have {snap['ready_reports']} report ready to view." if snap["ready_reports"] == 1
                     else f"You have {snap['ready_reports']} reports ready to view.")

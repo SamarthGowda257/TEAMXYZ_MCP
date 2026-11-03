@@ -213,3 +213,26 @@ def test_doctor_names_still_forgiving():
     assert [d["name"] for d in find_doctors("rajesh iyyer")] == ["Dr. Rajesh Iyer"]      # typo
     assert [d["name"] for d in find_doctors("Dr Harish Gowda")] == ["Dr. Harish Gowda"]
     assert find_doctors("Samarth Gowda") == []
+
+
+def test_eval_fixes_3nov(monkeypatch):
+    """Regressions from the Talkdesk 100-scenario evaluation (3 Nov)."""
+    from app.services import blackboard as bb, records
+    from app import search
+    seed.reset(verbose=False); ref.load(); bb.clear_all(); search.sync_kb(); search.sync()
+    # 008: "book Dr. X on his next consulting day" -> earliest free day, no date needed
+    r = ap.find_slots("next available", doctor_name="Dr. Harish Gowda")
+    assert r.ok and r.data["date_iso"] and r.data["doctors"][0]["free_slots"]
+    assert ap.find_slots("", doctor_name="Dr. Harish Gowda").ok
+    # 011: include_past shows upcoming AND past (also for seniors, whose replies are shortened)
+    r = ap.find_appointments("9845000001", "1959-03-04", include_past="true")
+    assert "WN-48213" in r.message and r.data["past_visits"]
+    assert "recent visits" in r.message.lower()
+    # 093: verify mentions an active waitlist entry
+    assert "waitlist" in pt.verify("9845000002", "1992-06-15").message
+    # 081/082/044-style FAQ questions in the caller's words; unknown questions are not answered with random facts
+    assert "blood bank" in records.hospital_info("can I donate blood").message.lower()
+    assert "cafeteria" in records.hospital_info("where can I grab a bite to eat").message.lower()
+    assert "security desk" in records.hospital_info("I lost my phone in the waiting area").message.lower()
+    assert records.hospital_info("what is the cricket score today").data.get("found") is False
+    assert "Outer Ring Road" in records.hospital_info("where are you located").message

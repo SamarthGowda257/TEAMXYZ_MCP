@@ -1,5 +1,6 @@
 """Lab reports, visit history, prescription refills, insurance + coverage, bills, hospital information."""
 
+import re
 from datetime import timedelta
 
 from sqlalchemy import func, insert, select, update
@@ -340,24 +341,32 @@ def hospital_info(topic="") -> Result:
             "contact": ["contact", "phone", "number", "email", "call"]}
     if t in keys:
         return ok(REF.info[t], topic=t)
-    # A question in the caller's own words: hybrid search over the knowledge base first (FAQ, visiting, insurance,
-    # procedures, departments), so "can my son stay overnight with me?" finds the attendant rule, not opening hours.
-    if len(t.split()) >= 2:
-        from .. import search
-        res = search.search(t, ref_prefixes=("kb:",), k=2)
-        if res["hits"]:
-            h = res["hits"][0]
-            return ok(h["body"], topic=h["ref"].split(":", 1)[1], source=h["title"], matched_by=res["mode"])
-    for k, words in keys.items():
-        if any(w in t for w in words):
+    if not t:
+        return ok(f"{REF.info['address']} {REF.info['hours']}", topic="address,hours")
+    from .. import search
+    # 1) The caller's own words: hybrid search over the knowledge base (FAQ, visiting, insurance, procedures,
+    #    departments), so "can my son stay overnight with me?" finds the attendant rule, not opening hours.
+    res = search.search(t, ref_prefixes=("kb:",), k=3, gate=False)
+    hits = res["hits"]
+    sure = [h for h in hits if h.get("confident")]
+    if sure:
+        h = sure[0]
+        return ok(h["body"], topic=h["ref"].split(":", 1)[1], source=h["title"], matched_by=res["mode"])
+    # 2) A weaker FAQ / hospital-info match that still shares a real word ("grab a bite to eat" -> cafeteria) beats a
+    #    generic keyword rule. Procedures and departments need a confident match (no "blood" -> blood sugar test).
+    for h in hits:
+        sig = h["signals"]
+        shared = sig.get("fts") or (sig.get("words") and not sig["words"].startswith("0/"))
+        if shared and h["ref"].startswith(("kb:faq:", "kb:info:")):
+            return ok(h["body"], topic=h["ref"].split(":", 1)[1], source=h["title"], matched_by=res["mode"] + " (partial)")
+    # 3) Simple topic words ("where are you", "timings", "parking"), whole words only.
+    words = set(re.findall(r"[a-z0-9]+", t))
+    for k, kws in keys.items():
+        if any(w in words or (len(w) > 4 and any(x.startswith(w) for x in words)) for w in kws):
             return ok(REF.info[k], topic=k)
-    if t:
-        from .. import search
-        res = search.search(t, ref_prefixes=("kb:",), k=1)
-        if res["hits"]:
-            h = res["hits"][0]
-            return ok(h["body"], topic=h["ref"].split(":", 1)[1], source=h["title"], matched_by=res["mode"])
-    return ok(f"{REF.info['address']} {REF.info['hours']}", topic="address,hours")
+    # 4) Honest "don't know" instead of a random fact.
+    return ok("I don't have that information. Our front desk on 080 4000 1234 can help, or I can arrange a call back.",
+              topic=None, found=False)
 
 
 def visit_instructions(department="", procedure="") -> Result:

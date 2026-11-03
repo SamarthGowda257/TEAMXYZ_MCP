@@ -93,6 +93,22 @@ FAQ = [
 ]
 
 
+# Words patients use for each FAQ. Added to the searchable title only; the spoken answer stays clean.
+FAQ_KEYWORDS = {
+    "lost_found": "lost phone, wallet, bag, umbrella, keys, documents",
+    "blood_bank": "donate blood, blood donation, donor",
+    "records": "copies of papers, discharge summary, case sheet",
+    "teleconsult": "video call, online consultation, teleconsultation from home",
+    "payment": "UPI, PhonePe, Google Pay, GPay, Paytm, card, cash",
+    "food": "food, eat, grab a bite, hungry, snacks, canteen, coffee, tea, breakfast, lunch, dinner, meals",
+    "prayer": "pray, temple, mosque, church, meditation",
+    "home_collection": "blood test at home, sample from home, house visit",
+    "atm": "cash withdrawal, cash machine",
+    "wifi": "internet, online, wifi password",
+    "attendant": "stay overnight, stay with patient, relative staying",
+}
+
+
 def documents() -> list[dict]:
     """All knowledge passages: {ref, title, body}."""
     docs = [{"ref": f"kb:info:{k}", "title": k.replace("_", " ").title(), "body": v} for k, v in REF.info.items()]
@@ -111,5 +127,6 @@ def documents() -> list[dict]:
         mode = {"both": "cashless and reimbursement", "cashless": "cashless", "reimbursement": "reimbursement only"}.get(i["mode"], i["mode"])
         docs.append({"ref": f"kb:ins:{i['code']}", "title": i["name"],
                      "body": f"We accept {i['name']} ({mode}). {i.get('notes') or ''} Documents: {i.get('documents') or 'insurance card and photo ID'}."})
-    docs += [{"ref": f"kb:faq:{r}", "title": t, "body": b} for r, t, b in FAQ]
+    docs += [{"ref": f"kb:faq:{r}", "title": f"{t}: {FAQ_KEYWORDS[r]}" if r in FAQ_KEYWORDS else t, "body": b}
+             for r, t, b in FAQ]
     return docs

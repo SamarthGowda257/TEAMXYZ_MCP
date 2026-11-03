@@ -86,8 +86,11 @@ def register_patient(name: Annotated[S, Field(description="Patient's full name."
     return pt.register(name, phone, date_of_birth, email, gender, insurance_provider)
 
 
+SlotDate = Annotated[S, Field(description="Date as the patient said it ('tomorrow', 'Monday', '4 Nov', 04/11/2026 day first), or 'next available' when the patient wants the earliest free day or a doctor's next consulting day. Never ask the patient for a format.")]
+
+
 @tool
-def find_available_slots(date: Date, department: Dept = "", doctor_name: Doc = "", time_preference: Pref = "any",
+def find_available_slots(date: SlotDate, department: Dept = "", doctor_name: Doc = "", time_preference: Pref = "any",
                          procedure: Proc = "", phone: OptPhone = "") -> dict:
     """Find free appointment slots for a date, by department, doctor or test/scan. Also returns each doctor's
     consulting days, hours, fee, room and languages, so you do not need get_doctors for the same question.
