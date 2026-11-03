@@ -447,24 +447,32 @@ def find_appointments(phone="", date_of_birth="", booking_id="", include_past=""
         up = [dict(r) for r in c.execute(base.where(A.c.status == "booked", A.c.appt_date >= config.today())
                                          .order_by(A.c.appt_date, A.c.appt_time).limit(3)).mappings()]
         old = [dict(r) for r in c.execute(base.where(A.c.appt_date < config.today())
-                                          .order_by(A.c.appt_date.desc(), A.c.appt_time.desc()).limit(3)).mappings()] if past else []
+                                          .order_by(A.c.appt_date.desc(), A.c.appt_time.desc()).limit(3 if past else 1)).mappings()]
+        wl = pt.active_waitlist(c, p["id"])
     up_v, old_v = [_appt_view(r) for r in up], [_appt_view(r) for r in old]
     fmt = lambda v: f"{v['with']} on {v['date']} at {v['time']}, ID {v['booking_id']}"
     keys = ("booking_id", "with", "date", "date_iso", "time", "room", "status")
     data = {"appointments": [{k: v[k] for k in keys} for v in up_v]}
     if past:
         data["past_visits"] = [{k: v[k] for k in keys} for v in old_v]
-    if not up_v and not old_v:
-        return ok("You have no upcoming bookings and no past visits on record." if past
-                  else "You have no upcoming bookings. Would you like to book one?", **data)
+    if wl:
+        data["waitlist"] = wl
+    # One reply answers "my appointments", "my last visit" and "am I on the waitlist" whichever was asked,
+    # so the agent never needs a second tool (or a second agent) for it.
     bits = []
     if up_v:
         bits.append(("Your upcoming booking: " if len(up_v) == 1 else "Your upcoming bookings: ") + "; ".join(fmt(v) for v in up_v) + ".")
-    elif past:
+    else:
         bits.append("You have no upcoming bookings.")
-    if old_v:
+    if old_v and past:
         bits.append("Your recent visits: " + "; ".join(fmt(v) for v in old_v) + ".")
-    short = " ".join(bits) if past else bits[0]     # asked for past visits: never shorten them away
+    elif old_v:
+        bits.append(f"Your last visit was with {old_v[0]['with']} on {old_v[0]['date']}.")
+    elif past:
+        bits.append("There are no past visits on record.")
+    if wl:
+        bits.append(f"You're also on the waitlist for {wl[0]['for']} until {wl[0]['until']}.")
+    short = " ".join(bits)
     return Result(True, pt.say(p, " ".join(bits), short), data, related=bb.related(p["phone"]))
 
 
@@ -730,7 +738,8 @@ def accept_offer(offer_code, phone, channel="chat", actor="agent") -> Result:
         with db.engine.begin() as c:
             o = c.execute(select(WO).where(WO.c.offer_code == code).with_for_update()).mappings().first()
             if not o:
-                return fail("not_found", "I couldn't find that offer code. Please check the email or SMS.")
+                return fail("not_found", "I couldn't find that offer code, so nothing was booked. Please check the email or SMS, "
+                                         "or I can look for other free slots or add you to the waitlist.")
             o = dict(o)
             w = dict(c.execute(select(WL).where(WL.c.id == o["waitlist_id"])).mappings().first())
             p = pt.get_by_id(c, w["patient_id"])

@@ -251,3 +251,10 @@ def test_eval_fixes_v3():
     iyer = ref.find_doctor("Rajesh Iyer")
     for k in range(1, 8):
         assert not ap.free_for_doctors(db.engine.connect(), [iyer], config.today() + timedelta(days=k)).get(iyer["id"])
+    # one find_appointments reply answers "my appointments", "my last visit" and "am I on the waitlist"
+    r = ap.find_appointments("9845000002", "1992-06-15")
+    assert "waitlist" in r.message and r.data["waitlist"]
+    assert "last visit" in ap.find_appointments("9845000001", "1959-03-04").message
+    assert "waitlist" in ap.accept_offer("ZZZZ9999QQ", "9845000002").message
+    from app.services import records
+    assert "Kannada" in records.get_doctors(department="Cardiology").message

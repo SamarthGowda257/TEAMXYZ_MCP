@@ -266,7 +266,8 @@ def get_doctors(department="", doctor_name="") -> Result:
                         departments=[d["name"] for d in REF.departments.values()])
         docs = sorted(doctors_in(dept["id"]), key=lambda x: -x["experience_years"])
         cards = [doctor_card(d) for d in docs[:5]]
-        msg = f"{dept['name']} doctors: " + "; ".join(f"{x['name']}, {x['days']}, {x['hours']}, fee {rupees(x['fee_inr'])}" for x in cards[:3]) + "."
+        msg = f"{dept['name']} doctors: " + "; ".join(f"{x['name']}, {x['days']}, {x['hours']}, fee {rupees(x['fee_inr'])}, "
+                                                      f"speaks {x['languages']}" for x in cards[:3]) + "."
         return ok(msg, department=dept["name"], doctors=cards)
     names = [d["name"] for d in REF.departments.values()]
     return ok(f"We have {len(names)} departments, including " + ", ".join(names[:6]) + ". Which one would you like?",
@@ -372,7 +373,11 @@ def hospital_info(topic="") -> Result:
 def visit_instructions(department="", procedure="") -> Result:
     proc = find_procedure(procedure) if clean(procedure) else None
     if proc:
-        return ok(f"For {proc['name']}: {proc['instructions']}" + (f" Fasting: {proc['fasting_hours']} hours." if proc["fasting_hours"] and "fast" not in (proc["instructions"] or "").lower() else ""),
+        ins = proc["instructions"] or ""
+        extra = (f" Fasting: {proc['fasting_hours']} hours." if proc["fasting_hours"] and "fast" not in ins.lower() else
+                 " No fasting is needed." if "fast" not in ins.lower() else "")
+        extra += "" if "photo id" in ins.lower() else " Bring a photo ID, the doctor's request and any previous reports."
+        return ok(f"For {proc['name']}: {ins}{extra}",
                   procedure=proc["name"], fasting_hours=proc["fasting_hours"], arrive_before_min=30 if proc["category"] in ("MRI", "CT") else 20,
                   preauth_required=proc["preauth_required"])
     dept = find_department(department)

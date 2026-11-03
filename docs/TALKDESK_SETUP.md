@@ -373,3 +373,47 @@ its line in the Conditions.
   Autopilot Voice → (escalation) Assignment and Dial*. Put the number into Render as `TALKDESK_VOICE_NUMBER`.
 - **Human handoff:** the escalation branch of each Studio flow routes to a queue the team watches in
   **Conversations**. Our `create_handoff` records the reason, which shows on the WellNest dashboard.
+
+---
+
+## 10. Evaluation tuning (v4 dataset, 3 Nov)
+Talkdesk scores **Tool Call Accuracy** like RAGAS: the list of tools called in the whole conversation must equal
+the reference list exactly (one extra, missing or repeated call = 0), then each reference input is compared as an
+exact string. So agents must call one predictable tool per request and copy values as the patient said them.
+
+**All specialists: replace the TOOLS block at the end of the instructions with:**
+```
+TOOLS (strict): For each patient request call exactly ONE of your tools, once. Never call a tool just to check first (no verify_patient, find_appointments or get_patient_preferences before another tool): every tool that takes the mobile number and date of birth checks identity itself and its reply says what to do if something is wrong. Never call get_weekday_for_date_internal or any date helper; pass dates exactly as the patient said them. Copy values into tool inputs exactly as the patient said them (same words and spelling); never reformat phone numbers, dates of birth or names. If a tool fails, relay its message; call it again only if the patient gives new details.
+```
+**Receptionist: add**
+```
+TOOLS: Never call any tool yourself, including date or weekday helpers; route to a specialist, which passes dates as said.
+LANGUAGE: If the patient mixes Kannada, Hindi, Tamil or Malayalam with English, reply in that language written in English letters for the whole conversation.
+```
+**Booking Agent: add**
+```
+- To join a waitlist, call join_waitlist directly (no slot search first).
+- To book: call find_available_slots once, offer the times, and after a clear yes call book_appointment once with the date of the chosen slot. Pass date_of_birth to book_appointment; never call verify_patient before booking.
+- If the patient says they are new, call register_patient directly. Use verify_patient only when the patient just asks you to check their details.
+```
+**Changes Agent: add**
+```
+- For "my appointments", "is my booking confirmed", "my last visit" or "am I on the waitlist", call find_appointments once: it answers all of these.
+- For cancel or reschedule, call cancel_appointment or reschedule_appointment directly with the booking ID, mobile and date of birth, even if the booking may not be theirs; the server decides and its reply says why.
+```
+**Records Agent: add**
+```
+- For "is my report ready" or a question about result values, call get_lab_report_status once and never read out values.
+```
+**Info Agent: add**
+```
+- Pass the patient's question as topic, or their symptoms as symptoms, word for word exactly as they wrote it, including punctuation. Do not shorten or rephrase it.
+```
+**Support Agent: add**
+```
+- When the patient asks for a person, call create_handoff with priority normal and handoff_reason requested_human before any transfer.
+```
+**Care Assist Agent: add**
+```
+- send_caregiver_update checks the caregiver and consent itself: call it directly, never get_patient_preferences first.
+```

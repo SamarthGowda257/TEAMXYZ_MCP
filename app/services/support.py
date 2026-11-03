@@ -33,6 +33,9 @@ def create_handoff(summary, priority="normal", phone="", reason_code="", channel
     if pr == "urgent":
         return ok(EMERGENCY_SAY, handoff_id=code, priority=pr, say=EMERGENCY_SAY, transfer=True)
     say = "I'm passing you to a team member now with a summary, so you won't need to repeat yourself. Please hold for a moment."
+    if rc == "complaint":
+        say = ("I'm sorry about this. I've passed your complaint to our patient care team with a summary, reference "
+               f"{code}; a team member will follow up with you.")
     return ok(say, handoff_id=code, priority=pr, say=say, transfer=True)
 
 
@@ -202,7 +205,8 @@ def submit_feedback(phone, rating, comment="", booking_id="") -> Result:
         a = c.execute(select(A.c.id).where(A.c.booking_code == norm_code(booking_id, "WN"))).first() if clean(booking_id) else None
         fid = c.execute(insert(db.feedback).values(patient_id=p["id"] if p else None, appointment_id=a[0] if a else None, rating=r,
                                                    comment=clean(comment)[:500] or None, created_at=config.now())).inserted_primary_key[0]
-    msg = "Thank you for the feedback." if r >= 4 else "Thank you for telling us. Our patient care team will look into it."
+    msg = ("Thank you for the feedback." if r >= 4 else
+           "I'm sorry your visit wasn't better, and thank you for telling us. Our patient care team will look into it.")
     if r <= 2 and p:
         create_handoff(f"Low rating {r}/5: {clean(comment)[:200]}", "normal", p["phone"], "complaint")
     return ok(msg, feedback_id=f"FB-{10000 + fid}")
