@@ -25,7 +25,7 @@
 - Team: TeamXYZ. Talkdesk sandbox is shared with other teams: never touch resources that are not ours (ours are named `*_TeamXYZ`).
 
 ## V1 (already built, live)
-- Talkdesk orchestration `CareLine_TeamXYZ` (published v1), bot `TestBot_TeamXYZ`: **Receptionist** (supervisor) → **Booking Agent**, **Info Agent**.
+- Talkdesk orchestration `WellNest_TeamXYZ` (formerly `CareLine_TeamXYZ`; the published V1 version keeps the old name), bot `TestBot_TeamXYZ`: **Receptionist** (supervisor) → **Booking Agent**, **Info Agent**.
 - This repo's MCP server on Render: 6 tools (`get_doctors`, `find_available_slots`, `book_appointment`, `find_appointments`, `reschedule_appointment`, `cancel_appointment`), in-memory data, branded "City Hospital, Bengaluru" (rename to WellNest in V2).
 - No database, no website, no login, no Studio flow, no phone number.
 
