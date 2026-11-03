@@ -97,7 +97,8 @@ def gemini(monkeypatch):
         calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
         return FakeResp(200, {"embeddings": [{"values": [3.0, 4.0] + [0.0] * (config.EMBEDDINGS_DIM - 2)}
                                              for _ in json["requests"]]})
-    monkeypatch.setattr(embeddings.httpx, "post", post)
+    import httpx
+    monkeypatch.setattr(httpx, "post", post)
     return calls
 
 
@@ -120,7 +121,8 @@ def test_query_embedding_is_cached(gemini):
 
 
 def test_quota_error_opens_breaker(gemini, monkeypatch):
-    monkeypatch.setattr(embeddings.httpx, "post", lambda *a, **k: FakeResp(429, {"error": {"message": "quota"}}))
+    import httpx
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: FakeResp(429, {"error": {"message": "quota"}}))
     assert embeddings.embed_documents(["x"]) is None
     assert embeddings.status()["breaker_open"] is True
     assert embeddings.embed_query("another question entirely") is None       # fails fast, no network

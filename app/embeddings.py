@@ -17,8 +17,6 @@ import re
 import threading
 import time
 
-import httpx
-
 from . import config
 
 log = logging.getLogger("wellnest.embeddings")
@@ -78,6 +76,7 @@ def _trip(err: str, seconds: float = 60.0) -> None:
 
 
 def _gemini(texts: list[str], task: str, timeout: float) -> list[list[float]]:
+    import httpx          # imported here: a missing package must never stop the server from starting
     m = config.EMBEDDINGS_MODEL
     body = {"requests": [{"model": f"models/{m}", "content": {"parts": [{"text": t[:6000]}]}, "taskType": task,
                           "outputDimensionality": config.EMBEDDINGS_DIM} for t in texts]}

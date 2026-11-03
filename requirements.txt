@@ -11,3 +11,6 @@ psycopg[binary]==3.3.7
 
 # Blackboard + event streams (Render Key Value / Upstash). Optional: without REDIS_URL everything runs in-process
 redis==5.2.1
+
+# Gemini embeddings for hybrid search (plain HTTPS; the MCP SDK ships httpx2, not httpx)
+httpx==0.28.1

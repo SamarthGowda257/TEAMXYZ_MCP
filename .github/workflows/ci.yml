@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: pip install -r requirements.txt pytest httpx
+      - run: pip install -r requirements.txt pytest     # nothing else: what Render installs is what the server gets
       - name: Unit tests (SQLite)
         run: python -m pytest -q tests
         env:
