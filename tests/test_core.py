@@ -176,3 +176,22 @@ def test_events_are_processed_in_process():
             break
         time.sleep(0.05)
     assert seen == [7]
+
+
+def test_waitlist_accept_survives_booking_code_clash(monkeypatch):
+    """Regression: accept_offer picked a random WN- code without checking it, so ~8% of accepts failed as 'slot taken'."""
+    from sqlalchemy import select
+    with db.engine.connect() as c:
+        existing = c.execute(select(db.appointments.c.booking_code).where(db.appointments.c.booking_code.isnot(None))).first()[0]
+    codes = iter([existing, existing, "WN-99998"])
+    orig = pt.random_code
+    monkeypatch.setattr(pt, "random_code", lambda prefix, n=5: next(codes, None) or orig(prefix, n))
+    from app.services import blackboard as bb
+    seed.reset(verbose=False)
+    ref.load()
+    bb.clear_all()                      # as /ops/reset-demo does: drop snapshots cached by earlier tests
+    shan = pt.verify("9845000001", "1959-03-04").data["upcoming"][0]["booking_id"]
+    assert ap.cancel(shan, "9845000001", "1959-03-04").ok
+    offer = pt.verify("9845000002", "1992-06-15").data["open_offer"]
+    r = ap.accept_offer(offer["offer_code"], "9845000002")
+    assert r.ok and r.data["booking_id"] == "WN-99998"

@@ -335,9 +335,7 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
                     msg += f" Free: {'; '.join(alts[:3])}." if alts else " I can check another day or add you to the waitlist."
                     return fail("slot_taken", msg, alternatives=alts[:3], date_iso=d.isoformat())
                 vals = dict(doctor_id=chosen["id"])
-            code = pt.random_code("WN")
-            while c.execute(select(A.c.id).where(A.c.booking_code == code)).first():
-                code = pt.random_code("WN")
+            code = new_booking_code(c)
             aid = c.execute(insert(A).values(booking_code=code, patient_id=patient["id"], appt_date=d, appt_time=hh,
                                              status="booked", reason=clean(reason)[:200] or (proc["name"] if proc else None),
                                              channel=channel, idempotency_key=key, created_at=config.now(),
@@ -659,6 +657,14 @@ def get_offer(code) -> dict | None:
             "patient_first_name": r["full_name"].split()[0], "_phone": r["phone"]}
 
 
+def new_booking_code(c) -> str:
+    """WN-xxxxx not used by any appointment (5 digits: with ~7k bookings a blind pick would clash ~8% of the time)."""
+    while True:
+        code = pt.random_code("WN")
+        if not c.execute(select(A.c.id).where(A.c.booking_code == code)).first():
+            return code
+
+
 def accept_offer(offer_code, phone, channel="chat", actor="agent") -> Result:
     code = clean(offer_code).upper().replace(" ", "").replace("-", "")
     if not code:
@@ -688,7 +694,7 @@ def accept_offer(offer_code, phone, channel="chat", actor="agent") -> Result:
                 extra = (f" The next free slot with {doc['name']} is {human_date(nxt[0])} at {human_time(nxt[2][0])}." if nxt else
                          " You're still on the waitlist and we'll offer you the next opening.")
                 return fail("offer_expired", "Sorry, that offer has expired or the slot has gone." + extra)
-            code_b = pt.random_code("WN")
+            code_b = new_booking_code(c)       # unique: a clash would surface as a false "slot taken"
             aid = c.execute(insert(A).values(booking_code=code_b, patient_id=p["id"], doctor_id=doc["id"], appt_date=o["appt_date"],
                                              appt_time=o["appt_time"], status="booked", reason="Waitlist booking",
                                              channel="waitlist", created_at=config.now(), updated_at=config.now())).inserted_primary_key[0]
