@@ -1,0 +1,68 @@
+/* Doctors, insurance, visit, auth, accept: Persuade/Operate hybrid pages sharing the site tokens. */
+.filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; max-width: 900px; }
+.filters .field + .field { margin-top: 0; }
+.count { margin: 28px 0 16px; color: var(--muted); font-weight: 700; }
+.doc-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+.doc { display: flex; gap: 20px; background: var(--card); border-radius: var(--radius); padding: 24px; }
+.doc-initials { --notch: 8px; flex: none; width: 72px; height: 56px; display: grid; place-items: center; font-family: var(--font-display);
+                font-weight: 600; font-size: 1.4rem; color: var(--ink); }
+.doc-body { min-width: 0; flex: 1; display: grid; gap: 6px; }
+.doc h2 { font-size: 1.45rem; letter-spacing: -0.025em; }
+.doc-meta { color: var(--muted); font-size: 0.95rem; }
+.doc-when { font-size: 1rem; }
+.doc-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.doc-fee { font-family: var(--font-display); font-weight: 600; font-size: 1.3rem; }
+@media (max-width: 700px) { .filters { grid-template-columns: 1fr; } .doc { padding: 20px; gap: 16px; } .doc-initials { width: 60px; height: 46px; font-size: 1.1rem; } }
+
+.ins-grid { display: grid; grid-template-columns: 5fr 7fr; gap: 40px; align-items: start; }
+.ins-check { --notch: 22px; background: var(--accent); color: var(--accent-ink); padding: 40px; display: grid; gap: 16px; }
+.ins-check h2 { font-size: 2rem; margin-bottom: 6px; }
+.ins-check label { color: var(--accent-ink); }
+.ins-check .btn-primary { background: var(--accent-ink); color: var(--accent-deep); margin-top: 6px; }
+.ins-check .btn-primary:hover { background: var(--ink); color: var(--bg); }
+.ins-result { background: color-mix(in srgb, var(--accent-ink) 14%, transparent); border-radius: 12px; padding: 18px 20px; display: grid; gap: 8px; }
+.ins-verdict { font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; letter-spacing: -0.02em; }
+.ins-verdict span { display: block; font-size: 1.05rem; font-family: var(--font-text); font-weight: 700; letter-spacing: 0; }
+.ins-check .error-text { color: var(--accent-ink); }
+.ins-table-wrap h2 { font-size: 2rem; margin-bottom: 18px; }
+.ins-table { width: 100%; border-collapse: collapse; }
+.ins-table th, .ins-table td { text-align: left; vertical-align: top; padding: 14px 12px 14px 0; border-bottom: 1px solid var(--border); }
+.ins-table thead th { font-size: var(--step-small); color: var(--muted); font-weight: 700; }
+.ins-table tbody th { font-weight: 700; white-space: nowrap; }
+.ins-table td:last-child { color: var(--muted); font-size: 0.95rem; }
+.muted-note { color: var(--muted); margin-top: 20px; font-size: 0.95rem; max-width: 60ch; }
+@media (max-width: 900px) { .ins-grid { grid-template-columns: 1fr; } .ins-check { padding: 30px 26px; }
+  .ins-table thead { display: none; } .ins-table tr { display: grid; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .ins-table th, .ins-table td { border: 0; padding: 2px 0; } }
+
+.visit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.visit-map { --notch: 18px; grid-row: span 2; background: var(--accent); color: var(--accent-ink); text-decoration: none; padding: 36px;
+             display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; min-height: 280px; transition: background .2s; }
+.visit-map:hover { background: var(--accent-deep); color: var(--accent-ink); }
+.visit-map strong { font-family: var(--font-display); font-size: 1.9rem; letter-spacing: -0.03em; line-height: 1.05; }
+.visit-card { background: var(--card); border-radius: var(--radius); padding: 26px; display: grid; gap: 10px; align-content: start; }
+.visit-card h2 { font-size: 1.35rem; letter-spacing: -0.02em; }
+.visit-card.is-alert { background: var(--alert); color: #fff; }
+
+/* ---------------------------------------------------------------- auth */
+.auth { min-height: calc(100svh - 110px); display: grid; grid-template-columns: 1fr 1fr; }
+.auth-side { background: var(--accent); color: var(--accent-ink); padding: 72px var(--margin); display: flex; flex-direction: column; justify-content: space-between; gap: 40px; }
+.auth-side h1 { font-size: clamp(2.6rem, 5vw, 4.4rem); letter-spacing: -0.045em; }
+.auth-side ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; font-size: 1.125rem; }
+.auth-side li { display: flex; gap: 14px; align-items: baseline; }
+.auth-side .token-bullet { background: var(--accent-ink); }
+.auth-form { padding: 72px var(--margin); display: flex; flex-direction: column; justify-content: center; max-width: 620px; width: 100%; }
+.auth-form h2 { font-size: 2.2rem; margin-bottom: 8px; }
+.auth-form form { margin-top: 28px; }
+.auth-form .btn { margin-top: 24px; width: 100%; }
+.auth-alt { margin-top: 20px; }
+.demo-note { margin-top: 28px; background: var(--surface); border-radius: 12px; padding: 16px 18px; font-size: 0.95rem; }
+.demo-note button { background: none; border: 0; padding: 0; color: var(--accent-deep); text-decoration: underline; font-weight: 700; cursor: pointer; }
+@media (max-width: 860px) { .auth { grid-template-columns: 1fr; } .auth-side { padding: 44px 16px; } .auth-form { padding: 40px 16px 72px; } }
+
+/* ---------------------------------------------------------------- waitlist accept */
+.accept { min-height: calc(100svh - 110px); padding: 64px var(--margin); display: grid; place-items: center; }
+.accept-card { width: min(720px, 100%); display: grid; gap: 22px; }
+.accept-card h1 { font-size: clamp(2.4rem, 5vw, 4rem); letter-spacing: -0.045em; }
+.countdown { font-family: var(--font-display); font-weight: 600; font-size: 1.4rem; }
+.countdown.low { color: var(--alert); }

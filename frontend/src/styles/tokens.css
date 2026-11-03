@@ -1,0 +1,146 @@
+/*
+  CareLine design tokens.
+  Direction (taste-skill sheet, seed 723725298): "One motif". The motif is the OPD token slip that every
+  Indian hospital desk hands out: a rounded slip with two half-circle notches. Palette = CareLine brand
+  colours from docs/09 mapped onto the sheet's proportions (ground, ink, one accent at large scale, four
+  flat fields). Type: Switzer for display (dealt), Atkinson Hyperlegible for text (ui-ux-pro-max: chosen for
+  senior readability).
+*/
+:root {
+  --bg: #f6f8f7;
+  --surface: #e9efed;
+  --surface-2: #dfe8e5;
+  --card: #ffffff;
+  --ink: #0f2a2e;
+  --muted: #3a5352;
+  --faint: #4f6866;
+  --accent: #086b64;
+  --accent-deep: #054c47;
+  --accent-ink: #ffffff;
+  --field-1: #cfe6f6;  --field-1-ink: #0f2a2e;
+  --field-2: #d8efcd;  --field-2-ink: #0f2a2e;
+  --field-3: #fbe1a0;  --field-3-ink: #0f2a2e;
+  --field-4: #bfeae4;  --field-4-ink: #0f2a2e;
+  --marigold: #e3a21a;
+  --alert: #b8302a;
+  --alert-tint: #fbe6e3;
+  --ok: #24724a;
+  --ok-tint: #dcf2e3;
+  --warn-tint: #fdf1d2;
+  --warn-ink: #7a5000;
+  --border: #dbe4e1;
+  --control: #b9c8c4;
+
+  --font-display: "Switzer", "Atkinson Hyperlegible", system-ui, sans-serif;
+  --font-text: "Atkinson Hyperlegible", "Switzer", system-ui, sans-serif;
+
+  --step-small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --step-body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --step-lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  --step-head: clamp(2rem, 1.3rem + 3.2vw, 4rem);
+  --step-hero: clamp(3.4rem, 6.4vw, 6.25rem);
+
+  --radius: 14px;
+  --notch: 13px;
+  --margin: clamp(16px, 6vw, 96px);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  color-scheme: light;
+}
+
+:root[data-size="lg"] { font-size: 118.75%; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1a1c; --surface: #132527; --surface-2: #19302f; --card: #10211f;
+    --ink: #e7f1ef; --muted: #a9bfbb; --faint: #94aaa6;
+    --accent: #2fae9f; --accent-deep: #5ccabf; --accent-ink: #04201d;
+    --field-1: #1b3446; --field-1-ink: #e7f1ef; --field-2: #20361c; --field-2-ink: #e7f1ef;
+    --field-3: #3d3010; --field-3-ink: #fbe1a0; --field-4: #123a35; --field-4-ink: #e7f1ef;
+    --alert: #ef7067; --alert-tint: #3b1715; --ok: #6ccb94; --ok-tint: #15301f; --warn-tint: #3a2e10; --warn-ink: #f3c560;
+    --border: #22393a; --control: #3b5553;
+    color-scheme: dark;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-text); font-size: var(--step-body); line-height: 1.5; letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
+}
+::selection { background: var(--accent); color: var(--accent-ink); }
+:focus-visible { outline: 3px solid var(--marigold); outline-offset: 3px; border-radius: 6px; }
+a { color: var(--accent-deep); text-underline-offset: 0.2em; text-decoration-thickness: 1.5px; }
+a:hover { color: var(--ink); }
+img { max-width: 100%; display: block; }
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.035em; line-height: 0.98; margin: 0; text-wrap: balance; }
+p { margin: 0; text-wrap: pretty; }
+button { font: inherit; color: inherit; }
+input, select, textarea { font: inherit; color: var(--ink); caret-color: var(--accent); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--control); border-radius: 10px; border: 2px solid var(--bg); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--ink); color: var(--bg); padding: 10px 14px; z-index: 100; border-radius: 8px; }
+.skip:focus { left: 12px; }
+
+/* ---------------------------------------------------------------- the motif: OPD token slip */
+.token-shape {
+  border-radius: var(--radius);
+  -webkit-mask: radial-gradient(circle var(--notch) at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle var(--notch) at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle var(--notch) at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle var(--notch) at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat;
+}
+
+/* Buttons are cut to the token: the one button shape on the site */
+.btn {
+  --notch: 7px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 48px; padding: 12px 26px; border: 0; cursor: pointer; text-decoration: none;
+  font-family: var(--font-display); font-weight: 600; font-size: 1.0625rem; letter-spacing: -0.01em;
+  transition: transform .18s var(--ease-out), background-color .18s, color .18s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--ink); color: var(--bg); }
+.btn-primary:hover { background: var(--accent-deep); color: var(--accent-ink); }
+.btn-accent { background: var(--accent); color: var(--accent-ink); }
+.btn-accent:hover { background: var(--accent-deep); color: var(--accent-ink); }
+.btn-quiet { background: var(--surface); color: var(--ink); }
+.btn-quiet:hover { background: var(--surface-2); color: var(--ink); }
+.btn-danger { background: var(--alert); color: #fff; }
+.btn-sm { min-height: 40px; padding: 8px 18px; font-size: 0.95rem; --notch: 6px; }
+.btn[disabled], .btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; transform: none; }
+
+.token-bullet {
+  display: inline-block; flex: none; width: 1.25em; height: 0.8em; background: var(--accent); --notch: 0.13em; border-radius: 0.16em;
+  -webkit-mask: radial-gradient(circle var(--notch) at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle var(--notch) at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle var(--notch) at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle var(--notch) at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat;
+}
+
+/* ---------------------------------------------------------------- forms (shared) */
+.field { display: grid; gap: 6px; }
+.field + .field { margin-top: 14px; }
+.field label { font-weight: 700; font-size: 0.95rem; }
+.field .hint { font-size: var(--step-small); color: var(--muted); font-weight: 400; }
+.input {
+  width: 100%; min-height: 50px; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--control);
+  background: var(--card); transition: border-color .15s;
+}
+.input:hover { border-color: var(--muted); }
+.input:focus { border-color: var(--accent); outline: 3px solid color-mix(in srgb, var(--accent) 25%, transparent); outline-offset: 0; }
+.input[aria-invalid="true"] { border-color: var(--alert); }
+.error-text { color: var(--alert); font-weight: 700; font-size: 0.95rem; }
+.check { display: flex; gap: 12px; align-items: center; font-weight: 600; cursor: pointer; }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); }
+
+/* ---------------------------------------------------------------- motion */
+.rise { opacity: 1; transform: none; }
+.js .rise:not(.in) { opacity: 0; transform: translateY(24px); }
+.js .rise.in { transition: opacity .7s var(--ease-out), transform .7s var(--ease-out); transition-delay: var(--d, 0ms); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .js .rise:not(.in) { opacity: 1; transform: none; }
+}

@@ -1,29 +1,27 @@
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg
 *.egg-info/
 dist/
 build/
-.eggs/
 
 # Virtual environments
 .venv/
 venv/
 env/
-ENV/
 
 # Environment files (never commit real secrets)
 .env
 
-# IDE / editor
+# Local databases (recreated and seeded automatically)
+*.db
+*.db-shm
+*.db-wal
+
+# IDE / OS
 .vscode/
 .idea/
 *.swp
-*.swo
 .DS_Store
 
 # pytest / coverage
@@ -31,9 +29,9 @@ ENV/
 .coverage
 htmlcov/
 
-# Local appointment database (recreated and seeded automatically)
-hospital.db
-
-# Local-only shortcuts that may contain the real token
+# Local-only shortcuts that may contain a token
 *.local.html
-.env
+
+# Frontend build tooling and design-inspector output
+frontend/node_modules/
+.taste-skill/inspect/
