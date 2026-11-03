@@ -13,7 +13,7 @@ const LAYERS = [
   { icon: MessageCircle, title: "Patients", items: ["Website chat (Talkdesk widget)", "Phone (Talkdesk voice)", "Website and patient portal"] },
   { icon: Bot, title: "Talkdesk AI Agent Platform", items: ["Receptionist supervisor: emergencies first, routing", "8 specialist agents, max 5 skills each", "Human handoff to Talkdesk Conversations"] },
   { icon: Lock, title: "WellNest MCP gateway (/mcp)", items: ["34 tools over Streamable HTTP", "Bearer token, constant-time check, rate limits", "Every reply: ok + speakable message + small data"] },
-  { icon: Server, title: "Services (one set of rules)", items: ["Same code for bot, website and jobs", "Identity: phone + date of birth checked on the server", "Waitlist auto-offer, coverage, reports, memory"] },
+  { icon: Server, title: "Services (one set of rules)", items: ["Same code for bot, website and jobs", "Identity: phone + date of birth checked on the server", "Waitlist auto-offer, coverage, reports, memory", "Hybrid search for memory, FAQs and symptoms"] },
 ];
 
 const SIDE = [
@@ -25,7 +25,7 @@ const SIDE = [
 
 const PROOF = [
   { v: "1 of 50", l: "patients won the race for the same slot; 49 told it was taken, 0 double bookings" },
-  { v: "30 / 30", l: "acceptance checks over the real MCP connection, on Postgres and Redis, on every code push" },
+  { v: "34 / 34", l: "acceptance checks over the real MCP connection, on Postgres, pgvector and Redis, on every code push" },
   { v: "0 errors", l: "in 600 tool calls from 25 simultaneous patients" },
   { v: "< 30 ms", l: "typical server time per tool call on its own (measured on the test server)" },
 ];
@@ -57,7 +57,7 @@ export function Architecture() {
             <Status label="Database" value={h ? (h.db_kind === "postgres" ? "Supabase Postgres" : "local fallback") : "…"} good={h?.db_kind === "postgres"} />
             <Status label="Blackboard" value={h ? (h.blackboard === "connected" ? "Redis connected" : h.blackboard) : "…"} good={h?.blackboard === "connected"} />
             <Status label="Events" value={h ? h.events : "…"} good={h?.events === "redis-streams"} />
-            <Status label="Search" value={h ? (h.search === "hybrid" ? "keyword + fuzzy + meaning" : h.search || "…") : "…"} good={h?.search === "hybrid"} />
+            <Status label="Search" value={h ? (h.search === "hybrid" ? "keyword + fuzzy + meaning" : h.search === "keyword+fuzzy" ? "keyword + fuzzy (meaning off)" : h.search || "…") : "…"} good={h?.search === "hybrid"} />
             <Status label="Email" value={h ? (h.email === "smtp" ? "sending" : "simulated") : "…"} good={h?.email === "smtp"} />
           </div>
         </section>
