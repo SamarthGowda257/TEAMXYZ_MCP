@@ -121,3 +121,22 @@ def test_fake_addresses_are_never_emailed():
         rows = dict(c.execute(select(db.notifications.c.dedupe_key, db.notifications.c.status)
                               .where(db.notifications.c.dedupe_key.in_(["fake-1", "real-1"]))).all())
     assert rows == {"fake-1": "simulated", "real-1": "queued"}
+
+
+def test_rate_limiter_blocks_after_limit():
+    from app import ratelimit
+    ip = "203.0.113.9"
+    results = [ratelimit.hit("login", ip) for _ in range(12)]
+    assert results[:10] == [True] * 10 and results[10:] == [False, False]
+    assert ratelimit.client_ip({"x-forwarded-for": "198.51.100.7, 10.0.0.1"}) == "198.51.100.7"
+
+
+def test_api_login_rate_limited_and_headers():
+    from fastapi.testclient import TestClient
+    from app.api import create_app
+    c = TestClient(create_app())
+    h = {"x-forwarded-for": "192.0.2.44"}
+    codes = [c.post("/api/auth/login", json={"email": "x@example.com", "password": "nope"}, headers=h).status_code for _ in range(11)]
+    assert codes[:10] == [401] * 10 and codes[10] == 429
+    r = c.get("/health")
+    assert "frame-ancestors 'none'" in r.headers["content-security-policy"] and r.headers["x-frame-options"] == "DENY"

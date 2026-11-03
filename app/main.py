@@ -11,7 +11,7 @@ import logging
 from starlette.responses import JSONResponse
 from starlette.routing import Mount
 
-from . import config, db, notify, seed
+from . import config, db, notify, ratelimit, seed
 from .api import create_app
 from .mcp_tools import mcp
 from .services import ref
@@ -43,13 +43,21 @@ class BearerTokenMiddleware:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["path"].startswith("/mcp"):
-            auth = dict(scope.get("headers") or []).get(b"authorization", b"").decode()
+            headers = dict(scope.get("headers") or [])
+            ip = ratelimit.client_ip(headers, (scope.get("client") or ["unknown"])[0])
+            if ratelimit.over("mcp_bad_token", ip):
+                resp = JSONResponse({"error": "rate_limited", "detail": "Too many failed attempts. Try again later."}, status_code=429)
+                await resp(scope, receive, send)
+                return
+            auth = headers.get(b"authorization", b"").decode()
             if not auth.startswith("Bearer "):
+                ratelimit.hit("mcp_bad_token", ip)
                 resp = JSONResponse({"error": "unauthorized", "detail": "Authorization: Bearer <token> header required."},
                                     status_code=401, headers={"WWW-Authenticate": "Bearer"})
                 await resp(scope, receive, send)
                 return
             if not hmac.compare_digest(auth[len("Bearer "):].encode(), config.MCP_TOKEN.encode()):
+                ratelimit.hit("mcp_bad_token", ip)
                 resp = JSONResponse({"error": "forbidden", "detail": "Invalid Bearer token."},
                                     status_code=403, headers={"WWW-Authenticate": "Bearer"})
                 await resp(scope, receive, send)

@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import and_, func, insert, select, update
 
-from . import config, db, metrics, notify, seed
+from . import config, db, metrics, notify, ratelimit, seed
 from .security import hash_password, read_token, sign_token, token_matches, verify_password
 from .services import appointments as ap
 from .services import blackboard as bb
@@ -22,6 +22,16 @@ from .util import Result, age_on, clean, human_date, human_time, mask_phone, nor
 
 WEB = config.ROOT / "web"
 router = APIRouter()
+
+
+def limited(bucket: str):
+    """Dependency: 429 when this client IP is over the bucket's limit."""
+    def dep(request: Request):
+        ip = ratelimit.client_ip(dict(request.headers), request.client.host if request.client else "unknown")
+        if not ratelimit.hit(bucket, ip):
+            raise HTTPException(429, detail={"error_code": "rate_limited",
+                                             "message": "Too many attempts. Please wait a few minutes and try again."})
+    return Depends(dep)
 
 
 def out(res: Result, status_fail: int = 400):
@@ -68,7 +78,7 @@ class Login(BaseModel):
     password: str
 
 
-@router.post("/api/auth/signup")
+@router.post("/api/auth/signup", dependencies=[limited("signup")])
 def signup(b: Signup):
     email = clean(b.email).lower()
     if "@" not in email or len(b.password) < 8:
@@ -111,7 +121,7 @@ def signup(b: Signup):
             "message": "Welcome back, we found your hospital record." if linked else "Your account is ready."}
 
 
-@router.post("/api/auth/login")
+@router.post("/api/auth/login", dependencies=[limited("login")])
 def login(b: Login):
     P = db.patients
     with db.engine.connect() as c:
@@ -205,7 +215,7 @@ class CoverageReq(BaseModel):
     department: str = ""
 
 
-@router.post("/api/coverage/estimate")
+@router.post("/api/coverage/estimate", dependencies=[limited("coverage")])
 def coverage(b: CoverageReq):
     return out(rc.check_coverage(b.insurer, b.procedure, b.department))
 
@@ -426,7 +436,7 @@ class AcceptReq(BaseModel):
     phone: str
 
 
-@router.post("/api/waitlist/offer/{code}/accept")
+@router.post("/api/waitlist/offer/{code}/accept", dependencies=[limited("accept")])
 def accept(code: str, b: AcceptReq):
     return out(ap.accept_offer(code, b.phone, channel="web", actor="web"))
 
@@ -570,7 +580,7 @@ class CallbackReq(BaseModel):
     reason: str = ""
 
 
-@router.post("/api/callback")
+@router.post("/api/callback", dependencies=[limited("callback")])
 def web_callback(b: CallbackReq):
     from .services import support as sp
     reason = (f"{clean(b.name)}: " if clean(b.name) else "") + (clean(b.reason) or "Call back requested on the website")
@@ -594,6 +604,25 @@ for _path in PAGES:
     router.add_api_route(_path, spa, methods=["GET"], include_in_schema=False)
 
 
+# Allows our own files, the Talkdesk chat widget (script, frames, live connection) and the stock photos.
+CSP = ("default-src 'self'; "
+       "script-src 'self' https://*.talkdeskapp.com https://*.talkdesk.com; "
+       "style-src 'self' 'unsafe-inline' https://*.talkdeskapp.com; "
+       "img-src 'self' data: blob: https:; font-src 'self' data: https://*.talkdeskapp.com; "
+       "connect-src 'self' https://*.talkdeskapp.com https://*.talkdesk.com wss://*.talkdeskapp.com wss://*.talkdesk.com; "
+       "frame-src https://*.talkdeskapp.com https://*.talkdesk.com; media-src 'self' https://*.talkdeskapp.com; "
+       "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CSP,
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), geolocation=(), payment=()",
+    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+}
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="CareLine Hospitals", version=config.VERSION, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -602,8 +631,8 @@ def create_app() -> FastAPI:
         t0 = time.perf_counter()
         resp = await call_next(request)
         resp.headers["X-Response-Time"] = f"{(time.perf_counter() - t0) * 1000:.1f}ms"
-        resp.headers["X-Content-Type-Options"] = "nosniff"
-        resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        for k, v in SECURITY_HEADERS.items():
+            resp.headers.setdefault(k, v)
         return resp
 
     @app.exception_handler(HTTPException)
