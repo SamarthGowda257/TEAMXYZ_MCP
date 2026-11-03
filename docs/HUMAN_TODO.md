@@ -42,6 +42,7 @@ Numbered so we can refer to them ("done with 3"). Tick the box when done.
 10. [ ] POST `https://teamxyz-mcp.onrender.com/jobs/run?token=<JOBS_TOKEN>` every 1 min (reminders + waitlist offer expiry).
 
 ## Talkdesk (V2 changes that affect the existing bot)
+> Full copy-paste build sheet: **docs/TALKDESK_SETUP.md** (agents, instructions, conditions, skill mappings, variables, test script).
 11. [ ] AI Agent Platform → MCP Servers → `TeamXYZ_MCP` → refresh / Test connection, so the 34 tools appear. URL and token are unchanged.
 12. [ ] **Changed behaviour, update the bot:**
    - `cancel_appointment` and `reschedule_appointment` now **require date of birth** (server-side identity check). Create a
