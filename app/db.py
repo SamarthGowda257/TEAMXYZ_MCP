@@ -300,6 +300,20 @@ def drop_schema():
     md.drop_all(engine)
 
 
+def db_target() -> dict | None:
+    """What DATABASE_URL was parsed as (user, host, port, database, password length): never the password itself."""
+    if not config.DATABASE_URL:
+        return None
+    from sqlalchemy.engine import make_url
+    try:
+        u = make_url(config.DATABASE_URL.replace("postgres://", "postgresql://", 1))
+        pw = u.password or ""
+        return {"user": u.username, "host": u.host, "port": u.port, "database": u.database, "password_length": len(pw),
+                "password_has_brackets": "[" in pw or "]" in pw, "password_has_spaces": pw != pw.strip()}
+    except Exception as e:
+        return {"parse_error": str(e)[:120]}
+
+
 def db_ok() -> bool:
     try:
         with engine.connect() as c:
