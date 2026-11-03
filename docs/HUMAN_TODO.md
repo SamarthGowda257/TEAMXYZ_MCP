@@ -58,14 +58,10 @@ Numbered so we can refer to them ("done with 3"). Tick the box when done.
 
 ## Hybrid search: the meaning leg (about 10 minutes, free)
 Keyword and typo search already work on the live server with nothing to set up. These steps switch on search by meaning.
-15. [ ] **Get a Gemini API key**: open https://aistudio.google.com/app/apikey, sign in with a Google account, click
-    **Create API key** (if asked for a project, let it create one). Copy the key (starts with `AIza`). Do not paste it in
-    chat or screenshots. No billing or card needed: leave the project on the free tier.
-16. [ ] **Render** → `teamxyz-mcp` → **Environment** → add `EMBEDDINGS_API_KEY` = the key → **Save** (Render redeploys).
-17. [ ] **GitHub** → repository **Settings** → **Secrets and variables** → **Actions** → **New repository secret** →
-    name `EMBEDDINGS_API_KEY`. Use a key from a **separate Google project** (AI Studio → Create API key → *Create API
-    key in new project*): free quotas are per project, so test runs never eat the live server's daily quota. This lets the "Search eval (real embeddings)" workflow measure
-    quality with the real model (Claude can start it and read the results; the key never leaves GitHub).
+15. [x] **Get a Gemini API key**: https://aistudio.google.com/app/apikey → **Create API key**. Never paste it in chat or screenshots.
+16. [x] **Render** → `teamxyz-mcp` → **Environment** → `EMBEDDINGS_API_KEY` = the key (only the live server uses it).
+17. [ ] **GitHub**: delete the repository secret `EMBEDDINGS_API_KEY` (Settings → Secrets and variables → Actions →
+    `EMBEDDINGS_API_KEY` → Remove). Testing no longer uses Google: CI runs all three search legs with a local stand-in.
 18. [ ] **Check it worked** (2–5 minutes after the deploy): `https://teamxyz-mcp.onrender.com/health` shows
     `"search":"hybrid"`. Detail: `/api/ops/system?token=<DASHBOARD_TOKEN>` → `search.kb_embedded` reaches `kb_total` (95);
     patients' notes are embedded when that patient is verified. `embeddings.last_quota` names any Google limit hit.

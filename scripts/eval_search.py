@@ -4,7 +4,7 @@ Includes paraphrases that share no words with the answer (only the meaning leg c
 and off-topic questions that must return nothing. Prints hit@1 / hit@3, which legs fired, and the cosine
 similarities seen, with a suggested SEARCH_MIN_SIM for the embeddings model in use.
 
-Usage:
+Usage (CI runs it with a local stand-in embedder; no Google key is used in testing):
   SEARCH_URL=http://localhost:8000 DASHBOARD_TOKEN=... python scripts/eval_search.py [--min-hit3 0.8]
   SEARCH_URL=https://teamxyz-mcp.onrender.com DASHBOARD_TOKEN=... python scripts/eval_search.py
 Read-only: it does not change any data.

@@ -139,7 +139,9 @@ procedures with preparation, insurers, 28 FAQs in `app/kb.py`). Three legs run i
 - **Degrades by itself**: no key → keyword + fuzzy; no `vector`/`pg_trgm` extension → those legs off; SQLite →
   word overlap in Python. `/health` shows `"search": "hybrid" | "keyword+fuzzy" | "keyword"`.
 - **Quality**: `scripts/eval_search.py` (26 labelled questions: keyword, typo, code, paraphrase, off-topic) runs in
-  CI with keyword, typo, code and off-topic required to pass; `search-live.yml` runs it with the real model.
+  CI with keyword, typo, code and off-topic required to pass, using a local stand-in embedder (no Google key in
+  testing). One real-model run (Gemini, 3 Nov): keyword 6/6, typo 3/3, code 1/1, off-topic 3/3, paraphrase 6/13;
+  correct passages scored cosine 0.61-0.80 (median 0.71), the best off-topic 0.61. Only the live server holds a key.
 - **Debug view**: `/api/ops/search?token=<DASHBOARD_TOKEN>&q=...&phone=...&raw=true` shows each hit's legs.
 - Patient memory is always scoped to one patient. Never search across patients.
 

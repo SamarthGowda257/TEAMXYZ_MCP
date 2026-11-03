@@ -45,7 +45,7 @@ jobs:
           MCP_BEARER_TOKEN: ci-token
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wellnest
           PORT: "8000"
-          EMBEDDINGS_PROVIDER: hash          # local stand-in so all three search legs run; real model: search-live.yml
+          EMBEDDINGS_PROVIDER: hash          # local stand-in so all three search legs run; testing never calls Google
       - name: Hybrid search evaluation (keyword, typo, code and off-topic questions must all pass)
         run: python scripts/eval_search.py --require keyword,typo,code,negative
         env:
