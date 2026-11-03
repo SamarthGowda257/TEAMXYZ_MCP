@@ -75,44 +75,38 @@ def save_note(phone, summary, topics="", outcome="", channel="chat") -> Result:
                                                             topics=pt.topics_text(topics) or None,
                                                             outcome=clean(outcome)[:120] or None,
                                                             created_at=config.now())).inserted_primary_key[0]
+        if p:
+            from .. import search
+            search.sync(c, p["id"])                 # keyword-searchable at once; the meaning vector follows in the background
     bb.invalidate(p_norm, "p1", "p3")
     events.publish("interaction.noted", patient_id=p["id"] if p else None)
     return ok("Noted for next time.", note_id=f"NT-{10000 + nid}")
 
 
-def _words(q: str) -> list[str]:
-    stop = {"did", "i", "you", "me", "my", "ask", "asked", "about", "the", "a", "an", "last", "week", "what", "when", "was",
-            "is", "of", "to", "for", "on", "in", "we", "talk", "talked", "tell", "told", "any", "previous", "before"}
-    return [w for w in "".join(ch if ch.isalnum() else " " for ch in q.lower()).split() if w not in stop and len(w) > 2]
-
-
 def search_interactions(phone, dob, query) -> Result:
-    N, R = db.interaction_notes, db.resolutions
+    """Hybrid search (keyword + fuzzy + meaning) over this patient's own notes and actions; never across patients."""
+    from .. import search
     with db.engine.begin() as c:
         p, err = pt.check_identity(c, phone, dob)
         if err:
             return err
-        words = _words(clean(query))
-        notes = [dict(r) for r in c.execute(select(N.c.summary, N.c.topics, N.c.created_at).where(N.c.patient_id == p["id"])
-                                            .order_by(N.c.created_at.desc()).limit(50)).mappings()]
-        res = [dict(r) for r in c.execute(select(R.c.summary, R.c.action, R.c.created_at).where(R.c.patient_id == p["id"])
-                                          .order_by(R.c.created_at.desc()).limit(50)).mappings()]
-    items = [{"date": n["created_at"], "text": n["summary"], "hay": f"{n['summary']} {n['topics'] or ''}".lower()} for n in notes]
-    items += [{"date": r["created_at"], "text": f"{r['action'].replace('_', ' ')}: {r['summary']}",
-               "hay": f"{r['action']} {r['summary']}".lower()} for r in res]
-    scored = []
-    for it in items:
-        score = sum(1 for w in words if w in it["hay"] or (len(w) > 4 and w[:-1] in it["hay"]))
-        if score or not words:
-            scored.append((score, it["date"], it))
-    scored.sort(key=lambda x: (-x[0], -x[1].timestamp()))
-    top = [x[2] for x in scored[:3]]
+        search.sync(c, p["id"])                     # a note saved seconds ago is findable at once
+        q = clean(query)
+        if search.words(q) or search.codes(q):
+            res = search.search(q, patient_id=p["id"], k=3, conn=c)
+            top, mode = res["hits"], res["mode"]
+        else:                                       # "what did we talk about last time?": most recent first
+            D = db.search_docs
+            rows = c.execute(select(D.c.ref, D.c.kind, D.c.title, D.c.body, D.c.created_at).where(
+                D.c.patient_id == p["id"], D.c.kind.in_(("note", "action"))).order_by(D.c.created_at.desc()).limit(3)).mappings().all()
+            top, mode = [dict(r) for r in rows], "recent"
     if not top:
-        return ok("I don't see an earlier conversation about that on your record.", matches=[])
+        return ok("I don't see an earlier conversation about that on your record.", matches=[], search_mode=mode)
     m = top[0]
-    days = (config.today() - m["date"].date()).days
-    when = "today" if days == 0 else "yesterday" if days == 1 else f"{days} days ago, on {human_date(m['date'].date())}"
-    return ok(f"Yes. {when[0].upper() + when[1:]}: {m['text']}", matches=[{"date": x["date"].date().isoformat(), "summary": x["text"]} for x in top])
+    days = (config.today() - m["created_at"].date()).days
+    when = "today" if days == 0 else "yesterday" if days == 1 else f"{days} days ago, on {human_date(m['created_at'].date())}"
+    return ok(f"Yes. {when[0].upper() + when[1:]}: {m['body']}", search_mode=mode,
+              matches=[{"date": x["created_at"].date().isoformat(), "summary": x["body"][:200]} for x in top])
 
 
 def caregiver_update(phone, dob, booking_id="") -> Result:

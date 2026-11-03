@@ -292,6 +292,11 @@ SYMPTOM_MAP = [
 ]
 
 
+# Words that say nothing about which department ("I need a check up", "book a consultation").
+ROUTING_FILLER = frozenset("""check checkup consult consultation appointment appointments book booking problem problems issue
+issues test tests see specialist treatment review visit general need help""".split())
+
+
 def is_emergency(text: str) -> bool:
     t = clean(text).lower()
     return any(f in t for f in RED_FLAGS)
@@ -307,9 +312,23 @@ def suggest_department(symptoms) -> Result:
     for words, dept in SYMPTOM_MAP:
         if any(w in t for w in words):
             return ok(f"{dept} would be the right department to start with. {DISCLAIMER} Shall I check free slots?",
-                      department=dept, emergency=False, disclaimer=DISCLAIMER)
+                      department=dept, emergency=False, disclaimer=DISCLAIMER, matched_by="keywords")
+    # No rule matched: hybrid search over department passages (patients' own words, typos, paraphrases).
+    # Red flags stay deterministic above; a meaning match to the emergency passage only ever escalates.
+    from .. import search
+    res = search.search(t, ref_prefixes=("kb:dept:", "kb:faq:emergency_signs"), k=2, ignore=ROUTING_FILLER)
+    if res["hits"]:
+        h = res["hits"][0]
+        if h["ref"] == "kb:faq:emergency_signs":
+            return ok("This may be an emergency. Please call 108 now or go to the nearest emergency department. "
+                      "Our emergency entrance B is open 24 hours.", department="Emergency", emergency=True,
+                      disclaimer=DISCLAIMER, matched_by=res["mode"])
+        dept = h["title"]
+        if dept != "Radiology":
+            return ok(f"{dept} would be the right department to start with. {DISCLAIMER} Shall I check free slots?",
+                      department=dept, emergency=False, disclaimer=DISCLAIMER, matched_by=res["mode"])
     return ok(f"General Medicine is a good place to start; the physician can refer you if needed. {DISCLAIMER}",
-              department="General Medicine", emergency=False, disclaimer=DISCLAIMER)
+              department="General Medicine", emergency=False, disclaimer=DISCLAIMER, matched_by="default")
 
 
 def hospital_info(topic="") -> Result:
@@ -318,9 +337,25 @@ def hospital_info(topic="") -> Result:
             "parking": ["park", "car", "valet"], "visiting": ["visit", "attendant", "ward"], "emergency": ["emergency", "casualty", "108", "ambulance"],
             "facilities": ["facilit", "service", "cafeteria", "atm", "wheelchair"], "pharmacy": ["pharmac", "medicine", "chemist"],
             "contact": ["contact", "phone", "number", "email", "call"]}
+    if t in keys:
+        return ok(REF.info[t], topic=t)
+    # A question in the caller's own words: hybrid search over the knowledge base first (FAQ, visiting, insurance,
+    # procedures, departments), so "can my son stay overnight with me?" finds the attendant rule, not opening hours.
+    if len(t.split()) >= 2:
+        from .. import search
+        res = search.search(t, ref_prefixes=("kb:",), k=2)
+        if res["hits"]:
+            h = res["hits"][0]
+            return ok(h["body"], topic=h["ref"].split(":", 1)[1], source=h["title"], matched_by=res["mode"])
     for k, words in keys.items():
-        if t == k or any(w in t for w in words):
+        if any(w in t for w in words):
             return ok(REF.info[k], topic=k)
+    if t:
+        from .. import search
+        res = search.search(t, ref_prefixes=("kb:",), k=1)
+        if res["hits"]:
+            h = res["hits"][0]
+            return ok(h["body"], topic=h["ref"].split(":", 1)[1], source=h["title"], matched_by=res["mode"])
     return ok(f"{REF.info['address']} {REF.info['hours']}", topic="address,hours")
 
 

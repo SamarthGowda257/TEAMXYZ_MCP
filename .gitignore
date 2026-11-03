@@ -36,3 +36,4 @@ htmlcov/
 frontend/node_modules/
 .taste-skill/inspect/
 preview/
+dump.rdb

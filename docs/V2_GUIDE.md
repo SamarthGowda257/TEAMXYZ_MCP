@@ -12,7 +12,8 @@ One Python process on Render (`python server.py`):
 | `/checkin?t=` | Post-visit check-in form from the aftercare email (signed 7-day link, no login); pain ≥ 7, fever or "worse" raises a nurse alert |
 | `/architecture` | Public "How WellNest works" page with live status from `/health` |
 | `/ops/reset-demo?token=` | Rebuild demo data relative to today (about 3 s) |
-| `/health` | Uptime + DB check |
+| `/api/ops/search?token=&q=` | Hybrid search debug view: hits with keyword / fuzzy / meaning / code signals (`&phone=` for a patient's memory) |
+| `/health` | Uptime + DB check; `search` shows hybrid / keyword+fuzzy / keyword |
 
 Database: Postgres when `DATABASE_URL` is set (Supabase), otherwise a local SQLite file. Both are seeded automatically.
 

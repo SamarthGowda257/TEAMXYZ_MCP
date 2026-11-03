@@ -229,6 +229,16 @@ interaction_notes = Table("interaction_notes", md, _id(),
     Column("topics", String(200)), Column("outcome", String(120)), _ts(),
     Index("ix_notes_patient", "patient_id", "created_at"))
 
+# One searchable row per note, action or knowledge passage. Postgres adds three columns at startup
+# (see setup_search): tsv (full-text, generated), chash (content hash, generated) and embedding vector(768).
+search_docs = Table("search_docs", md, _id(),
+    Column("ref", String(48), unique=True, nullable=False),       # note:12 / action:34 / kb:info:parking
+    Column("kind", String(8), nullable=False),                    # note / action / kb
+    Column("patient_id", Integer),                                # null for kb; always filtered, never cross-patient
+    Column("title", String(160)),
+    Column("body", Text, nullable=False), _ts(),
+    Index("ix_search_patient", "patient_id", "created_at"), Index("ix_search_kind", "kind"))
+
 resolutions = Table("resolutions", md, _id(),
     Column("patient_id", ForeignKey("patients.id")),
     Column("actor", String(30), nullable=False),     # agent / web / job:reminders / system
@@ -296,6 +306,74 @@ def create_schema():
     md.create_all(engine)
     if IS_POSTGRES:
         lock_down()
+        setup_search()
+
+
+# ------------------------------------------------------------------ hybrid search capabilities
+SEARCH = {"fts": False, "trgm": False, "vector": False, "path": "public", "error": None}
+
+
+def _ext_schema(c, name: str) -> str | None:
+    return c.execute(text("SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace "
+                          "WHERE e.extname = :n"), {"n": name}).scalar()
+
+
+def _try_extension(name: str) -> str | None:
+    """Enable an extension if allowed (Supabase lets the postgres role create vector and pg_trgm,
+    preferably in the 'extensions' schema). Returns the schema it lives in, or None."""
+    try:
+        with engine.begin() as c:
+            found = _ext_schema(c, name)
+            if found:
+                return found
+            has_ext_schema = c.execute(text("SELECT 1 FROM pg_namespace WHERE nspname = 'extensions'")).scalar()
+            c.execute(text(f"CREATE EXTENSION IF NOT EXISTS {name}" + (" WITH SCHEMA extensions" if has_ext_schema else "")))
+            return _ext_schema(c, name)
+    except Exception as e:
+        SEARCH["error"] = f"{name}: {str(e).splitlines()[0][:160]}"
+        return None
+
+
+def setup_search() -> dict:
+    """Idempotent DDL for hybrid search. Each leg is optional: if an extension can't be enabled, that leg is off
+    and search still works with the others. Never raises."""
+    from . import config
+    trgm, vec = _try_extension("pg_trgm"), _try_extension("vector")
+    schemas = ["public"] + [s for s in dict.fromkeys([trgm, vec]) if s and s != "public"]
+    SEARCH["path"] = ", ".join(schemas)
+    dim = config.EMBEDDINGS_DIM
+    steps = [
+        ("fts", ["ALTER TABLE search_docs ADD COLUMN IF NOT EXISTS tsv tsvector GENERATED ALWAYS AS "
+                 "(to_tsvector('english', coalesce(title, '') || ' ' || body)) STORED",
+                 "CREATE INDEX IF NOT EXISTS ix_search_tsv ON search_docs USING gin (tsv)",
+                 "ALTER TABLE search_docs ADD COLUMN IF NOT EXISTS chash text GENERATED ALWAYS AS "
+                 "(md5(coalesce(title, '') || '|' || body)) STORED"]),
+        ("trgm", ["CREATE INDEX IF NOT EXISTS ix_search_trgm ON search_docs USING gin (body gin_trgm_ops)"] if trgm else None),
+        ("vector", [f"ALTER TABLE search_docs ADD COLUMN IF NOT EXISTS embedding vector({dim})",
+                    # Knowledge passages are searched across the whole table, so they get an ANN index. Patient
+                    # rows are always filtered to one patient (a handful of rows) and scored exactly instead.
+                    "CREATE INDEX IF NOT EXISTS ix_search_vec_kb ON search_docs USING hnsw (embedding vector_cosine_ops) "
+                    "WHERE kind = 'kb'",
+                    # Survives /ops/reset-demo (not in the SQLAlchemy metadata), so re-seeding re-uses embeddings
+                    # instead of spending API quota again. Keyed by model + content hash.
+                    f"CREATE TABLE IF NOT EXISTS embedding_cache (model text NOT NULL, chash text NOT NULL, "
+                    f"embedding vector({dim}) NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), "
+                    "PRIMARY KEY (model, chash))",
+                    "ALTER TABLE embedding_cache ENABLE ROW LEVEL SECURITY"] if vec else None),
+    ]
+    for leg, sqls in steps:
+        if not sqls:
+            continue
+        try:
+            with engine.begin() as c:
+                c.execute(text(f"SET LOCAL search_path TO {SEARCH['path']}"))
+                for s in sqls:
+                    c.execute(text(s))
+            SEARCH[leg] = True
+        except Exception as e:
+            SEARCH[leg] = False
+            SEARCH["error"] = f"{leg}: {str(e).splitlines()[0][:160]}"
+    return SEARCH
 
 
 def lock_down() -> None:

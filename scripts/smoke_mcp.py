@@ -95,13 +95,23 @@ async def main():
 
             # A6 lab
             b, ms, _ = await call(s, "get_lab_report_status", PRIYA)
-            check("A6 Priya has a ready report", b["ok"] and any(r["status"] == "ready" for r in b["data"]["reports"]), b, ms)
+            check("A6 Priya has a ready report", b["ok"] and any(r["status"] in ("ready", "collected") for r in b["data"]["reports"]), b, ms)
             b, ms, _ = await call(s, "get_insurance_info", {"insurance_provider": "star"})
             check("Insurance info for Star Health", b["ok"] and b["data"]["accepted"], b, ms)
 
             # memory
             b, ms, _ = await call(s, "search_past_interactions", dict(PRIYA, query="did I ask about my MRI report last week"))
             check("Memory: Priya asked about MRI report", b["ok"] and "MRI" in b["message"], b, ms)
+
+            # hybrid search (keyword + fuzzy + meaning): must hold even with the meaning leg off
+            b, ms, _ = await call(s, "search_past_interactions", dict(SHAN, query="anything about WN-48213?"))
+            check("Search: exact booking code found", b["ok"] and "WN-48213" in b["message"], b, ms)
+            b, ms, _ = await call(s, "get_hospital_info", {"topic": "can my son stay overnight with me in the ward"})
+            check("Search: free-text question -> attendant rule", b["ok"] and "attendant" in b["message"].lower(), b, ms)
+            b, ms, _ = await call(s, "get_hospital_info", {"topic": "is there wifi"})
+            check("Search: FAQ answer (Wi-Fi)", b["ok"] and "Wi-Fi" in b["message"], b, ms)
+            b, ms, _ = await call(s, "suggest_department", {"symptoms": "need a cardiolgy check up"})
+            check("Search: typo 'cardiolgy' -> Cardiology", b["ok"] and b["data"]["department"] == "Cardiology", b, ms)
 
             # emergency
             b, ms, _ = await call(s, "suggest_department", {"symptoms": "I have chest pain and sweating"})

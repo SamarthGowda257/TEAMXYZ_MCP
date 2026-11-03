@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Activity, ArrowDown, ArrowRight, Bot, Database, Globe, Layers, Lock, MessageCircle, PhoneCall, Radio, Server, ShieldCheck,
-  Zap } from "lucide-react";
+import { Activity, ArrowDown, ArrowRight, Bot, Database, Globe, Layers, Lock, MessageCircle, PhoneCall, Radio, Search, Server,
+  ShieldCheck, Zap } from "lucide-react";
 import { PageHero } from "./Public";
 
-type Health = { db_kind: string; db: boolean; blackboard: string; events: string; email: string; version: string };
+type Health = { db_kind: string; db: boolean; blackboard: string; events: string; email: string; version: string; search?: string };
 
 function Status({ label, value, good }: { label: string; value: string; good: boolean }) {
   return <div className={good ? "st st-ok" : "st st-warn"}><span className="st-dot" aria-hidden="true" /><div><strong>{label}</strong><span>{value}</span></div></div>;
@@ -20,6 +20,7 @@ const SIDE = [
   { icon: Layers, title: "Blackboard (Redis)", text: "Shared working memory: P0 live facts, P1 patient snapshot, P2 profile, P3 memory digest, plus a context registry (READY / LOADING / MISSING). Facts reach agents inside normal tool replies: zero extra hops." },
   { icon: Radio, title: "Event stream (Redis Streams)", text: "Every booking, cancellation and verification is an event. Workers preload context, refresh caches, send notifications and keep analytics. Acks, retries and a dead-letter stream." },
   { icon: Database, title: "Supabase Postgres", text: "Source of truth. A unique index makes double booking impossible; Row Level Security closes the public API; an outbox keeps emails consistent with bookings." },
+  { icon: Search, title: "Hybrid search (pgvector)", text: "Memory and hospital questions are answered by three searches at once, fused by rank: exact words and booking codes (full-text), typos and names (trigram), and meaning (Gemini embeddings in pgvector). A relevance gate means \"nothing found\" is an honest answer." },
 ];
 
 const PROOF = [
@@ -33,7 +34,7 @@ const SCALE = [
   ["One FastAPI service on Render, one worker", "Several API instances behind a load balancer; blackboard already shared through Redis"],
   ["Workers run inside the web service", "Separate worker services (same code, no changes)"],
   ["Redis Streams event backbone", "Kafka, behind the same publish interface, when several services need the events"],
-  ["Keyword search over conversation notes", "Hybrid search with pgvector embeddings in the same Supabase database"],
+  ["Hybrid search in Supabase (full-text + trigram + pgvector), exact scoring per patient", "Same design; ANN index already on the knowledge base, reranker on top"],
   ["Email by SMTP; SMS, WhatsApp and reminder calls simulated", "Talkdesk SMS and outbound voice, WhatsApp Business API"],
   ["Demo hospital data", "Integration with the hospital's HIS / EHR, lab (LIS) and billing systems"],
 ];
@@ -56,6 +57,7 @@ export function Architecture() {
             <Status label="Database" value={h ? (h.db_kind === "postgres" ? "Supabase Postgres" : "local fallback") : "…"} good={h?.db_kind === "postgres"} />
             <Status label="Blackboard" value={h ? (h.blackboard === "connected" ? "Redis connected" : h.blackboard) : "…"} good={h?.blackboard === "connected"} />
             <Status label="Events" value={h ? h.events : "…"} good={h?.events === "redis-streams"} />
+            <Status label="Search" value={h ? (h.search === "hybrid" ? "keyword + fuzzy + meaning" : h.search || "…") : "…"} good={h?.search === "hybrid"} />
             <Status label="Email" value={h ? (h.email === "smtp" ? "sending" : "simulated") : "…"} good={h?.email === "smtp"} />
           </div>
         </section>
@@ -113,7 +115,7 @@ export function Architecture() {
         </section>
 
         <section className="arch-foot">
-          <Globe size={18} aria-hidden="true" /> <span>Stack: Talkdesk AI Agent Platform · Python MCP SDK 2.x (Streamable HTTP) · FastAPI · Supabase Postgres · Redis (Render Key Value) · React · Render. All on free tiers.</span>
+          <Globe size={18} aria-hidden="true" /> <span>Stack: Talkdesk AI Agent Platform · Python MCP SDK 2.x (Streamable HTTP) · FastAPI · Supabase Postgres + pgvector · Gemini embeddings · Redis (Render Key Value) · React · Render. All on free tiers.</span>
           <Activity size={18} aria-hidden="true" /> <span>Live operations dashboard for staff at /dashboard.</span>
           <PhoneCall size={18} aria-hidden="true" /> <span>Patients reach the same assistant by chat or phone.</span>
         </section>

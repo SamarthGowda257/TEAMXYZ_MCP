@@ -49,6 +49,19 @@ except ValueError:
 
 EMAIL_ENABLED = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
 
+# --- hybrid search (Postgres full-text + trigram + pgvector) ---
+# The keyword and fuzzy legs always run on Postgres. The meaning (vector) leg needs an embeddings key:
+# Google AI Studio (free tier) -> EMBEDDINGS_API_KEY. "hash" is a local, non-semantic stand-in for tests only.
+EMBEDDINGS_API_KEY = env("EMBEDDINGS_API_KEY") or env("GEMINI_API_KEY")
+EMBEDDINGS_PROVIDER = (env("EMBEDDINGS_PROVIDER") or ("gemini" if EMBEDDINGS_API_KEY else "none")).lower()
+EMBEDDINGS_MODEL = env("EMBEDDINGS_MODEL", "gemini-embedding-001")
+EMBEDDINGS_DIM = 768                      # fixed: the pgvector column is vector(768)
+EMBEDDINGS_TIMEOUT = float(env("EMBEDDINGS_TIMEOUT", "1.5"))   # seconds, for the query embedding in a live call
+SEARCH_MIN_SIM = float(env("SEARCH_MIN_SIM", "0.70"))          # cosine needed for a meaning-only match to count
+# Background embedding cap per day (IST). Gemini's free tier is roughly 1,000 requests/day per project, so this leaves
+# headroom for live query embeddings. Only natural-language text is embedded (knowledge passages and notes).
+EMBED_DAILY_BUDGET = int(env("EMBED_DAILY_BUDGET", "900"))
+
 # --- hospital clock: fixed IST offset (no tzdata needed) ---
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
 

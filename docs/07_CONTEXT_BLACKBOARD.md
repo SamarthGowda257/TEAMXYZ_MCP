@@ -106,11 +106,39 @@ Talkdesk sends no transcript to us, so memory is built from two sources:
 
 **Retrieval**
 - `verify_patient` includes the 3 most recent notes in the snapshot. Most "did I ask you…" questions are answered with no extra call.
-- `search_past_interactions(phone, dob, query)`:
-  - default: Postgres full-text (`search @@ websearch_to_tsquery('english', $q)`) over that patient's notes + resolutions, ranked by `ts_rank` and recency, top 3.
-  - **vector search (P2)**: if `EMBEDDINGS_PROVIDER` is set, store an embedding per note (pgvector column, same database, no separate vector DB) and rank by cosine distance combined with full-text (hybrid: 0.6 vector + 0.4 text). Embed on write in a background task. If the provider is down, fall back to full-text silently.
-  - Embedding providers need an API key the user supplies; do not run a local model on Render's free 512 MB instance.
-- Scope is always one patient. Never search across patients.
+- `search_past_interactions(phone, dob, query)`: **hybrid search** (built, `app/search.py`), described below.
+
+## Hybrid search (built)
+One table, `search_docs`, holds every searchable passage: the patient's notes (`note:`), their actions (`action:`,
+from `resolutions`) and the hospital knowledge base (`kb:`: hospital info, departments with lay symptom words,
+procedures with preparation, insurers, 28 FAQs in `app/kb.py`). Three legs run in one SQL statement:
+
+| Leg | Postgres feature | Finds | Example |
+|---|---|---|---|
+| Keyword | generated `tsvector` + GIN, English stemming, OR query | exact words, stems | "visiting" ↔ "visits" |
+| Fuzzy | `pg_trgm` `strict_word_similarity` ≥ 0.45 | typos, names | "cardiolgy" → Cardiology, "Iyyer" → Iyer |
+| Code | `ILIKE` on normalised codes | booking/report IDs | "wn 48213" → WN-48213 |
+| Meaning | `pgvector` `vector(768)`, cosine, Gemini `gemini-embedding-001` | paraphrases | "grab a bite to eat" → cafeteria |
+
+- **Fusion**: Reciprocal Rank Fusion, `score = Σ weight / (60 + rank)` with ties sharing a rank (`dense_rank`), so
+  no raw score scales need calibrating against each other and a passage found by several legs rises.
+- **Relevance gate**: a hit counts only if it covers enough query words (1 of 1–2, half of 3+, after filler words are
+  dropped), has a code match, or has cosine ≥ `SEARCH_MIN_SIM` (0.70). "Nothing relevant" is a real answer.
+- **Scope**: patient searches are filtered to one `patient_id` and scored exactly (no ANN post-filtering);
+  knowledge passages have an HNSW index (`WHERE kind = 'kb'`).
+- **Where it is used**: `search_past_interactions`; `get_hospital_info` (free-text questions); `suggest_department`
+  after the deterministic red-flag and keyword rules (a meaning match to the emergency passage only ever escalates).
+- **Embeddings**: only natural-language text (knowledge passages and notes, about 900 rows) is embedded, in the
+  background (startup, `/jobs/run`, after a note is saved or a patient verified). `embedding_cache` (model + content
+  hash) survives demo resets, so re-seeding costs no API calls. Daily budget `EMBED_DAILY_BUDGET` (900) keeps the
+  free tier for live queries. The query embedding is the only network call in a live tool call: 1.5 s timeout,
+  7-day cache, and a circuit breaker; on any failure the search runs on keyword + fuzzy without the agent noticing.
+- **Degrades by itself**: no key → keyword + fuzzy; no `vector`/`pg_trgm` extension → those legs off; SQLite →
+  word overlap in Python. `/health` shows `"search": "hybrid" | "keyword+fuzzy" | "keyword"`.
+- **Quality**: `scripts/eval_search.py` (26 labelled questions: keyword, typo, code, paraphrase, off-topic) runs in
+  CI with keyword, typo, code and off-topic required to pass; `search-live.yml` runs it with the real model.
+- **Debug view**: `/api/ops/search?token=<DASHBOARD_TOKEN>&q=...&phone=...&raw=true` shows each hit's legs.
+- Patient memory is always scoped to one patient. Never search across patients.
 
 ## What to show the judges
 - Dashboard tile: cache hit rate, prefetch hit rate, p50/p95 per tool.

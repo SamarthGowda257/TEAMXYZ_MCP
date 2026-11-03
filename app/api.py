@@ -581,8 +581,11 @@ def jobs_run():
     closed = close_past_visits()
     aftercare = run_aftercare()
     sent = notify.flush(50)
+    from . import search
+    search.sync()
+    embedded = search.embed_pending(200)       # steady backfill within the embeddings free tier
     return {"ok": True, "offers_expired": expired, "reminders_queued": reminders, "visits_completed": closed,
-            "aftercare_checkins_queued": aftercare, "emails_processed": sent,
+            "aftercare_checkins_queued": aftercare, "emails_processed": sent, "search_rows_embedded": embedded,
             "ms": round((time.perf_counter() - t0) * 1000)}
 
 
@@ -591,6 +594,8 @@ def reset_demo():
     counts = seed.reset(verbose=False)
     ref.load()
     bb.clear_all()
+    from . import search
+    search.rebuild_async()                      # re-index; embeddings come back from embedding_cache, no API calls
     return {"ok": True, "seeded": counts}
 
 
@@ -598,7 +603,13 @@ def reset_demo():
 def health():
     return {"ok": True, "service": "WellNest Hospitals MCP + web", "version": config.VERSION, "db": db.db_ok(),
             "db_kind": "postgres" if db.IS_POSTGRES else "sqlite", "db_error": db.DB_ERROR, "db_target": db.db_target() if db.DB_ERROR else None, "time_ist": config.now().isoformat(),
-            "email": "smtp" if config.EMAIL_ENABLED else "simulated", "blackboard": _store_status(), "events": _events_backend()}
+            "email": "smtp" if config.EMAIL_ENABLED else "simulated", "blackboard": _store_status(), "events": _events_backend(),
+            "search": _search_status()}
+
+
+def _search_status():
+    from . import search
+    return search.status(brief=True)
 
 
 def _store_status():
@@ -622,7 +633,33 @@ def ops_system():
             if reg:
                 reg_sample[name] = {k: {"state": v["state"], "level": v["level"], "source": v.get("source", ""),
                                         "age_s": int(time.time() - v.get("fetched_at", time.time()))} for k, v in reg.items()}
-    return {"blackboard": bb.stats(), "events": events.snapshot(), "today": workers.todays_counts(), "registry": reg_sample}
+    from . import search
+    return {"blackboard": bb.stats(), "events": events.snapshot(), "today": workers.todays_counts(), "registry": reg_sample,
+            "search": search.status()}
+
+
+@router.get("/api/ops/search", dependencies=[Depends(ops_auth)])
+def ops_search(q: str, phone: str = "", scope: str = "kb", raw: bool = False):
+    """Staff/debug view of hybrid search: every hit with its keyword, fuzzy, meaning and code signals.
+    scope=kb (hospital knowledge) or a patient's phone (their own notes and actions)."""
+    from . import search
+    pid = None
+    if phone:
+        with db.engine.connect() as c:
+            p = pt.get_by_phone(c, norm_phone(phone))
+        if not p:
+            raise HTTPException(404, detail={"error_code": "not_found", "message": "No patient with that phone."})
+        pid = p["id"]
+        search.sync(patient_id=pid)
+    t0 = time.perf_counter()
+    prefixes = ("kb:dept:", "kb:faq:emergency_signs") if scope == "dept" else ("kb:",)
+    from .services.records import ROUTING_FILLER
+    res = search.search(q[:300], patient_id=pid, ref_prefixes=prefixes, k=8 if raw else 5, gate=not raw,
+                        ignore=ROUTING_FILLER if scope == "dept" else frozenset())
+    return {"query": q, "mode": res["mode"], "ms": round((time.perf_counter() - t0) * 1000, 1),
+            "hits": [{"ref": h["ref"], "title": h["title"], "text": h["body"][:240], "score": h["score"], "signals": h["signals"],
+                      "confident": h.get("confident", True)}
+                     for h in res["hits"]], "status": search.status()}
 
 
 # ------------------------------------------------------------------ post-visit check-in (link from the day-2 email)

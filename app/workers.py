@@ -62,6 +62,7 @@ def refresh_memory(pid, p=None) -> None:
 @on("patient.verified")
 def _verified(e):
     preload(e["patient_id"])
+    _index_patient(e["patient_id"])     # memory questions usually come later in the same call
     _count("patient.verified")
 
 
@@ -126,7 +127,15 @@ def _notify(e):
 def _noted(e):
     if e.get("patient_id"):
         refresh_memory(e["patient_id"])
+        _index_patient(e["patient_id"])
     _count("interaction.noted")
+
+
+def _index_patient(pid) -> None:
+    """Keep this patient's memory searchable by meaning: index new rows and embed them (cache first)."""
+    from . import search
+    search.sync(patient_id=pid)
+    search.embed_pending(100, patient_id=pid)
 
 
 @on("handoff.created")

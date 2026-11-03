@@ -56,6 +56,22 @@ Numbered so we can refer to them ("done with 3"). Tick the box when done.
    Records agent (`get_lab_report_status`, `email_lab_report`), Billing agent (`get_insurance_info`, `check_coverage`).
 14. [ ] Create the chat touchpoint (Digital Engagement) → give `TALKDESK_TOUCHPOINT_ID` + region to Render (step 5).
 
+## Hybrid search: the meaning leg (about 10 minutes, free)
+Keyword and typo search already work on the live server with nothing to set up. These steps switch on search by meaning.
+15. [ ] **Get a Gemini API key**: open https://aistudio.google.com/app/apikey, sign in with a Google account, click
+    **Create API key** (if asked for a project, let it create one). Copy the key (starts with `AIza`). Do not paste it in
+    chat or screenshots. No billing or card needed: leave the project on the free tier.
+16. [ ] **Render** → `teamxyz-mcp` → **Environment** → add `EMBEDDINGS_API_KEY` = the key → **Save** (Render redeploys).
+17. [ ] **GitHub** → repository **Settings** → **Secrets and variables** → **Actions** → **New repository secret** →
+    name `EMBEDDINGS_API_KEY`, value = the same key. This lets the "Search eval (real embeddings)" workflow measure
+    quality with the real model (Claude can start it and read the results; the key never leaves GitHub).
+18. [ ] **Check it worked** (2–5 minutes after the deploy): `https://teamxyz-mcp.onrender.com/health` shows
+    `"search":"hybrid"`. Detail: `/api/ops/system?token=<DASHBOARD_TOKEN>` → `search.embedded` climbs to about 900.
+    Try it: `/api/ops/search?token=<DASHBOARD_TOKEN>&q=where can I grab a bite to eat` should return `kb:faq:food`.
+19. [ ] Supabase: nothing to click. The server enables the `vector` and `pg_trgm` extensions itself (schema `extensions`).
+    Only if `/api/ops/system` shows a `setup_error` about an extension: Supabase → **Database** → **Extensions** →
+    enable **vector** and **pg_trgm** → Render → **Manual Deploy** → **Restart service**.
+
 ## Demo logins (website)
 - Shanthamma K (67, senior): `shanthamma.demo@example.com` · Arjun Mehta: `arjun.demo@example.com` ·
   Priya Nair: `priya.demo@example.com` · password = `DEMO_PASSWORD`. Phone/DOB for the bot: see `docs/V2_GUIDE.md`.

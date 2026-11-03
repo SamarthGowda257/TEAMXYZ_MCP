@@ -156,7 +156,7 @@
 
 /* architecture page */
 .arch section + section { margin-top: 56px; }
-.st-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.st-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
 .st { display: flex; gap: 12px; align-items: center; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; background: #fff; }
 .st div { display: grid; line-height: 1.3; }
 .st span:last-child { color: var(--muted); font-size: 0.9rem; }
@@ -183,7 +183,7 @@
 .arch-foot { display: grid; grid-template-columns: 22px 1fr; gap: 10px 10px; align-items: start; color: var(--muted); border-top: 1px solid var(--border); padding-top: 24px; }
 .arch-foot svg { color: var(--accent); margin-top: 3px; }
 .check-list li svg { color: var(--teal); flex: none; }
-@media (max-width: 1000px) { .st-row { grid-template-columns: 1fr 1fr; } .arch-flow { grid-template-columns: 1fr; } .proof-grid { grid-template-columns: 1fr 1fr; } .proof:nth-child(3) { border-left: 0; } .proof:nth-child(n+3) { border-top: 1px solid var(--line); } }
+@media (max-width: 1000px) { .st-row { grid-template-columns: 1fr 1fr 1fr; } .arch-flow { grid-template-columns: 1fr; } .proof-grid { grid-template-columns: 1fr 1fr; } .proof:nth-child(3) { border-left: 0; } .proof:nth-child(n+3) { border-top: 1px solid var(--line); } }
 @media (max-width: 560px) { .st-row, .proof-grid { grid-template-columns: 1fr; } .proof { border-left: 0; border-top: 1px solid var(--line); } }
 
 /* check-in form */

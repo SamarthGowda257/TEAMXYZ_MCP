@@ -1,0 +1,58 @@
+name: Search eval (real embeddings)
+
+# Manual only: it spends Gemini free-tier quota (about 1,000 embeddings for the knowledge base and notes).
+# Needs the repository secret EMBEDDINGS_API_KEY (Google AI Studio key). Read-only for every external system.
+on:
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wellnest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Check the secret is set
+        run: test -n "$EMBEDDINGS_API_KEY" || (echo "Add the EMBEDDINGS_API_KEY repository secret first" && exit 1)
+        env:
+          EMBEDDINGS_API_KEY: ${{ secrets.EMBEDDINGS_API_KEY }}
+      - name: Start server with Gemini embeddings and wait for the backfill
+        run: |
+          nohup python server.py > server.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 2; done
+          curl -s localhost:8000/health | grep '"search":"hybrid"'
+          for i in $(seq 1 60); do
+            s=$(curl -s "localhost:8000/api/ops/system?token=ci-token" | python -c "import json,sys; s=json.load(sys.stdin)['search']; print(s.get('embedded',0), s.get('embeddable',0), s['embeddings']['breaker_open'], s['embeddings']['last_error'])")
+            echo "embedded/embeddable/breaker/last_error: $s"
+            set -- $s; [ "$1" -ge "$2" ] && break; sleep 5
+          done
+        env:
+          MCP_BEARER_TOKEN: ci-token
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wellnest
+          PORT: "8000"
+          EMBEDDINGS_API_KEY: ${{ secrets.EMBEDDINGS_API_KEY }}
+      - name: Evaluate (prints hit rates per question type and the cosine calibration)
+        run: python scripts/eval_search.py --require keyword,typo,code,negative
+        env:
+          SEARCH_URL: http://localhost:8000
+          DASHBOARD_TOKEN: ci-token
+      - name: MCP acceptance checks over the real transport
+        run: python scripts/smoke_mcp.py
+        env:
+          MCP_URL: http://localhost:8000/mcp
+          MCP_BEARER_TOKEN: ci-token
+      - name: Server log
+        if: always()
+        run: grep -iE "embedd|search|warn|error" server.log | tail -60

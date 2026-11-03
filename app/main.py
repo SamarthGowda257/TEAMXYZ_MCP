@@ -36,6 +36,8 @@ def init_data() -> None:
     except Exception as e:
         log.warning("brand migration skipped: %s", e)
     ref.load()
+    from . import search
+    search.rebuild_async()
     notify.start_sender()
     from . import events
     events.start_workers()
