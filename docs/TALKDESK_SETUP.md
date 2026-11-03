@@ -56,10 +56,10 @@ Keep the existing ones (marked *existing*) and **update their descriptions** whe
 | Variable | Description (paste this) |
 |---|---|
 | `patient_name` *existing* | The patient's full name as they say it. |
-| `patient_phone` *existing* | The patient's 10-digit Indian mobile number, digits only, e.g. 9845000001. |
-| `date_of_birth` **new** | The patient's date of birth in YYYY-MM-DD format, e.g. 1959-03-04. Convert spoken dates like "4 March 1959". |
-| `appointment_date` *existing* | The date the patient wants, in YYYY-MM-DD format. Words like "tomorrow" or "Monday" are also fine. |
-| `appointment_time` *existing* | The time the patient chose, in 24-hour HH:MM, e.g. 10:30 or 14:15. |
+| `patient_phone` *existing* | The patient's mobile number as they said it, with or without spaces or +91, e.g. 98450 00001. |
+| `date_of_birth` **new** | The patient's date of birth exactly as they said it, e.g. 10-2-1999, 10/02/1999 or 4 March 1959. Do not convert or reorder it and never ask for a format: the server reads Indian day-month-year order. |
+| `appointment_date` *existing* | The date the patient wants, exactly as they said it, e.g. tomorrow, Monday, 4 Nov or 04/11/2026 (day first). Never ask for a format. |
+| `appointment_time` *existing* | The time the patient chose, as they said it, e.g. 10 am, 10:30 or 2.15 pm. |
 | `department` *existing* | The department or plain words for it, e.g. Cardiology, heart, skin, child. Empty if a doctor was named. |
 | `doctor_name` *existing* | The doctor's name if the patient named one, e.g. Dr. Rajesh Iyer or Iyer. |
 | `booking_id` *existing* | **Update:** The booking ID, like WN-48213. Accept it spoken as letters and digits. |
@@ -118,6 +118,10 @@ RELAY: Specialists return a ready-to-speak message. Relay it as given; do not re
 SAFETY: Never give medical advice, diagnoses or medicine recommendations. You may suggest which department to see through the Info Agent, with its disclaimer.
 
 IDENTITY: For anything about an existing patient's bookings, reports, bills, history or preferences, the specialist will need the registered mobile number and date of birth. Ask for both if not given.
+
+FORMATS: Accept phone numbers, dates and times in whatever form the patient gives them (10-2-1999, 4 Nov, 10 am). Never ask the patient to repeat them in a particular format and never convert dates yourself: dates are day-month-year (India), so 10-2-1999 is 10 February 1999. The tools check and read them.
+
+NAMES: Do not ask a registered patient for their full name; verification returns it. Ask for a name and email only when the patient is new.
 
 ROUTING: Send each request to exactly one specialist when possible. Handle greetings, thanks and small talk yourself.
 

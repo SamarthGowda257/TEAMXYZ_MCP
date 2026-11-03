@@ -35,9 +35,9 @@ mcp = MCPServer(
 S = str
 Phone = Annotated[S, Field(description="Patient's mobile number, any format, e.g. 98450 12345 or +91 9845012345.")]
 OptPhone = Annotated[S, Field(description="Optional. Patient's mobile number if known; helps carry facts between agents.")]
-Dob = Annotated[S, Field(description="Patient's date of birth, e.g. 1958-03-04 or 4 March 1958.")]
+Dob = Annotated[S, Field(description="Patient's date of birth exactly as they said it, any format, e.g. 10-2-1999, 10/02/1999 or 4 March 1958. Day-month-year (India): 10-2-1999 is 10 February 1999. Do not convert it or ask the patient for a format.")]
 OptDob = Annotated[S, Field(description="Optional. Patient's date of birth, e.g. 1958-03-04, for identity verification.")]
-Date = Annotated[S, Field(description="Date as YYYY-MM-DD, or words like 'tomorrow', 'Monday', '4 Nov' (Asia/Kolkata).")]
+Date = Annotated[S, Field(description="Date as the patient said it: 'tomorrow', 'Monday', '4 Nov', 04/11/2026 (day first) or 2026-11-04 (Asia/Kolkata). Never ask the patient for a format.")]
 Time = Annotated[S, Field(description="Time like 10:30, 10:30 AM or 14:15.")]
 Dept = Annotated[S, Field(description="Optional. Department or plain words, e.g. Cardiology, heart, skin, child.")]
 Doc = Annotated[S, Field(description="Optional. Doctor's name, e.g. Dr. Rajesh Iyer or Iyer.")]
