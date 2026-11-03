@@ -62,6 +62,9 @@ def email_report(phone, dob, report_id="", patient_id=None, actor="agent", chann
         if not p["email"]:
             return fail("not_found", "There's no email on your record. You can add one on the website under Profile, or I can request a call back.")
         q = select(LR).where(LR.c.patient_id == p["id"])
+        if clean(report_id) and re.match(r"\s*W\s*N", clean(report_id), re.I):
+            return fail("invalid_input", f"{clean(report_id)} is a booking ID, not a lab report. Lab report IDs start with L R. "
+                                         "To send booking details to a family member, ask for a caregiver update.")
         if clean(report_id):
             q = q.where(LR.c.report_code == norm_code(report_id, "LR"))
         else:
@@ -266,7 +269,8 @@ def get_doctors(department="", doctor_name="") -> Result:
                         departments=[d["name"] for d in REF.departments.values()])
         docs = sorted(doctors_in(dept["id"]), key=lambda x: -x["experience_years"])
         cards = [doctor_card(d) for d in docs[:5]]
-        msg = f"{dept['name']} doctors: " + "; ".join(f"{x['name']}, {x['days']}, {x['hours']}, fee {rupees(x['fee_inr'])}, "
+        # fee right after the name: it survives when the reply is relayed in short form
+        msg = f"{dept['name']} doctors: " + "; ".join(f"{x['name']}, fee {rupees(x['fee_inr'])}, {x['days']}, {x['hours']}, "
                                                       f"speaks {x['languages']}" for x in cards[:3]) + "."
         return ok(msg, department=dept["name"], doctors=cards)
     names = [d["name"] for d in REF.departments.values()]

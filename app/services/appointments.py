@@ -596,7 +596,8 @@ def request_assistance(booking_id, phone, assistance_type, notes="", channel="ch
         a = _get_booking(c, booking_id)
         p = pt.get_by_id(c, patient_id) if patient_id else pt.get_by_phone(c, phone)
         if not a or not p or a["patient_id"] != p["id"]:
-            return fail("not_allowed", "I couldn't find that booking under this mobile number. Please check the booking ID.")
+            return fail("not_allowed", "That booking isn't under this mobile number, so I can't arrange help for it. "
+                                       "Only the patient on the booking, or someone calling with their registered mobile number, can request it.")
         aid = c.execute(insert(db.assistance_requests).values(appointment_id=a["id"], type=kind, notes=clean(notes)[:200] or None,
                                                               created_at=config.now())).inserted_primary_key[0]
         pt.log(c, p["id"], "request_assistance", a["booking_code"], True, f"{kind} requested", actor, channel)
