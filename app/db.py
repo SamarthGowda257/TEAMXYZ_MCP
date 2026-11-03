@@ -277,6 +277,19 @@ def _make_engine():
 
 engine = _make_engine()
 IS_POSTGRES = engine.dialect.name == "postgresql"
+DB_ERROR: str | None = None
+
+
+def fallback_to_sqlite(reason: str) -> None:
+    """Postgres is unreachable at startup: keep the site and the Talkdesk tools up on local SQLite.
+    /health reports the reason so the misconfiguration is visible."""
+    global engine, IS_POSTGRES, DB_ERROR
+    saved = config.DATABASE_URL
+    config.DATABASE_URL = ""
+    engine = _make_engine()
+    config.DATABASE_URL = saved
+    IS_POSTGRES = False
+    DB_ERROR = reason
 
 
 def create_schema():

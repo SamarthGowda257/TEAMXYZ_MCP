@@ -22,7 +22,13 @@ log = logging.getLogger("careline")
 
 
 def init_data() -> None:
-    db.create_schema()
+    try:
+        db.create_schema()
+    except Exception as e:  # bad DATABASE_URL or database down: don't take the whole service down
+        msg = str(e).splitlines()[0][:300]
+        log.error("DATABASE_URL could not be used, falling back to local SQLite: %s", msg)
+        db.fallback_to_sqlite(msg)
+        db.create_schema()
     if config.AUTO_SEED and not seed.is_seeded():
         log.info("Seeding demo data: %s", seed.seed())
     ref.load()

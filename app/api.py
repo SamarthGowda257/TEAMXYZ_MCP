@@ -558,7 +558,7 @@ def reset_demo():
 @router.get("/health")
 def health():
     return {"ok": True, "service": "CareLine Hospitals MCP + web", "version": config.VERSION, "db": db.db_ok(),
-            "db_kind": "postgres" if db.IS_POSTGRES else "sqlite", "time_ist": config.now().isoformat(),
+            "db_kind": "postgres" if db.IS_POSTGRES else "sqlite", "db_error": db.DB_ERROR, "time_ist": config.now().isoformat(),
             "email": "smtp" if config.EMAIL_ENABLED else "simulated"}
 
 
