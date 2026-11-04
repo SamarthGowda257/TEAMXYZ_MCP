@@ -366,3 +366,22 @@ def test_demo_override_reaches_personas_but_not_other_invented_patients(monkeypa
         rows = {r.dedupe_key: r for r in c.execute(select(db.notifications).where(db.notifications.c.dedupe_key.in_(["o1", "o2"])))}
     assert rows["o1"].status == "queued" and rows["o1"].to_address == "team@gmail.com"
     assert rows["o2"].status == "simulated"
+
+
+def test_website_booking_mails_the_profile_email():
+    from fastapi.testclient import TestClient
+    from app.api import create_app
+    web = TestClient(create_app())
+    with db.engine.begin() as c:                                    # a patient on file with no website account yet
+        c.execute(update(db.patients).where(db.patients.c.id == 4).values(web_email=None, password_hash=None))
+    r = web.post("/api/auth/signup", json={"email": "rahul.real@gmail.com", "password": "longenough1", "phone": RAHUL, "date_of_birth": RAHUL_DOB},
+                 headers={"x-forwarded-for": "198.51.100.77"}).json()
+    h = {"Authorization": f"Bearer {r['token']}"}
+    assert web.get("/api/me", headers=h).json()["email"] == "rahul.real@gmail.com"
+    assert web.patch("/api/me/preferences", json={"email": "rahul.new@gmail.com"}, headers=h).status_code == 200
+    d = config.today() + timedelta(days=2)
+    while d.isoweekday() == 7:
+        d += timedelta(days=1)
+    b = web.post("/api/me/appointments", json={"date": d.isoformat(), "time": _first_free_time(d), "department": "General Medicine"}, headers=h).json()
+    row, _ = _mail_for(b["data"]["booking_id"])
+    assert row["to_address"] == "rahul.new@gmail.com" and row["status"] == "queued"

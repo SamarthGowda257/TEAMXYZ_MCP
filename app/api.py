@@ -120,7 +120,7 @@ def signup(b: Signup):
         h = hash_password(b.password)
         if p:   # link the existing hospital record (made by phone, chat or the front desk)
             vals = dict(web_email=email, password_hash=h, is_guest=False, date_of_birth=dob)
-            if not p["email"]:
+            if not p["email"] or p["email"].lower().endswith(notify.FAKE_DOMAINS):   # a real address replaces an invented one
                 vals["email"] = email
             if clean(b.name) and p["is_guest"]:
                 vals["full_name"] = clean(b.name).title()
