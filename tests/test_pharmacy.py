@@ -313,3 +313,56 @@ def test_scan_event_starts_with_the_fast_and_signed_calendar_link():
     path = b.data["calendar_link"].split(config.PUBLIC_BASE_URL)[1]
     assert web.get(path).headers["location"].startswith("https://calendar.google.com/")
     assert web.get("/cal/not-a-real-token").status_code == 404
+
+
+def _mail_for(code):
+    with db.engine.connect() as c:
+        row = c.execute(select(db.notifications).where(db.notifications.c.channel == "email", db.notifications.c.dedupe_key.like(f"%{code}%:email"))).mappings().first()
+        files = c.execute(select(db.notification_files).where(db.notification_files.c.notification_id == row["id"])).mappings().all()
+    return row, files
+
+
+def test_booking_email_is_html_with_details_buttons_and_invite():
+    d = config.today() + timedelta(days=2)
+    while d.isoweekday() == 7:
+        d += timedelta(days=1)
+    b = ap.book(RAHUL, d.isoformat(), _first_free_time(d), department="General Medicine", date_of_birth=RAHUL_DOB)
+    row, files = _mail_for(b.data["booking_id"])
+    msg = notify._message(row, files)
+    page = msg.get_body(("html",)).get_content()
+    assert msg.get_body(("plain",)).get_content().startswith("Dear Rahul")     # plain text stays as the fallback
+    assert b.data["booking_id"] in page and "Booking confirmed" in page and "Good to know" in page
+    assert "Add to Google Calendar</a>" in page and "Manage your bookings</a>" in page and "tel:108" in page
+    assert row["subject"].startswith("Confirmed: Dr.")
+    assert [p.get_filename() for p in msg.iter_attachments()] == ["invite.ics"]
+
+
+def test_email_text_cannot_inject_html():
+    from app import email_ui
+    page = email_ui.render("Hi", 'Dear <script>alert(1)</script>,\n\nReason: <b>x</b>')
+    assert "<script>alert" not in page and "&lt;script&gt;" in page and "<b>x</b>" not in page
+
+
+def test_new_patient_email_is_saved_but_never_replaces_one_on_file():
+    d = config.today() + timedelta(days=2)
+    while d.isoweekday() == 7:
+        d += timedelta(days=1)
+    t = _first_free_time(d)
+    new = ap.book("9845077777", d.isoformat(), t, department="General Medicine", patient_name="New Person", email="New.Person@gmail.com")
+    assert new.ok and new.data["confirmation_email"].endswith("@gmail.com")
+    assert _mail_for(new.data["booking_id"])[0]["to_address"] == "new.person@gmail.com"
+    other = ap.book(RAHUL, d.isoformat(), _first_free_time(d), department="General Medicine", email="attacker@gmail.com")
+    assert _mail_for(other.data["booking_id"])[0]["to_address"] != "attacker@gmail.com"
+    assert ap.book("9845077778", d.isoformat(), t, department="General Medicine", patient_name="X", email="nope").error_code == "invalid_input"
+    none = ap.book("9845077779", d.isoformat(), _first_free_time(d), department="General Medicine", patient_name="No Mail")
+    assert "email address" in none.message
+
+
+def test_demo_override_reaches_personas_but_not_other_invented_patients(monkeypatch):
+    monkeypatch.setattr(config, "DEMO_EMAIL_OVERRIDE", "team@gmail.com")
+    with db.engine.begin() as c:
+        notify.queue(c, patient_id=None, channel="email", template="t", to="rahul.demo@example.com", subject="s", body="b", dedupe_key="o1")
+        notify.queue(c, patient_id=None, channel="email", template="t", to="someone.7@example.com", subject="s", body="b", dedupe_key="o2")
+        rows = {r.dedupe_key: r for r in c.execute(select(db.notifications).where(db.notifications.c.dedupe_key.in_(["o1", "o2"])))}
+    assert rows["o1"].status == "queued" and rows["o1"].to_address == "team@gmail.com"
+    assert rows["o2"].status == "simulated"

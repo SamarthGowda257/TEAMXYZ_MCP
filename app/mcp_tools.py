@@ -110,11 +110,12 @@ def book_appointment(phone: Phone, date: Date, time: Time,
                      department: Dept = "", doctor_name: Doc = "",
                      reason: Annotated[S, Field(description="Optional. Reason for visit, e.g. knee pain.")] = "",
                      date_of_birth: OptDob = "", procedure: Proc = "",
-                     idempotency_key: Annotated[S, Field(description="Optional. Any unique text; repeating it returns the same booking.")] = "") -> dict:
+                     idempotency_key: Annotated[S, Field(description="Optional. Any unique text; repeating it returns the same booking.")] = "",
+                     email: Annotated[S, Field(description="Optional. Patient's email for the confirmation, when they have none on file. It never replaces an email already on file.")] = "") -> dict:
     """Book a doctor appointment or a test/scan slot after the patient has chosen a free time and confirmed.
     Needs phone, date, time and a doctor, department or procedure. Returns the booking ID (read it out), doctor,
     room, fee and preparation advice. Booking the same slot twice returns the existing booking."""
-    return ap.book(phone, date, time, doctor_name, department, patient_name, date_of_birth, reason, procedure, idempotency_key)
+    return ap.book(phone, date, time, doctor_name, department, patient_name, date_of_birth, reason, procedure, idempotency_key, email=email)
 
 
 @tool

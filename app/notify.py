@@ -16,7 +16,7 @@ from email.utils import formataddr, make_msgid
 
 from sqlalchemy import insert, select, update
 
-from . import config, db
+from . import config, db, email_ui
 
 log = logging.getLogger("wellnest.notify")
 _wake = threading.Event()
@@ -34,7 +34,8 @@ def queue(conn, *, patient_id, channel: str, template: str, to: str | None, subj
         if exists:
             return
     status = "queued" if channel in SENT_BY_WORKER else "simulated"
-    if channel == "email" and to.lower().endswith(FAKE_DOMAINS):
+    persona = to.lower().endswith(".demo@example.com")      # the demo personas: the override inbox should see their mail
+    if channel == "email" and to.lower().endswith(FAKE_DOMAINS) and not (persona and config.DEMO_EMAIL_OVERRIDE):
         status = "simulated"          # seeded fake patients: never send real mail to invented addresses
     elif channel == "email" and config.DEMO_EMAIL_OVERRIDE:
         body = f"[Demo: originally to {to}]\n\n" + body
@@ -94,6 +95,7 @@ def _message(row, files) -> EmailMessage:
     msg["Subject"] = row["subject"] or "WellNest Hospitals"
     msg["Message-ID"] = make_msgid(domain="wellnest-hospitals")
     msg.set_content(row["body"] or "")
+    msg.add_alternative(email_ui.render(row["subject"] or "WellNest Hospitals", row["body"] or ""), subtype="html")
     for f in files:
         sub = f["mime"].split(";")[0].split("/")[1]
         params = dict(p.strip().split("=", 1) for p in f["mime"].split(";")[1:] if "=" in p)

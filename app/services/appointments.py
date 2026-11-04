@@ -11,7 +11,7 @@ from sqlalchemy import and_, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .. import config, db, notify
-from ..util import (Result, clean, fail, human_date, human_time, in_pref, norm_code, norm_phone, norm_time_pref, ok,
+from ..util import (Result, clean, fail, human_date, human_time, in_pref, mask_email, norm_code, norm_phone, norm_time_pref, ok,
                     parse_date, parse_time, rupees, short_date, spoken_code, yes_no)
 from ..security import sign_token
 from .. import events
@@ -376,7 +376,10 @@ def _confirm_email(conn, patient, view, subject_prefix="Booking confirmed", extr
 
 # ------------------------------------------------------------------ book
 def book(phone, date_text, time_text, doctor_name="", department="", patient_name="", date_of_birth="", reason="",
-         procedure="", idempotency_key="", channel="chat", actor="agent", patient_id=None) -> Result:
+         procedure="", idempotency_key="", channel="chat", actor="agent", patient_id=None, email="") -> Result:
+    new_email = clean(email).lower()
+    if new_email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", new_email):
+        return fail("invalid_input", "That email address doesn't look right. Please spell it again.")
     p_norm = norm_phone(phone)
     if not patient_id and not p_norm:
         return fail("invalid_input", "Please share a valid 10 digit mobile number for the booking.")
@@ -419,6 +422,9 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
                         patient_code=pt.random_code("PT", 6), full_name=name, phone=p_norm, date_of_birth=dob,
                         is_guest=dob is None, created_at=config.now())).inserted_primary_key[0]
                     patient = pt.get_by_id(c, pid)
+            if new_email and not patient.get("email"):      # first email only: a caller can't redirect someone's mail
+                c.execute(update(db.patients).where(db.patients.c.id == patient["id"]).values(email=new_email))
+                patient["email"] = new_email
             if earliest:
                 d = first_day_with_time(c, docs, proc, hh)
                 if not d:
@@ -484,12 +490,15 @@ def _booked_result(patient, a: dict, repeat=False) -> Result:
         msg += " The fee includes one free follow-up review within 7 days."
     if patient.get("is_guest"):
         msg += " Please register with us to manage this booking later."
+    if not patient.get("email"):
+        msg += " Share your email address if you'd like the details and a calendar invite by email."
     short = f"{lead} {v['with']}, {v['date']} at {v['time']}. Booking ID {v['booking_id']}."
     if free:
         short += " No fee: this is your free follow-up review."
     ref = REF.procedures[a["procedure_id"]]["code"] if a.get("procedure_id") else None
     rel = bb.related(patient["phone"], ref=ref, skip_kinds=("booking",))
-    data = dict(v, instructions_short=ins[:160], patient_name=patient["full_name"], calendar_link=calendar_link(v["booking_id"]))
+    data = dict(v, instructions_short=ins[:160], patient_name=patient["full_name"], calendar_link=calendar_link(v["booking_id"]),
+                confirmation_email=mask_email(patient.get("email")))
     return Result(True, pt.say(patient, msg, short), data, related=rel)
 
 

@@ -82,11 +82,13 @@ tools on these agents check identity themselves.
 | Billing & Insurance | `verify_patient` | `request_credits_refund` | phone\* → `patient_phone`; date_of_birth → `date_of_birth`; amount → `refund_amount` |
 | Care Assist | `verify_patient` | `set_shared_wallet` | phone\* → `patient_phone`; family_phone\* → `family_phone`; date_of_birth → `date_of_birth`; per_transaction_limit → `per_transaction_limit`; daily_limit → `daily_limit`; action → `wallet_action` |
 
+On Booking open `book_appointment` and map: email → `patient_email` (so a patient with no email on file still gets the confirmation).
+
 On Care Assist also open `request_assistance` and map: off_campus → `off_campus`; date_of_birth → `date_of_birth`; notes → `conversation_summary`.
 
 ## 5. Additions to existing agents' instructions (add, don't replace)
 - **Receptionist:** add `PHARMACY: Buying medicine, medicine stock or price, and HealthCredits go to the Pharmacy & HealthCredits Agent. A medicine order that is already placed goes to the Records Agent.`
-- **Booking:** `Mention that the fee includes one free follow-up review within 7 days. For a senior, offer free wheelchair help and ask if a family member should get updates. Late arrival, refunds and registration charges: the Info Agent answers these from hospital policy.`
+- **Booking:** `If the reply asks for an email address, ask for it, then call book_appointment again with the same details and the email. Mention that the fee includes one free follow-up review within 7 days. For a senior, offer free wheelchair help and ask if a family member should get updates. Late arrival, refunds and registration charges: the Info Agent answers these from hospital policy.`
 - **Changes:** `Before cancelling or moving, say it is free up to 2 hours before the visit and 150 rupees after that. Read back the cancellation reference (CN-) from the reply.`
 - **Care Assist:** `For a wheelchair or escort ask which gate (Gate 1 emergency, Gate 2 main entrance or Basement P1) and the arrival time, and put both in notes. Say it is free and two-way, and read back the token (AS-). If the wheelchair will leave the campus, set off_campus yes; it holds a 1,000 credit refundable deposit. Before adding a caregiver, say they get practical updates only, and lab results stay private unless a proxy form is signed; then get a clear yes. To let family pay from the patient's wallet use set_shared_wallet; the wallet owner's mobile and date of birth are needed.`
 - **Records:** `If the reply offers a medicine refill, ask if they'd like it; the Pharmacy & HealthCredits Agent orders it. Reports go only to the registered email, never another address. Never mention a PDF or password. Use track_medicine_order for where a medicine order is, or to cancel it.`
