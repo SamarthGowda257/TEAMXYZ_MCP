@@ -60,9 +60,26 @@ def current_patient(authorization: str = Header(default="")) -> CurrentPatient:
     return CurrentPatient(id=p["id"], phone=p["phone"], name=p["full_name"])
 
 
-def ops_auth(token: str = Query(default=""), x_dashboard_token: str = Header(default="")):
+ADMIN_COOKIE = "wn_admin"
+
+
+def admin_session(request: Request) -> dict | None:
+    """The signed admin cookie, or None. Separate from the patient token: different audience, different cookie."""
+    body = read_token(request.cookies.get(ADMIN_COOKIE, "")) if request.cookies.get(ADMIN_COOKIE) else None
+    return body if body and body.get("adm") else None
+
+
+def ops_auth(request: Request, token: str = Query(default=""), x_dashboard_token: str = Header(default="")):
+    """Dashboard token (unchanged, still used by the old /dashboard) or a signed-in admin session."""
+    if admin_session(request):
+        return
     if not token_matches(token or x_dashboard_token, config.DASHBOARD_TOKEN):
-        raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Dashboard token required."})
+        raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Please sign in to the admin console."})
+
+
+def admin_only(request: Request):
+    if not admin_session(request):
+        raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Please sign in to the admin console."})
 
 
 class Signup(BaseModel):
@@ -858,10 +875,198 @@ def web_callback(b: CallbackReq):
     return out(sp.request_callback(b.phone, b.preferred_time, reason, channel="web"))
 
 
+# ------------------------------------------------------------------ admin console (/admin)
+# Sign-in with an ID and password instead of a token in the URL. Everything below is read-only except the
+# handoff status write, and nothing here touches an MCP tool or an existing response shape.
+class AdminLogin(BaseModel):
+    username: str
+    password: str
+
+
+@router.post("/api/admin/login", dependencies=[limited("login")])
+def admin_login(body: AdminLogin, response: Response):
+    user = clean(body.username)
+    ok = (token_matches(user.lower(), config.ADMIN_USER.lower())
+          and token_matches(body.password, config.ADMIN_PASSWORD))
+    if not ok:
+        raise HTTPException(401, detail={"error_code": "not_allowed", "message": "That admin ID and password don't match."})
+    response.set_cookie(ADMIN_COOKIE, sign_token({"adm": user}, ttl_seconds=12 * 3600),
+                        httponly=True, samesite="lax", secure=config.PUBLIC_BASE_URL.startswith("https"),
+                        max_age=12 * 3600, path="/")
+    return {"ok": True, "user": user}
+
+
+@router.post("/api/admin/logout")
+def admin_logout(response: Response):
+    response.delete_cookie(ADMIN_COOKIE, path="/")
+    return {"ok": True}
+
+
+@router.get("/api/admin/me")
+def admin_me(request: Request):
+    s = admin_session(request)
+    if not s:
+        raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Not signed in."})
+    return {"ok": True, "user": s.get("adm")}
+
+
+@router.get("/api/ops/handoffs", dependencies=[Depends(ops_auth)])
+def ops_handoffs(status: str = "", limit: int = Query(default=100, le=300)):
+    """The human-handoff queue behind the Escalations console: who asked for a person, why, and how urgent."""
+    H, P = db.handoffs, db.patients
+    q = (select(H.c.handoff_code, H.c.priority, H.c.reason_code, H.c.summary, H.c.status, H.c.assigned_to,
+                H.c.created_at, H.c.phone, P.c.full_name, P.c.patient_code, P.c.id.label("patient_id"))
+         .select_from(H.outerjoin(P, H.c.patient_id == P.c.id)).order_by(H.c.created_at.desc()).limit(limit))
+    if status:
+        q = q.where(H.c.status == status)
+    with db.engine.connect() as c:
+        rows = [dict(r) for r in c.execute(q).mappings()]
+    for r in rows:
+        r["created_at"] = r["created_at"].isoformat() if r.get("created_at") else None
+        r["phone"] = mask_phone(r.get("phone") or "")
+    counts = {k: sum(1 for r in rows if r["status"] == k) for k in ("open", "in_progress", "resolved")}
+    return {"counts": counts, "open_urgent": sum(1 for r in rows if r["status"] == "open" and r["priority"] == "urgent"),
+            "handoffs": rows}
+
+
+class HandoffStatus(BaseModel):
+    status: str
+
+
+@router.post("/api/ops/handoffs/{code}/status", dependencies=[Depends(admin_only)])
+def ops_handoff_status(code: str, body: HandoffStatus, request: Request):
+    """Mark a handoff in progress or resolved. The reply itself still happens in Talkdesk Conversations."""
+    if body.status not in ("open", "in_progress", "resolved"):
+        raise HTTPException(400, detail={"error_code": "invalid_input", "message": "Unknown status."})
+    who = (admin_session(request) or {}).get("adm", "admin")
+    with db.engine.begin() as c:
+        res = c.execute(update(db.handoffs).where(db.handoffs.c.handoff_code == code.upper())
+                        .values(status=body.status, assigned_to=None if body.status == "open" else who))
+    if not res.rowcount:
+        raise HTTPException(404, detail={"error_code": "not_found", "message": "No handoff with that code."})
+    return {"ok": True, "handoff_code": code.upper(), "status": body.status}
+
+
+@router.get("/api/ops/conversations", dependencies=[Depends(ops_auth)])
+def ops_conversations(limit: int = Query(default=80, le=300), channel: str = ""):
+    """What the AI handled, from interaction_notes. These are per-conversation summaries and outcomes, not
+    turn-by-turn messages: Talkdesk holds the verbatim transcript, we hold what it meant."""
+    N, P = db.interaction_notes, db.patients
+    q = (select(N.c.id, N.c.channel, N.c.summary, N.c.topics, N.c.outcome, N.c.created_at, N.c.phone,
+                P.c.full_name, P.c.id.label("patient_id"))
+         .select_from(N.outerjoin(P, N.c.patient_id == P.c.id)).order_by(N.c.created_at.desc()).limit(limit))
+    if channel:
+        q = q.where(N.c.channel == channel)
+    with db.engine.connect() as c:
+        rows = [dict(r) for r in c.execute(q).mappings()]
+        codes = {r["handoff_code"]: r for r in c.execute(
+            select(db.handoffs.c.handoff_code, db.handoffs.c.phone, db.handoffs.c.created_at)).mappings()}
+    escalated_phones = {r["phone"] for r in codes.values() if r.get("phone")}
+    for r in rows:
+        r["created_at"] = r["created_at"].isoformat() if r.get("created_at") else None
+        r["escalated"] = r.get("phone") in escalated_phones
+        r["phone"] = mask_phone(r.get("phone") or "")
+    by_channel = {}
+    for r in rows:
+        by_channel[r.get("channel") or "chat"] = by_channel.get(r.get("channel") or "chat", 0) + 1
+    return {"total": len(rows), "by_channel": by_channel, "conversations": rows}
+
+
+@router.get("/api/ops/conversations/{note_id}", dependencies=[Depends(ops_auth)])
+def ops_conversation(note_id: int):
+    """One conversation: its summary plus the patient's nearby actions, as an activity timeline."""
+    N = db.interaction_notes
+    with db.engine.connect() as c:
+        note = c.execute(select(N).where(N.c.id == note_id)).mappings().first()
+        if not note:
+            raise HTTPException(404, detail={"error_code": "not_found", "message": "No such conversation."})
+        note = dict(note)
+        timeline = []
+        if note.get("patient_id"):
+            A, D = db.appointments, db.doctors
+            for a in c.execute(select(A.c.booking_code, A.c.appt_date, A.c.appt_time, A.c.status, A.c.channel,
+                                      A.c.created_at, D.c.name.label("doctor"))
+                               .select_from(A.outerjoin(D, A.c.doctor_id == D.c.id))
+                               .where(A.c.patient_id == note["patient_id"])
+                               .order_by(A.c.created_at.desc()).limit(8)).mappings():
+                timeline.append({"kind": "appointment", "code": a["booking_code"], "status": a["status"],
+                                 "channel": a["channel"], "doctor": a["doctor"],
+                                 "when": f"{human_date(a['appt_date'])} {human_time(a['appt_time'])}",
+                                 "at": a["created_at"].isoformat() if a["created_at"] else None})
+            for h in c.execute(select(db.handoffs).where(db.handoffs.c.patient_id == note["patient_id"])
+                               .order_by(db.handoffs.c.created_at.desc()).limit(5)).mappings():
+                timeline.append({"kind": "handoff", "code": h["handoff_code"], "status": h["status"],
+                                 "priority": h["priority"], "summary": h["summary"],
+                                 "at": h["created_at"].isoformat() if h["created_at"] else None})
+    note["created_at"] = note["created_at"].isoformat() if note.get("created_at") else None
+    note["phone"] = mask_phone(note.get("phone") or "")
+    timeline.sort(key=lambda x: x.get("at") or "", reverse=True)
+    return {"conversation": note, "timeline": timeline,
+            "note": "Summaries and actions recorded by the AI. The verbatim transcript lives in Talkdesk Conversations."}
+
+
+@router.get("/api/ops/appointments", dependencies=[Depends(ops_auth)])
+def ops_appointments(limit: int = Query(default=120, le=400), status: str = "", day: str = ""):
+    """Every appointment in the hospital, newest first. /api/me/appointments is one patient's own."""
+    A, P, D = db.appointments, db.patients, db.doctors
+    q = (select(A.c.booking_code, A.c.appt_date, A.c.appt_time, A.c.status, A.c.channel, A.c.reason,
+                A.c.created_at, P.c.full_name, P.c.phone, D.c.name.label("doctor"), D.c.room)
+         .select_from(A.join(P, A.c.patient_id == P.c.id).outerjoin(D, A.c.doctor_id == D.c.id))
+         .order_by(A.c.appt_date.desc(), A.c.appt_time.desc()).limit(limit))
+    if status:
+        q = q.where(A.c.status == status)
+    if day:
+        d = parse_date(day)
+        if d:
+            q = q.where(A.c.appt_date == d)
+    with db.engine.connect() as c:
+        rows = [dict(r) for r in c.execute(q).mappings()]
+    for r in rows:
+        r["date_label"] = human_date(r["appt_date"])
+        r["time_label"] = human_time(r["appt_time"])
+        r["appt_date"] = r["appt_date"].isoformat() if r.get("appt_date") else None
+        r["created_at"] = r["created_at"].isoformat() if r.get("created_at") else None
+        r["phone"] = mask_phone(r.get("phone") or "")
+    return {"total": len(rows), "appointments": rows}
+
+
+@router.get("/api/ops/patients", dependencies=[Depends(ops_auth)])
+def ops_patients(q: str = "", limit: int = Query(default=60, le=200)):
+    """Patient directory for the admin console. Phones are masked; no date of birth is ever returned."""
+    P, A = db.patients, db.appointments
+    sel = (select(P.c.id, P.c.patient_code, P.c.full_name, P.c.phone, P.c.email, P.c.preferred_language,
+                  P.c.caregiver_name, P.c.created_at, func.count(A.c.id).label("appointments"))
+           .select_from(P.outerjoin(A, A.c.patient_id == P.c.id))
+           .group_by(P.c.id).order_by(P.c.full_name).limit(limit))
+    term = clean(q)
+    if term:
+        like = f"%{term.lower()}%"
+        sel = sel.where(func.lower(P.c.full_name).like(like) | P.c.phone.like(f"%{norm_phone(term) or term}%"))
+    with db.engine.connect() as c:
+        rows = [dict(r) for r in c.execute(sel).mappings()]
+    for r in rows:
+        r["phone"] = mask_phone(r.get("phone") or "")
+        r["created_at"] = r["created_at"].isoformat() if r.get("created_at") else None
+    return {"total": len(rows), "patients": rows}
+
+
+@router.get("/api/policies")
+def public_policies():
+    """The hospital's policy passages, the same text the Info agent reads out, for the website /policies page."""
+    with db.engine.connect() as c:
+        rows = [dict(r) for r in c.execute(text(
+            "SELECT ref, title, body FROM search_docs WHERE kind = 'kb' AND ref LIKE 'kb:policy:%' ORDER BY title")).mappings()]
+    return {"policies": [{"id": r["ref"].split(":")[-1], "title": r["title"], "body": r["body"]} for r in rows]}
+
+
 # ------------------------------------------------------------------ pages (React app built into web/dist)
 DIST = WEB / "dist"
 PAGES = ["/", "/about", "/architecture", "/checkin", "/specialities", "/visitors", "/doctors", "/insurance", "/contact", "/login", "/signup", "/portal", "/portal/book", "/portal/appointments",
-         "/portal/reports", "/portal/profile", "/portal/waitlist", "/waitlist/accept", "/dashboard", "/pay"]
+         "/portal/reports", "/portal/profile", "/portal/waitlist", "/waitlist/accept", "/dashboard", "/pay",
+         # frontend-v3
+         "/assistant", "/policies", "/departments",
+         "/admin", "/admin/login", "/admin/appointments", "/admin/conversations", "/admin/escalations",
+         "/admin/reminders", "/admin/patients", "/admin/doctors"]
 
 
 def spa():

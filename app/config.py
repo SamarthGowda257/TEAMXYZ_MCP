@@ -28,6 +28,11 @@ DASHBOARD_TOKEN = env("DASHBOARD_TOKEN") or MCP_TOKEN
 JOBS_TOKEN = env("JOBS_TOKEN") or MCP_TOKEN
 SECRET_KEY = env("SECRET_KEY") or hashlib.sha256(f"wellnest-session:{MCP_TOKEN}".encode()).hexdigest()
 
+# --- admin console sign-in (/admin). An ID and password, not a token in the URL.
+# ADMIN_PASSWORD falls back to the dashboard token so the console works before anything is added to Render.
+ADMIN_USER = env("ADMIN_USER", "admin")
+ADMIN_PASSWORD = env("ADMIN_PASSWORD") or DASHBOARD_TOKEN
+
 # --- website / widget ---
 PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", "https://teamxyz-mcp.onrender.com").rstrip("/")
 TALKDESK_TOUCHPOINT_ID = env("TALKDESK_TOUCHPOINT_ID")
