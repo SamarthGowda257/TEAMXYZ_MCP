@@ -735,7 +735,9 @@ def outbound_event(b: OutboundEvent):
     """Called by the Studio flow's Execute Action steps. Returns what the flow says next and whether to end the
     call, ask again or forward to the AI assistant (action = end | ask | repeat | transfer)."""
     from .services import outbound
-    return outbound.handle_event(b.call_id, b.event, b.choice)
+    res = outbound.handle_event(b.call_id, b.event, b.choice)
+    # Talkdesk actions map outputs into string flow variables: send every field as text
+    return {k: (str(v).lower() if isinstance(v, bool) else "" if v is None else str(v)) for k, v in res.items()}
 
 
 @router.post("/api/ops/outbound/call", dependencies=[Depends(ops_auth)])
