@@ -358,13 +358,40 @@ def hospital_info(topic="") -> Result:
     return res
 
 
+def _shared_words(h: dict) -> tuple[int, int]:
+    """(terms matched, terms in the question). Postgres reports "2/5" in `words`; the SQLite keyword
+    fallback reports a plain count in `overlap` and no total."""
+    sig = h.get("signals") or {}
+    if sig.get("words"):
+        try:
+            n, total = str(sig["words"]).split("/")[:2]
+            return int(n), int(total)
+        except ValueError:
+            return 0, 0
+    return int(sig.get("overlap") or 0), 0
+
+
+def _enough_evidence(h: dict) -> bool:
+    """A passage from data/hospital is long prose, so a single shared keyword is not evidence that it answers
+    the question: "what is the cricket score today" must not reach the aftercare passage just because that
+    mentions a pain score. Those need two shared words, or a real meaning or full-text match. The short curated
+    passages in app/kb.py are tightly scoped already and keep the original rule."""
+    if not h["ref"].startswith("kb:doc:"):
+        return True
+    sig = h["signals"]
+    if sig.get("vec") is not None or sig.get("code") or sig.get("fts"):
+        return True                       # a real meaning, code or full-text match is evidence on its own
+    n, total = _shared_words(h)
+    return n >= 2 or (total and n == total)    # one word is enough only when it is the whole question
+
+
 def _hospital_lookup(t: str, keys: dict) -> Result:
     from .. import search
     # 1) The caller's own words: hybrid search over the knowledge base (FAQ, visiting, insurance, procedures,
     #    departments), so "can my son stay overnight with me?" finds the attendant rule, not opening hours.
     res = search.search(t, ref_prefixes=("kb:",), k=3, gate=False)
     hits = res["hits"]
-    sure = [h for h in hits if h.get("confident")]
+    sure = [h for h in hits if h.get("confident") and _enough_evidence(h)]
     if sure:
         h = sure[0]
         return ok(h["body"], topic=h["ref"].split(":", 1)[1], source=h["title"], matched_by=res["mode"])
@@ -372,8 +399,10 @@ def _hospital_lookup(t: str, keys: dict) -> Result:
     #    generic keyword rule. Procedures and departments need a confident match (no "blood" -> blood sugar test).
     for h in hits:
         sig = h["signals"]
-        shared = sig.get("fts") or (sig.get("words") and not sig["words"].startswith("0/"))
-        if shared and h["ref"].startswith(("kb:faq:", "kb:info:", "kb:policy:", "kb:doc:")):
+        if not h["ref"].startswith(("kb:faq:", "kb:info:", "kb:policy:", "kb:doc:")):
+            continue
+        shared = bool(sig.get("fts")) or _shared_words(h)[0] >= 1
+        if shared and _enough_evidence(h):
             return ok(h["body"], topic=h["ref"].split(":", 1)[1], source=h["title"], matched_by=res["mode"] + " (partial)")
     # 3) Simple topic words ("where are you", "timings", "parking"), whole words only.
     words = set(re.findall(r"[a-z0-9]+", t))
@@ -381,7 +410,8 @@ def _hospital_lookup(t: str, keys: dict) -> Result:
         if any(w in words or (len(w) > 4 and any(x.startswith(w) for x in words)) for w in kws):
             return ok(REF.info[k], topic=k)
     # 4) Honest "don't know" instead of a random fact.
-    return ok("I don't have that information. Our front desk on 080 4000 1234 can help, or I can arrange a call back.",
+    # The number is read from the hospital record, never hardcoded: the front desk number differs per deployment.
+    return ok(f"I don't have that information. {REF.info.get('contact', 'Our front desk')} can help, or I can arrange a call back.",
               topic=None, found=False)
 
 
