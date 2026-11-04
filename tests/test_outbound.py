@@ -157,3 +157,13 @@ def test_lab_report_call_emails_link_and_agent_schedules_call_back():
     assert "pr***@" in ob.handle_event(row["call_code"], "choice", "1")["say"]
     later = ob.record_outcome("9845000003", "call_back_later", "Busy now.", call_back_at="tomorrow at 5 pm")
     assert later.ok and "5:00 PM" in later.message and later.data["call_back_id"].startswith("OC-")
+
+
+def test_stale_live_call_does_not_block_a_new_call():
+    first = ob.trigger("WN-48213")
+    with db.engine.begin() as c:                               # answered, then the caller hung up before choosing
+        c.execute(update(db.outbound_calls).where(db.outbound_calls.c.call_code == first["call_id"])
+                  .values(status="in_progress", updated_at=config.now() - timedelta(minutes=11)))
+    again = ob.trigger("WN-48213")
+    assert again["ok"] and again["call_id"] != first["call_id"]
+    assert _call(first["call_id"])["outcome"] == "no_choice"
