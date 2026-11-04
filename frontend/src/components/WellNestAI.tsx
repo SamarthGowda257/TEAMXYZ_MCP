@@ -1,7 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { Maximize2, MessageCircle, Phone, X } from "lucide-react";
-import { chatConfigured, hostChat, openChat, unhostChat, voiceNumber } from "../lib/chat";
+import { MessageCircle, Phone } from "lucide-react";
+import { chatConfigured, openChat, voiceNumber } from "../lib/chat";
 
 /**
  * WellNest AI mark: a nest arc cradling a pulse line. The pulse is the only motif, and the same line is
@@ -21,16 +19,7 @@ export function AIAvatar({ size = 32, online = false }: { size?: number; online?
   );
 }
 
-/** The three-dot wait state, drawn from the same pulse language. */
-export function AIThinking() {
-  return (
-    <span className="ai-thinking" aria-label="WellNest AI is connecting">
-      <i /><i /><i />
-    </span>
-  );
-}
-
-const PROMPTS = [
+export const PROMPTS = [
   "Book a skin doctor this week",
   "Reschedule my appointment",
   "Is my lab report ready?",
@@ -39,143 +28,33 @@ const PROMPTS = [
 ];
 
 /**
- * The branded frame around the real Talkdesk panel. We own the header, the prompt rail and the shell;
- * the panel itself is the Talkdesk widget, moved into `slot`. If it cannot be hosted we say so plainly
- * and give the phone number rather than faking a conversation.
+ * What sits in the corner of every page.
+ *
+ * When the Talkdesk widget is configured it renders its own launcher bottom-right, and that launcher's iframe
+ * takes the pointer events in that corner. A second button of ours underneath it would be invisible to clicks
+ * and would read as two chat bubbles, so we render nothing and let Talkdesk's own bubble open the panel —
+ * exactly as this site worked before. Our branding lives on the inline buttons that call openChat(): the header,
+ * the /assistant prompts and the calls to action through the site.
+ *
+ * With no touchpoint configured there is no Talkdesk launcher, so we offer the phone number instead of a chat
+ * button that cannot open anything.
  */
-export function ChatFrame({ variant, onClose }: { variant: "page" | "modal"; onClose?: () => void }) {
-  const slot = useRef<HTMLDivElement>(null);
-  const [hosted, setHosted] = useState(false);
+export function AILauncher() {
+  if (chatConfigured()) return null;
+  return <ChatUnavailable />;
+}
 
-  useEffect(() => {
-    let tries = 0;
-    const attempt = () => {
-      if (!slot.current) return;
-      if (hostChat(slot.current)) { setHosted(true); return; }
-      if (tries++ < 20) window.setTimeout(attempt, 300);   // the SDK script may still be loading
-    };
-    attempt();
-    return () => unhostChat();
-  }, []);
-
+/** Shown instead of the launcher when no Talkdesk touchpoint is configured, so the page never lies. */
+function ChatUnavailable() {
   const phone = voiceNumber();
   return (
-    <div className={`ai-frame ai-frame-${variant}`}>
-      <div className="ai-head">
-        <AIAvatar size={38} online />
-        <div className="ai-head-text">
-          <strong>WellNest AI</strong>
-          <span>{hosted ? "Usually replies in seconds" : "Connecting…"}</span>
-        </div>
-        {variant === "modal" && (
-          <>
-            <Link className="ai-icon-btn" to="/assistant" onClick={onClose} title="Open the full page">
-              <Maximize2 size={18} aria-hidden="true" /><span className="sr-only">Open full page</span>
-            </Link>
-            <button type="button" className="ai-icon-btn" onClick={onClose} title="Close">
-              <X size={20} aria-hidden="true" /><span className="sr-only">Close chat</span>
-            </button>
-          </>
-        )}
-      </div>
-
-      <div className="ai-slot" ref={slot}>
-        {!hosted && (
-          <div className="ai-waiting">
-            {chatConfigured() ? (
-              <><AIThinking /><p>Opening the WellNest AI chat.</p></>
-            ) : (
-              <>
-                <p><strong>The chat window isn't connected on this site yet.</strong></p>
-                <p>The same assistant answers on the phone, around the clock.</p>
-                <a className="btn btn-primary btn-sm" href={phone.href}><Phone size={16} aria-hidden="true" /> Call {phone.label}</a>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="ai-foot">
-        <p className="ai-foot-note">WellNest AI can book, move and cancel visits, check reports and insurance, and pass you to a person. It never gives medical advice.</p>
-      </div>
-    </div>
+    <a className="ai-launcher ai-launcher-call" href={phone.href} aria-label={`Call WellNest on ${phone.label}`}>
+      <Phone size={22} aria-hidden="true" />
+    </a>
   );
 }
 
-/** The suggested-prompt rail that sits beside the chat on /assistant. */
-export function PromptRail() {
-  return (
-    <aside className="ai-rail">
-      <h2>Things people ask</h2>
-      <ul className="ai-prompts">
-        {PROMPTS.map((p) => (
-          <li key={p}><button type="button" onClick={openChat}>{p}</button></li>
-        ))}
-      </ul>
-      <div className="ai-rail-card">
-        <h3>Prefer to talk?</h3>
-        <p>The same assistant answers the phone, 24 hours a day.</p>
-        <a className="btn btn-quiet btn-sm" href={voiceNumber().href}><Phone size={16} aria-hidden="true" /> {voiceNumber().label}</a>
-      </div>
-      <div className="ai-rail-card ai-rail-urgent">
-        <h3>Medical emergency</h3>
-        <p>Don't wait for the chat. Call 108, or come to emergency at entrance B — open 24 hours.</p>
-        <a className="btn btn-emergency btn-sm" href="tel:108">Call 108</a>
-      </div>
-    </aside>
-  );
-}
-
-/** Floating launcher plus the side-sheet it opens. Rendered once by the site layout. */
-export function AILauncher() {
-  const [open, setOpen] = useState(false);
-  const [hint, setHint] = useState(false);
-
-  useEffect(() => {
-    let seen = false;
-    try { seen = localStorage.getItem("wellnest_ai_hint") === "seen"; } catch { /* private mode */ }
-    if (seen) return;
-    const t = window.setTimeout(() => setHint(true), 2600);
-    return () => window.clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
-  }, [open]);
-
-  const launch = () => {
-    setOpen(true);
-    setHint(false);
-    try { localStorage.setItem("wellnest_ai_hint", "seen"); } catch { /* private mode */ }
-  };
-
-  return (
-    <>
-      {hint && !open && (
-        <button type="button" className="ai-hint" onClick={launch}>
-          Ask WellNest AI
-        </button>
-      )}
-      <button type="button" className={open ? "ai-launcher is-open" : "ai-launcher"} onClick={() => (open ? setOpen(false) : launch())}
-              aria-expanded={open} aria-label={open ? "Close WellNest AI chat" : "Open WellNest AI chat"}>
-        {open ? <X size={24} aria-hidden="true" /> : <AIAvatar size={40} online />}
-      </button>
-      {open && (
-        <>
-          <div className="ai-scrim" onClick={() => setOpen(false)} />
-          <div className="ai-sheet" role="dialog" aria-modal="true" aria-label="WellNest AI">
-            <ChatFrame variant="modal" onClose={() => setOpen(false)} />
-          </div>
-        </>
-      )}
-    </>
-  );
-}
-
-/** Small inline button other pages use to start a chat. */
+/** Inline button other pages use to start a chat. */
 export function ChatCta({ label = "Chat with WellNest AI", className = "btn btn-primary" }: { label?: string; className?: string }) {
   return (
     <button type="button" className={className} onClick={openChat}>

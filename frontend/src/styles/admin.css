@@ -173,3 +173,44 @@
 @media (prefers-reduced-motion: reduce) {
   .ad-skel i { animation: none; }
 }
+
+/* ---------- hospital reference ---------- */
+.ad-nav-h {
+  font-size: .6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: #7f97b8; padding: 14px 12px 6px; margin: 0;
+}
+.ad-side nav .ad-nav-h:first-child { padding-top: 2px; }
+
+.ad-ref-controls { display: flex; gap: 8px; align-items: center; }
+.ad-ref-controls .input { min-height: 38px; }
+.ad-ref-controls select.input { width: auto; padding-right: 32px; }
+
+.ad-search-inline { position: relative; display: flex; align-items: center; }
+.ad-search-inline svg { position: absolute; left: 11px; color: var(--faint); pointer-events: none; }
+.ad-search-inline .input { min-height: 38px; width: 240px; padding-left: 32px; }
+
+.ad-filters-wrap { flex-wrap: wrap; margin-bottom: 14px; }
+
+/* consulting days as seven initials, so a week reads at a glance */
+.ad-days { display: inline-flex; gap: 3px; }
+.ad-days i {
+  width: 19px; height: 19px; border-radius: 5px; display: grid; place-items: center;
+  font-style: normal; font-size: .625rem; font-weight: 700;
+  background: var(--surface-2); color: var(--control);
+}
+.ad-days i.on { background: var(--accent); color: #fff; }
+
+.ad-kb { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ad-kb li { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.ad-kb-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ad-kb-top strong { font-family: var(--font-display); font-size: 1rem; margin-right: auto; }
+.ad-kb p { color: var(--muted); font-size: .9375rem; line-height: 1.6; }
+
+@media (max-width: 860px) {
+  .ad-ref-controls { flex-direction: column; align-items: stretch; width: 100%; }
+  .ad-search-inline .input, .ad-ref-controls select.input { width: 100%; }
+  .ad-side nav .ad-nav-h { display: none; }
+}
+
+/* If the widget already loaded on a patient page, keep it out of the staff console. */
+body:has(.ad-shell) #tdWebchat, body:has(.ad-login) #tdWebchat { display: none !important; }

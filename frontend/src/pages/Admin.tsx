@@ -1,65 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import {
-  CalendarDays, ExternalLink, LayoutDashboard, LifeBuoy, LogOut,
-  MessagesSquare, PhoneOutgoing, RefreshCw, Users,
+  BookOpen, Building2, CalendarDays, ExternalLink, FlaskConical, LayoutDashboard, LifeBuoy, LogOut,
+  MessagesSquare, PhoneOutgoing, RefreshCw, ShieldCheck, Stethoscope, Users,
 } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Mark } from "../components/Site";
+import { Chip, Empty, Loading, Panel, statusKind, useOps } from "./adminKit";
+import { AdminDepartments, AdminDoctors, AdminInsurance, AdminKnowledge, AdminTests } from "./AdminHospital";
 
 /* The admin console reads the ops API with the signed admin cookie. It is a context and tracking screen:
    the human's actual replies happen in Talkdesk Conversations, which is where Talkdesk routes the chat. */
 
 const TALKDESK_CONVERSATIONS = "https://pesit-hackathon.mytalkdesk.com/atlas/apps/conversations";
-
-type Loaded<T> = { data: T | null; error: string | null; loading: boolean };
-
-function useOps<T>(path: string, everyMs = 0): Loaded<T> & { reload: () => void } {
-  const [state, setState] = useState<Loaded<T>>({ data: null, error: null, loading: true });
-  const load = useCallback(async () => {
-    try {
-      const d = await api<T>(path);
-      setState({ data: d, error: null, loading: false });
-    } catch (e) {
-      setState({ data: null, error: e instanceof ApiError ? e.message : "Could not load this.", loading: false });
-    }
-  }, [path]);
-  useEffect(() => {
-    load();
-    if (!everyMs) return;
-    const t = window.setInterval(load, everyMs);
-    return () => window.clearInterval(t);
-  }, [load, everyMs]);
-  return { ...state, reload: load };
-}
-
-function Chip({ kind, children }: { kind: string; children: React.ReactNode }) {
-  return <span className={`ad-chip ad-chip-${kind}`}>{children}</span>;
-}
-
-function statusKind(s: string) {
-  if (s === "cancelled" || s === "no_show") return "off";
-  if (s === "completed" || s === "closed") return "ok";
-  if (s === "assigned") return "work";
-  return "live";
-}
-
-function Empty({ title, hint }: { title: string; hint: string }) {
-  return <div className="ad-empty"><strong>{title}</strong><p>{hint}</p></div>;
-}
-
-function Loading({ rows = 5 }: { rows?: number }) {
-  return <div className="ad-skel">{Array.from({ length: rows }, (_, i) => <i key={i} />)}</div>;
-}
-
-function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="ad-panel">
-      <div className="ad-panel-head"><h2>{title}</h2>{action}</div>
-      {children}
-    </section>
-  );
-}
 
 /* ---------------------------------------------------------------- overview */
 function Overview() {
@@ -452,6 +405,14 @@ const NAV = [
   { to: "/admin/patients", label: "Patients", icon: Users },
 ];
 
+const REF_NAV = [
+  { to: "/admin/doctors", label: "Doctors", icon: Stethoscope },
+  { to: "/admin/departments", label: "Departments", icon: Building2 },
+  { to: "/admin/tests", label: "Tests & scans", icon: FlaskConical },
+  { to: "/admin/insurance", label: "Insurance", icon: ShieldCheck },
+  { to: "/admin/knowledge", label: "Knowledge base", icon: BookOpen },
+];
+
 export function Admin() {
   const [who, setWho] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
@@ -477,8 +438,13 @@ export function Admin() {
       <aside className="ad-side">
         <div className="ad-brand"><Mark size={30} /><span>WellNest<small>Staff console</small></span></div>
         <nav aria-label="Admin">
+          <p className="ad-nav-h">Operations</p>
           {NAV.map(({ to, end, label, icon: Icon }) => (
             <NavLink key={to} to={to} end={end}><Icon size={18} aria-hidden="true" /> {label}</NavLink>
+          ))}
+          <p className="ad-nav-h">The hospital</p>
+          {REF_NAV.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to}><Icon size={18} aria-hidden="true" /> {label}</NavLink>
           ))}
         </nav>
         <a className="ad-side-out" href={TALKDESK_CONVERSATIONS} target="_blank" rel="noreferrer">
@@ -499,6 +465,11 @@ export function Admin() {
             <Route path="conversations" element={<Conversations />} />
             <Route path="reminders" element={<Reminders />} />
             <Route path="patients" element={<Patients />} />
+            <Route path="doctors" element={<AdminDoctors />} />
+            <Route path="departments" element={<AdminDepartments />} />
+            <Route path="tests" element={<AdminTests />} />
+            <Route path="insurance" element={<AdminInsurance />} />
+            <Route path="knowledge" element={<AdminKnowledge />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
         </div>

@@ -1070,7 +1070,8 @@ PAGES = ["/", "/about", "/architecture", "/checkin", "/specialities", "/visitors
          # frontend-v3
          "/assistant", "/policies", "/departments",
          "/admin", "/admin/login", "/admin/appointments", "/admin/conversations", "/admin/escalations",
-         "/admin/reminders", "/admin/patients", "/admin/doctors"]
+         "/admin/reminders", "/admin/patients", "/admin/doctors", "/admin/departments", "/admin/tests",
+         "/admin/insurance", "/admin/knowledge"]
 
 
 def spa():
