@@ -18,6 +18,8 @@ from .services import patients as pt
 from .services import records as rc
 from .services import outbound as ob
 from .services import support as sp
+from .services import pharmacy as ph
+from .services import wallet as wl
 from .util import Result, mask_phone
 
 log = logging.getLogger("wellnest")
@@ -221,6 +223,75 @@ def send_payment_link(phone: Phone, date_of_birth: SDob = "",
     """Email a secure payment link for an outstanding bill (simulated in this demo). Never take card details by
     chat or phone. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.send_payment_link(phone, date_of_birth, bill_id)
+
+
+# ======================================================================== Pharmacy & HealthCredits
+Medicine = Annotated[S, Field(description="Medicine(s) as the patient said them, with amounts if given, e.g. 'Dolo 650', '2 strips of Metformin 500 and a strip of Dolo 650', 'Telma 40'.")]
+
+
+@tool
+def check_medicine_stock(medicine_name: Medicine) -> dict:
+    """Check the 24-hour hospital pharmacy: in stock or not, price per pack, whether a prescription is needed
+    (OTC, Schedule H/H1, or Schedule X which can't be ordered by chat), cold-chain handling, and for out-of-stock
+    brands the restock time and an in-stock generic with the same medicine. No verification needed."""
+    return ph.check_stock(medicine_name)
+
+
+@tool
+def order_medicine(phone: Phone, medicine_name: Medicine, date_of_birth: SDob = "",
+                   quantity: Annotated[S, Field(description="Optional. Number of packs/strips when one medicine is ordered.")] = "",
+                   delivery_address: Annotated[S, Field(description="Optional. Delivery address; default is the address on file.")] = "",
+                   payment_method: Annotated[S, Field(description="Optional. health_credits (default; any shortfall goes on a payment link) or payment_link.")] = "health_credits",
+                   confirm: Annotated[S, Field(description="Leave empty first to get the price quote; set to yes only after the patient agreed to the total and payment.")] = "",
+                   wait_for_restock: Annotated[S, Field(description="Optional. yes to reserve an out-of-stock brand and send it when the stock arrives.")] = "") -> dict:
+    """Order medicines for home delivery. First call without confirm returns the quote (items, delivery fee, total,
+    HealthCredits to use, any amount by payment link); after the patient agrees call again with confirm=yes to place
+    it. The server enforces prescription law: Schedule H/H1 need a prescription on file from the last 6 months (if
+    not, it refuses and offers a General Medicine consultation), Schedule X is never sold by chat. Returns the order
+    ID (PHARM-xxxxx), delivery time and new balance. Repeating the same order within a minute never charges twice."""
+    return ph.order(phone, date_of_birth, medicine_name, quantity, delivery_address, payment_method, confirm, wait_for_restock)
+
+
+@tool
+def track_medicine_order(phone: Phone, date_of_birth: SDob = "",
+                         order_id: Annotated[S, Field(description="Optional. Order ID like PHARM-30219; default is the latest order.")] = "",
+                         action: Annotated[S, Field(description="Optional. 'cancel' to cancel an order that hasn't left the pharmacy.")] = "") -> dict:
+    """Where a medicine order is (paid, packed, on the way with ETA, delivered) with the tracking link, or cancel it
+    before dispatch (HealthCredits are returned). Dispatched medicines can't be recalled (drug safety policy)."""
+    return ph.track(phone, date_of_birth, order_id, action)
+
+
+@tool
+def get_health_credits_balance(phone: Phone, date_of_birth: SDob = "") -> dict:
+    """The patient's WellNest HealthCredits wallet balance (1 credit = 1 rupee) and last transactions. Credits pay for
+    medicines, consultations, tests and bills at WellNest."""
+    return wl.get_balance(phone, date_of_birth)
+
+
+@tool
+def recharge_health_credits(phone: Phone,
+                            amount_inr: Annotated[S, Field(description="Amount in rupees to add, e.g. 2000.")],
+                            date_of_birth: SDob = "") -> dict:
+    """Send a secure payment link to add HealthCredits. Bonus: 5% from 2,000 rupees, 7% from 5,000 rupees.
+    Never take card or UPI details in the conversation."""
+    return wl.recharge(phone, amount_inr, date_of_birth)
+
+
+@tool
+def pay_with_health_credits(phone: Phone,
+                            reference: Annotated[S, Field(description="Booking ID (WN-48213) to pay its consultation or test fee, or a bill ID (BL-55012).")],
+                            date_of_birth: SDob = "") -> dict:
+    """Pay a booking's fee or an outstanding bill from HealthCredits in one step, after the patient agreed. If the
+    booking is later cancelled more than 2 hours ahead the credits come back in full (150 rupee fee within 2 hours)."""
+    return wl.pay(phone, reference, date_of_birth)
+
+
+@tool
+def request_credits_refund(phone: Phone, date_of_birth: SDob = "",
+                           amount: Annotated[S, Field(description="Optional. Credits to refund; empty means the whole balance.")] = "") -> dict:
+    """Refund unused HealthCredits to the original bank account or card (3 to 5 banking days). Credits are never paid
+    out as cash (RBI closed-loop wallet rules)."""
+    return wl.request_refund(phone, amount, date_of_birth)
 
 
 # ======================================================================== Info

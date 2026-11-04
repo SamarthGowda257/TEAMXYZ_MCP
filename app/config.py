@@ -62,19 +62,36 @@ OUTBOUND_MAX_ATTEMPTS = int(env("OUTBOUND_MAX_ATTEMPTS", "3"))
 OUTBOUND_RETRY_MIN = int(env("OUTBOUND_RETRY_MIN", "30"))
 OUTBOUND_MAX_PER_RUN = int(env("OUTBOUND_MAX_PER_RUN", "2"))
 
-# --- email ---
+# --- email: sent from the hospital Gmail (wellnesthospitals@gmail.com) ---
+# Either the Gmail API through the connected Google account (GOOGLE_* below, nothing else needed), or Gmail SMTP
+# with an app password: SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, SMTP_USER=<gmail>, SMTP_PASSWORD=<16-char app password>.
 SMTP_HOST = env("SMTP_HOST")
 SMTP_PORT = int(env("SMTP_PORT", "587"))
 SMTP_USER = env("SMTP_USER")
-SMTP_PASSWORD = env("SMTP_PASSWORD")
-EMAIL_FROM = env("EMAIL_FROM", "WellNest Hospitals <no-reply@wellnest.test>")
+SMTP_PASSWORD = env("SMTP_PASSWORD").replace(" ", "")      # Google shows app passwords in groups of four
+EMAIL_FROM_NAME = env("EMAIL_FROM_NAME", "WellNest Hospitals")
+EMAIL_FROM_ADDRESS = env("EMAIL_FROM_ADDRESS") or SMTP_USER or "wellnesthospitals@gmail.com"
+EMAIL_FROM = f"{EMAIL_FROM_NAME} <{EMAIL_FROM_ADDRESS}>"
+EMAIL_VIA = env("EMAIL_VIA", "auto").lower()               # auto (Gmail API if connected, else SMTP) | gmail_api | smtp
 DEMO_EMAIL_OVERRIDE = env("DEMO_EMAIL_OVERRIDE")
 try:
     DEMO_PERSONA_EMAILS: dict = json.loads(env("DEMO_PERSONA_EMAILS", "{}"))
 except ValueError:
     DEMO_PERSONA_EMAILS = {}
 
-EMAIL_ENABLED = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
+# --- Google account of the hospital (Calendar events + Gmail send). scripts/google_connect.py prints the token. ---
+GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = env("GOOGLE_CLIENT_SECRET")
+GOOGLE_REFRESH_TOKEN = env("GOOGLE_REFRESH_TOKEN")
+GOOGLE_CALENDAR_ID = env("GOOGLE_CALENDAR_ID", "primary")
+GOOGLE_SEND_MAIL = env("GOOGLE_SEND_MAIL", "true").lower() in ("1", "true", "yes")
+
+# --- payments: Razorpay Payment Links (test or live keys). Empty = a labelled demo payment page on this server. ---
+RAZORPAY_KEY_ID = env("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET = env("RAZORPAY_KEY_SECRET")
+RAZORPAY_WEBHOOK_SECRET = env("RAZORPAY_WEBHOOK_SECRET")
+
+EMAIL_ENABLED = bool((SMTP_HOST and SMTP_USER and SMTP_PASSWORD) or (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN and GOOGLE_SEND_MAIL))
 
 # --- hybrid search (Postgres full-text + trigram + pgvector) ---
 # The keyword and fuzzy legs always run on Postgres. The meaning (vector) leg needs an embeddings key:

@@ -272,6 +272,95 @@ call_optouts = Table("call_optouts", md,
     Column("phone", String(16), primary_key=True),                   # patient's E.164 number
     Column("reason", String(120)), _ts())
 
+# ------------------------------------------------------------------ pharmacy, HealthCredits wallet, payments
+pharmacy_inventory = Table("pharmacy_inventory", md, _id(),
+    Column("medicine_code", String(20), unique=True, nullable=False),
+    Column("brand_name", String(80), nullable=False),
+    Column("generic_name", String(120), nullable=False),
+    Column("strength", String(40), nullable=False),
+    Column("pack", String(40), nullable=False),                      # "strip of 15 tablets", "1 pen"
+    Column("schedule_class", String(4), nullable=False),             # OTC H H1 X (Drugs and Cosmetics Rules)
+    Column("chronic", Boolean, nullable=False, default=False),       # 30-day maintenance medicine: refill reminders
+    Column("stock_qty", Integer, nullable=False, default=0),
+    Column("unit_price_inr", Integer, nullable=False),
+    Column("restock_eta", DateTime),
+    Column("cold_chain", Boolean, nullable=False, default=False),    # 2-8 C, insulated pouch, OTP handover
+    Column("alternative_code", String(20)),                          # in-stock bioequivalent generic
+    Column("updated_at", DateTime))
+
+pharmacy_orders = Table("pharmacy_orders", md, _id(),
+    Column("order_code", String(16), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("items", JSON, nullable=False),                           # [{code, name, qty, unit_price, line_total, schedule}]
+    Column("subtotal_inr", Integer, nullable=False), Column("delivery_fee_inr", Integer, nullable=False),
+    Column("total_inr", Integer, nullable=False),
+    Column("credits_used", Integer, nullable=False, default=0),
+    Column("amount_due_inr", Integer, nullable=False, default=0),    # still to pay by link (split payment)
+    Column("payment_link_code", String(16)),
+    Column("delivery_address", String(200), nullable=False), Column("zone", String(10)),
+    Column("status", String(16), nullable=False),  # awaiting_payment awaiting_stock confirmed dispatched delivered cancelled
+    Column("cold_chain", Boolean, nullable=False, default=False),
+    Column("eta", DateTime),
+    Column("idempotency_key", String(80), unique=True),
+    _ts(), Column("dispatched_at", DateTime), Column("updated_at", DateTime),
+    Index("ix_pharm_patient", "patient_id", "created_at"))
+
+health_credit_wallets = Table("health_credit_wallets", md,
+    Column("patient_id", ForeignKey("patients.id"), primary_key=True),
+    Column("balance", Integer, nullable=False, default=0),           # 1 HealthCredit = 1 rupee
+    Column("updated_at", DateTime))
+
+health_credit_txns = Table("health_credit_txns", md, _id(),
+    Column("txn_code", String(20), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("direction", String(6), nullable=False),                  # credit debit
+    Column("amount", Integer, nullable=False),
+    Column("balance_after", Integer, nullable=False),
+    Column("service", String(20), nullable=False),                   # pharmacy opd lab bill topup bonus refund
+    Column("reference", String(40)),
+    Column("idempotency_key", String(100), unique=True),             # a repeated request never debits twice
+    _ts(), Index("ix_hc_patient", "patient_id", "created_at"))
+
+payment_links = Table("payment_links", md, _id(),
+    Column("link_code", String(16), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("purpose", String(16), nullable=False),                   # topup pharmacy bill
+    Column("reference", String(40)),
+    Column("amount_inr", Integer, nullable=False),
+    Column("credits_to_add", Integer, nullable=False, default=0),    # top-ups: amount plus bonus
+    Column("status", String(10), nullable=False, default="created"),  # created paid expired
+    Column("provider", String(12)), Column("provider_id", String(64)), Column("provider_url", String(300)),
+    _ts(), Column("paid_at", DateTime))
+
+credit_refunds = Table("credit_refunds", md, _id(),
+    Column("refund_code", String(16), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("amount", Integer, nullable=False),
+    Column("status", String(12), nullable=False, default="requested"),   # requested settled
+    _ts())
+
+# ------------------------------------------------------------------ calendar (Google Calendar + .ics)
+calendar_events = Table("calendar_events", md, _id(),
+    Column("ref", String(60), unique=True, nullable=False),         # WN-48213, PHARM-30219, refill:12, review:WN-1
+    Column("patient_id", ForeignKey("patients.id")),
+    Column("kind", String(16), nullable=False),                      # appointment delivery refill review
+    Column("title", String(160), nullable=False),
+    Column("starts_at", DateTime, nullable=False), Column("minutes", Integer, nullable=False, default=30),
+    Column("all_day", Boolean, nullable=False, default=False),
+    Column("details", Text), Column("location", String(200)),
+    Column("attendees", JSON),                                       # [email, ...] patient + consented caregiver
+    Column("sequence", Integer, nullable=False, default=0),          # iCalendar SEQUENCE: bumps on change
+    Column("status", String(10), nullable=False, default="active"),  # active cancelled
+    Column("google_event_id", String(120)),
+    Column("sync_status", String(12), nullable=False, default="pending"),   # pending synced simulated failed
+    Column("sync_error", String(300)), _ts(), Column("updated_at", DateTime))
+
+notification_files = Table("notification_files", md, _id(),
+    Column("notification_id", ForeignKey("notifications.id"), nullable=False),
+    Column("filename", String(80), nullable=False),
+    Column("mime", String(80), nullable=False),                      # text/calendar; method=REQUEST
+    Column("content", Text, nullable=False))
+
 notifications = Table("notifications", md, _id(),
     Column("patient_id", ForeignKey("patients.id")),
     Column("channel", String(10), nullable=False),   # email sms whatsapp voice_call

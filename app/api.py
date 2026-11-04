@@ -495,7 +495,7 @@ def ops_summary():
             "upcoming_bookings": cnt(select(func.count()).select_from(A).where(A.c.appt_date >= t, A.c.status == "booked")),
         }
     return {"date": human_date(t), "now": config.now().strftime("%H:%M"), "summary": summary,
-            "schedule": [{"department": k, **v} for k, v in sorted(sched.items())], "email_mode": "smtp" if config.EMAIL_ENABLED else "simulated",
+            "schedule": [{"department": k, **v} for k, v in sorted(sched.items())], "email_mode": notify.transport() if config.EMAIL_ENABLED else "simulated",
             "db": "postgres" if db.IS_POSTGRES else "sqlite"}
 
 
@@ -565,29 +565,76 @@ def run_aftercare() -> int:
 
 
 def run_reminders() -> int:
+    """24 hours and 2 hours before each visit: email + SMS to the patient, an operational copy to a consented
+    caregiver, and the 2-hour reminder call."""
     A, P = db.appointments, db.patients
     now = config.now()
     n = 0
     with db.engine.begin() as c:
-        rows = c.execute(select(A, P.c.full_name, P.c.email, P.c.phone).join(P, P.c.id == A.c.patient_id).where(
+        rows = c.execute(select(A, P.c.full_name, P.c.email, P.c.phone, P.c.caregiver_name, P.c.caregiver_phone,
+                                P.c.caregiver_email, P.c.caregiver_consent).join(P, P.c.id == A.c.patient_id).where(
             A.c.status == "booked", A.c.appt_date.in_([config.today(), config.today() + timedelta(days=1)]))).mappings().all()
         for r in rows:
             start = datetime.combine(r["appt_date"], datetime.strptime(r["appt_time"], "%H:%M").time())
             hours = (start - now).total_seconds() / 3600
             v = ap._appt_view(dict(r))
-            patient = {"id": r["patient_id"], "full_name": r["full_name"], "email": r["email"], "phone": r["phone"]}
+            patient = {k: r[k] for k in ("full_name", "email", "phone", "caregiver_name", "caregiver_phone", "caregiver_email",
+                                         "caregiver_consent")} | {"id": r["patient_id"]}
+            report = (start - timedelta(minutes=15)).strftime("%I:%M %p").lstrip("0")
             if 20 <= hours <= 25:
+                prep = ap.instructions_for(dict(r))
                 notify.email_and_sms(c, patient=patient, template="reminder_24h", key=f"r24:{r['booking_code']}",
-                                     subject=f"Reminder: {v['with']} tomorrow at {v['time']}",
+                                     subject=f"Reminder: your appointment with {v['with']} is tomorrow",
                                      body=f"Dear {r['full_name']},\n\nA reminder of your visit with {v['with']} on {v['date']} at "
-                                          f"{v['time']}, room {v['room']}. Booking {v['booking_id']}.\n\nTo cancel or change: "
+                                          f"{v['time']}, room {v['room']}. Booking {v['booking_id']}.\n\nPlease report by {report} "
+                                          f"for vitals. {prep}\nParking: Basement P1 via Gate 3 (free for 3 hours with your slip); "
+                                          f"valet at Gate 2.\n\nTo cancel or change (free until 2 hours before): "
                                           f"{config.PUBLIC_BASE_URL}/portal/appointments\n\nWellNest Hospitals",
-                                     sms=f"WellNest reminder: {v['with']} {v['date']} {v['time']}, {v['booking_id']}.")
+                                     sms=f"WellNest reminder: {v['with']} {v['date']} {v['time']}, {v['booking_id']}. Report by {report}.")
+                notify.to_caregiver(c, patient, template="reminder_24h", key=f"r24:{r['booking_code']}",
+                                    subject=f"Reminder for {r['full_name']}: {v['with']} tomorrow at {v['time']}",
+                                    body=f"{r['full_name']} sees {v['with']} tomorrow ({v['date']}) at {v['time']}, {v['room']}. "
+                                         f"Please arrive by {report}; free wheelchair help is at Gate 2.",
+                                    sms=f"{r['full_name']}: {v['with']} tomorrow {v['time']} ({v['booking_id']}).")
                 n += 1
             elif 1.5 <= hours <= 2.5:
+                notify.email_and_sms(c, patient=patient, template="reminder_2h", key=f"r2e:{r['booking_code']}",
+                                     subject=f"2 hours to your visit: report by {report}",
+                                     body=f"Dear {r['full_name']},\n\nYour visit with {v['with']} is at {v['time']} today, room "
+                                          f"{v['room']}. Please report by {report}. This is the last chance to cancel or change it "
+                                          f"free of charge: {config.PUBLIC_BASE_URL}/portal/appointments\n\nWellNest Hospitals",
+                                     sms=f"WellNest: {v['with']} at {v['time']} today. Report by {report}.")
                 notify.queue(c, patient_id=r["patient_id"], channel="voice_call", template="reminder_2h", to=r["phone"],
                              body=f"Reminder call: {v['with']} at {v['time']} today.", dedupe_key=f"r2:{r['booking_code']}")
                 n += 1
+    return n
+
+
+def run_review_expiry() -> int:
+    """Day 5 after a doctor visit: the free follow-up review ends on day 7. Email + SMS + calendar note."""
+    from .services import calendar as cal
+    A, P = db.appointments, db.patients
+    day = config.today() - timedelta(days=5)
+    n = 0
+    with db.engine.begin() as c:
+        rows = c.execute(select(A).where(A.c.status == "completed", A.c.appt_date == day, A.c.doctor_id.is_not(None))).mappings().all()
+        for a in rows:
+            p = pt.get_by_id(c, a["patient_id"])
+            if not p or p["is_guest"]:
+                continue
+            v = ap._appt_view(dict(a))
+            last = a["appt_date"] + timedelta(days=7)
+            key = f"review:{a['booking_code']}"
+            notify.email_and_sms(c, patient=p, template="review_expiry", key=key,
+                                 subject=f"2 days left for your free review with {v['with']}",
+                                 body=f"Dear {p['full_name']},\n\nYour visit on {v['date']} includes one free follow-up review "
+                                      f"with {v['with']} for the same problem until {human_date(last)}. Book it in the chat or at "
+                                      f"{config.PUBLIC_BASE_URL}/book\n\nWellNest Hospitals",
+                                 sms=f"WellNest: free review with {v['with']} ends {human_date(last)}. Book in chat.")
+            cal.upsert(c, ref=key, patient=p, kind="review", title=f"Last day: free follow-up with {v['with']}",
+                       starts_at=datetime.combine(last, datetime.min.time()), minutes=0, all_day=True,
+                       details=f"Your free review for booking {v['booking_id']} ends today.")
+            n += 1
     return n
 
 
@@ -598,6 +645,12 @@ def jobs_run():
     reminders = run_reminders()
     closed = close_past_visits()
     aftercare = run_aftercare()
+    from .services import pharmacy
+    try:
+        pharmacy_jobs = {"pharmacy": pharmacy.advance(), "refill_reminders": pharmacy.refill_reminders(),
+                         "review_reminders": run_review_expiry()}
+    except Exception as e:                                    # never let one job break the others
+        pharmacy_jobs = {"pharmacy_error": str(e)[:200]}
     sent = notify.flush(50)
     from . import search
     search.sync()
@@ -608,7 +661,7 @@ def jobs_run():
     except Exception as e:                                    # never let calling break the other jobs
         calls = {"calls_error": str(e)[:200]}
     return {"ok": True, "offers_expired": expired, "reminders_queued": reminders, "visits_completed": closed,
-            "aftercare_checkins_queued": aftercare, "emails_processed": sent, "search_rows_embedded": embedded,
+            "aftercare_checkins_queued": aftercare, **pharmacy_jobs, "emails_processed": sent, "search_rows_embedded": embedded,
             **calls, "ms": round((time.perf_counter() - t0) * 1000)}
 
 
@@ -626,7 +679,7 @@ def reset_demo():
 def health():
     return {"ok": True, "service": "WellNest Hospitals MCP + web", "version": config.VERSION, "db": db.db_ok(),
             "db_kind": "postgres" if db.IS_POSTGRES else "sqlite", "db_error": db.DB_ERROR, "db_target": db.db_target() if db.DB_ERROR else None, "time_ist": config.now().isoformat(),
-            "email": "smtp" if config.EMAIL_ENABLED else "simulated", "blackboard": _store_status(), "events": _events_backend(),
+            "email": notify.transport() if config.EMAIL_ENABLED else "simulated", "blackboard": _store_status(), "events": _events_backend(),
             "search": _search_status()}
 
 
@@ -1124,6 +1177,8 @@ def create_app() -> FastAPI:
         body = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
         return JSONResponse({"ok": False, **body}, status_code=exc.status_code)
 
+    from .commerce_api import router as commerce_router
+    app.include_router(commerce_router)
     app.include_router(router)
     (DIST / "assets").mkdir(parents=True, exist_ok=True)
     app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")

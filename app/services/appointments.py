@@ -287,19 +287,62 @@ def _get_booking(conn, booking_id, lock=False) -> dict | None:
     return dict(r) if r else None
 
 
-def _confirm_email(conn, patient, view, subject_prefix="Booking confirmed", extra=""):
+POLICY_LINES = ("Please report 15 minutes early at the floor reception for vitals (BP, pulse, SpO2, weight).\n"
+                "Your fee includes one free follow-up review for the same problem within 7 days.\n"
+                "Free cancellation or rescheduling up to 2 hours before; later cancellations or no-shows have a 150 rupee fee.\n"
+                "Slots are held for 15 minutes past the time. Wheelchair and porter help at Gate 2 is free; just ask.\n"
+                "Helpline: 080 4000 1234. Emergency: call 108.")
+
+
+def _floor_of(dept_name: str) -> str:
+    d = next((x for x in REF.departments.values() if x["name"] == dept_name), None)
+    return d["floor"] if d and d.get("floor") else ""
+
+
+def calendar_event(conn, patient, view, appt) -> dict:
+    """Create or move the patient's calendar event for this booking (Google Calendar and/or invite.ics)."""
+    from . import calendar as cal
+    start = datetime.combine(date.fromisoformat(view["date_iso"]), datetime.strptime(appt["appt_time"], "%H:%M").time())
+    if appt.get("procedure_id"):
+        pr = REF.procedures[appt["procedure_id"]]
+        minutes, title = pr["duration_minutes"], f"Scan/test: {pr['name']} (WellNest Radiology & Diagnostics)"
+        prep = pr["instructions"] or ""
+        if pr.get("fasting_hours"):
+            prep = f"Fasting: {pr['fasting_hours']} hours before ({(start - timedelta(hours=pr['fasting_hours'])).strftime('%I:%M %p').lstrip('0')}). " + prep
+    else:
+        doc = REF.doctors[appt["doctor_id"]]
+        minutes, title, prep = doc["slot_minutes"] or 15, f"WellNest OPD: {view['with']} ({view['department']})", ""
+    floor = _floor_of(view["department"])
+    location = f"{view['room']}{', ' + floor if floor else ''}, WellNest Hospitals, Gate 2, 42 Outer Ring Road, Marathahalli, Bengaluru 560037"
+    details = (f"Patient: {patient['full_name']}\nBooking ID: {view['booking_id']}\nWith: {view['with']}\nRoom: {view['room']}"
+               f"\nFee: {view['fee_inr']} rupees\n" + (f"Preparation: {prep}\n" if prep else "") + "\n" + POLICY_LINES
+               + f"\n\nManage: {config.PUBLIC_BASE_URL}/portal/appointments")
+    return cal.upsert(conn, ref=view["booking_id"], patient=patient, kind="appointment", title=title, starts_at=start,
+                      minutes=minutes, location=location, details=details)
+
+
+def _confirm_email(conn, patient, view, subject_prefix="Booking confirmed", extra="", appt=None):
+    from . import calendar as cal
+    ev = calendar_event(conn, patient, view, appt) if appt else None
+    files = cal.invite_attachment(ev) if ev else []
+    add_cal = (f"Add to Google Calendar: {cal.google_link(ev)}\n" if ev else "")
     body = (f"Dear {patient['full_name']},\n\n{subject_prefix}: {view['with']} ({view['department']})\n"
             f"Date: {view['date']}\nTime: {view['time']}\nRoom: {view['room']}\nFee: Rs {view['fee_inr']}\n"
-            f"Booking ID: {view['booking_id']}\n\n{extra}Manage your bookings at {config.PUBLIC_BASE_URL}/portal\n\n"
+            f"Booking ID: {view['booking_id']}\n\n{extra}{POLICY_LINES}\n\n{add_cal}"
+            + ("The calendar invite is attached.\n" if files else "")
+            + f"Manage your bookings at {config.PUBLIC_BASE_URL}/portal\n\n"
             "WellNest Hospitals, 42 Outer Ring Road, Marathahalli, Bengaluru.\nFor emergencies call 108.")
     sms = f"WellNest: {subject_prefix} {view['booking_id']} {view['with']} {short_date(date.fromisoformat(view['date_iso']))} {view['time']}."
+    key = f"{subject_prefix[:12]}:{view['booking_id']}:{view['date_iso']}:{view['time']}"
     notify.email_and_sms(conn, patient=patient, template=subject_prefix.lower().replace(" ", "_"),
-                         subject=f"{subject_prefix} - {view['booking_id']}", body=body, sms=sms)
-    if patient.get("caregiver_consent") and patient.get("caregiver_email"):
-        notify.queue(conn, patient_id=patient["id"], channel="email", template="caregiver_update",
-                     to=patient["caregiver_email"], subject=f"Update for {patient['full_name']}: {subject_prefix}",
-                     body=f"Hello {patient['caregiver_name']},\n\n{patient['full_name']}: {subject_prefix.lower()} with "
-                          f"{view['with']} on {view['date']} at {view['time']} (booking {view['booking_id']}).\n\nWellNest Hospitals")
+                         subject=f"{subject_prefix} - {view['booking_id']}", body=body, sms=sms, key=key, attachments=files)
+    notify.to_caregiver(conn, patient, template="caregiver_update", key=key, attachments=files,
+                        subject=f"Update for {patient['full_name']}: {subject_prefix}",
+                        body=f"{patient['full_name']}: {subject_prefix.lower()} with {view['with']} on {view['date']} at "
+                             f"{view['time']}, {view['room']} (booking {view['booking_id']}). Please arrive 15 minutes early; "
+                             "free wheelchair and porter help is available at Gate 2.",
+                        sms=f"{patient['full_name']}: {subject_prefix.lower()} {view['booking_id']} {view['with']} "
+                            f"{short_date(date.fromisoformat(view['date_iso']))} {view['time']}.")
 
 
 # ------------------------------------------------------------------ book
@@ -388,7 +431,7 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
                                              updated_at=config.now(), **vals)).inserted_primary_key[0]
             a = dict(c.execute(select(A).where(A.c.id == aid)).mappings().first())
             view = _appt_view(a)
-            _confirm_email(c, patient, view, extra=f"Before your visit: {instructions_for(a)}\n\n")
+            _confirm_email(c, patient, view, extra=f"Before your visit: {instructions_for(a)}\n\n", appt=a)
             pt.log(c, patient["id"], "book_appointment", code, True,
                    f"Booked {view['with']} {view['date']} {view['time']}", actor, channel)
     except IntegrityError:
@@ -506,16 +549,32 @@ def cancel(booking_id, phone="", date_of_birth="", reason="", channel="chat", ac
                                                             cancel_reason=clean(reason)[:200] or None, updated_at=config.now()))
         pt.log(c, p["id"], "cancel_appointment", v["booking_id"], True, f"Cancelled {v['with']} {v['date']} {v['time']}",
                actor, channel)
+        from . import calendar as cal
+        from . import wallet
+        starts = datetime.combine(a["appt_date"], datetime.strptime(a["appt_time"], "%H:%M").time())
+        late = starts - config.now() < timedelta(hours=2)
+        refunded = wallet.refund_for_cancelled_booking(c, p, a, starts)
+        cal.cancel(c, v["booking_id"])
+        ev = cal.get(c, v["booking_id"])
+        files = cal.invite_attachment(ev) if ev else []          # METHOD:CANCEL removes it from their calendar
+        money = (f"{refunded:,} HealthCredits have been returned to your wallet"
+                 + (" (after the 150 rupee late-cancellation fee)" if late else "") + ".\n" if refunded else "")
         notify.email_and_sms(c, patient=p, template="booking_cancelled", subject=f"Booking cancelled - {v['booking_id']}",
                              body=f"Dear {p['full_name']},\n\nYour booking {v['booking_id']} with {v['with']} on {v['date']} "
-                                  f"at {v['time']} is cancelled.\n\nBook again any time at {config.PUBLIC_BASE_URL}.\n\nWellNest Hospitals",
-                             sms=f"WellNest: booking {v['booking_id']} cancelled.")
+                                  f"at {v['time']} is cancelled.\n{money}\nBook again any time at {config.PUBLIC_BASE_URL}.\n\nWellNest Hospitals",
+                             sms=f"WellNest: booking {v['booking_id']} cancelled.", key=f"cancel:{v['booking_id']}", attachments=files)
+        notify.to_caregiver(c, p, template="booking_cancelled", key=f"cancel:{v['booking_id']}", attachments=files,
+                            subject=f"Update for {p['full_name']}: booking cancelled",
+                            body=f"{p['full_name']}'s visit with {v['with']} on {v['date']} at {v['time']} ({v['booking_id']}) is cancelled.",
+                            sms=f"{p['full_name']}'s booking {v['booking_id']} on {v['date']} is cancelled.")
         offer = offer_slot(c, a["doctor_id"], a["appt_date"], a["appt_time"], exclude_patient=p["id"]) if a["doctor_id"] else None
     bb.invalidate(p["phone"])
     events.publish("appointment.cancelled", patient_id=p["id"], booking_id=v["booking_id"], channel=channel)
     if offer:
         events.publish("waitlist.offered", patient_id=offer["patient_id"], offer_code=offer["offer_code"])
     msg = f"Cancelled. Booking {v['booking_id']} with {v['with']} on {v['date']} at {v['time']} is cancelled."
+    if refunded:
+        msg += (f" {refunded:,} HealthCredits are back in your wallet" + (" after the 150 rupee fee for cancelling within 2 hours." if late else "."))
     short = f"Cancelled booking {v['booking_id']}."
     if offer:
         msg += " The freed slot has been offered to the next patient on the waitlist."
@@ -567,7 +626,7 @@ def reschedule(booking_id, new_date, new_time, phone="", date_of_birth="", docto
             a2 = dict(c.execute(select(A).where(A.c.id == a["id"])).mappings().first())
             v = _appt_view(a2)
             pt.log(c, p["id"], "reschedule_appointment", v["booking_id"], True, f"Moved to {v['date']} {v['time']}", actor, channel)
-            _confirm_email(c, p, v, subject_prefix="Booking rescheduled")
+            _confirm_email(c, p, v, subject_prefix="Booking rescheduled", appt=a2)
             offer = offer_slot(c, *old, exclude_patient=p["id"]) if old[0] else None
             moved_code = v["booking_id"]
     except IntegrityError:
@@ -766,7 +825,7 @@ def accept_offer(offer_code, phone, channel="chat", actor="agent") -> Result:
             c.execute(update(WL).where(WL.c.id == w["id"]).values(status="booked"))
             a = dict(c.execute(select(A).where(A.c.id == aid)).mappings().first())
             v = _appt_view(a)
-            _confirm_email(c, p, v, extra="Booked from the waitlist.\n\n")
+            _confirm_email(c, p, v, extra="Booked from the waitlist.\n\n", appt=a)
             pt.log(c, p["id"], "accept_waitlist_offer", code_b, True, f"Waitlist slot {v['with']} {v['date']} {v['time']}", actor, channel)
     except IntegrityError:
         return fail("offer_expired", "Sorry, that slot has just been taken. You're still on the waitlist.")
