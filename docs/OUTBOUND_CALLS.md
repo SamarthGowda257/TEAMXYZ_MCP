@@ -57,31 +57,44 @@ forward: everything else stays the same.
 
 ## What you do (about 45 minutes)
 
-### 1. Talkdesk: OAuth client (5 min)
-Builder → **OAuth Clients** → Create: name `WellNest_Outbound_TeamXYZ`, grant type **Client Credentials**, scope
-**`flows-interactions:start`**. Copy the client ID and secret (straight into Render, never into chat).
+Build in this order; each step can be tested on its own. Menu paths checked in the sandbox on 4 Nov.
 
-### 2. Talkdesk: Builder connection for the webhook (10 min)
-Builder → **Connections** → Create `WellNest_TeamXYZ`, base URL `https://teamxyz-mcp.onrender.com`, header
-`X-Outbound-Token: <OUTBOUND_WEBHOOK_TOKEN>`. Add action **`outbound_event`**: `POST /api/outbound/event`, JSON body
-`{"call_id": "<string>", "event": "<string>", "choice": "<string>"}`, outputs `say` (string), `action` (string),
-`outcome` (string).
+### 1. Talkdesk: Custom Integration for the webhook (10 min)
+**Builder → Integrations → Browse integrations → Custom Integration → Add.** (Another team's
+"Rakshak Backend_VortexKnights" integration is the same keypress-confirm pattern, so this works in our sandbox.)
+- Name `WellNest_Outbound_TeamXYZ`, host / base URL `https://teamxyz-mcp.onrender.com`.
+- Authentication: an API key **header** `X-Outbound-Token` = the `OUTBOUND_WEBHOOK_TOKEN` value (if only "no auth" is
+  offered, put the token in the action path instead: `/api/outbound/event?token=<OUTBOUND_WEBHOOK_TOKEN>`).
+- **Add action** `outbound_event`: method **POST**, path `/api/outbound/event`, JSON body with three string inputs:
+  `{"call_id": "{{call_id}}", "event": "{{event}}", "choice": "{{choice}}"}`.
+  Response / outputs (strings): `say`, `action`, `outcome`.
+- Test the action from the integration screen with `call_id` = any `OC-...` from `/api/ops/outbound`, `event` =
+  `answered`: it should return a `say` sentence. (A wrong token returns 401.)
 
-### 3. Talkdesk: Studio flow `WellNest_Outreach_TeamXYZ` (20 min)
-Studio → Create flow → **API request** trigger.
-1. **API request** input arguments (all strings, each to a flow variable of the same name): `call_id`,
-   `patient_phone`, `patient_name`, `call_type`, `prompt`, `booking_id`.
-2. **Make Outbound Call**: caller ID = our Talkdesk number; destination = `patient_phone`; ring time 30 s.
-   - *No answer* → Execute Action `outbound_event` (call_id=`call_id`, event=`no_answer`) → End Flow.
-     Do the same for *Busy* (`busy`) and *Invalid number* (`invalid_number`).
-   - *Answered* → Execute Action `outbound_event` (event=`answered`) → next step.
-3. **Input IVR** (or **Voice IVR** for spoken answers), message (text-to-speech): `%{current_flow.prompt}`.
-   Options 1, 2, 3, 9; no input → repeat once → End Flow.
-4. For each option N: **Execute Action** `outbound_event` (call_id=`call_id`, event=`choice`, choice=`N`, output
-   `say` → flow variable `say`) → **Play Audio** text-to-speech `%{current_flow.say}` → End Flow.
-   For option **3**: after Play Audio → **Forward to External Number** = the AI voice number (the Studio voice flow
-   that connects to Autopilot).
-5. Save → **Publish**. Open **Request details** on the flow and copy the **flow ID**.
+### 2. Talkdesk: Studio flow `WellNest_Outreach_TeamXYZ` (20 min)
+**Studio → Create flow → trigger type API request** (only API-request flows can be started by the Flows API and only
+they offer Make Outbound Call).
+1. **API request** node → input arguments (all strings), each saved to a flow variable of the same name:
+   `call_id`, `patient_phone`, `patient_name`, `call_type`, `prompt`, `booking_id`.
+2. **Make Outbound Call**: outbound (caller ID) number = our Talkdesk number from Admin → Numbers; destination =
+   variable `patient_phone`; ring time 30 s (allowed 10–35). Exits:
+   - *No answer* → **Execute Action** `outbound_event` (call_id = `call_id`, event = `no_answer`, choice empty) → End Flow.
+   - *Busy* → same with event `busy`; *Invalid number* → same with event `invalid_number`.
+   - *Answered* → **Execute Action** `outbound_event` (event = `answered`) → step 3.
+3. **Input IVR** (keys) or **Voice IVR** (spoken answers): message, text-to-speech: `%{current_flow.prompt}`.
+   Options **1, 2, 3, 9**. No input / invalid → repeat once → End Flow.
+4. For each option N: **Execute Action** `outbound_event` (call_id = `call_id`, event = `choice`, choice = `N`;
+   output `say` → flow variable `say`) → **Play Audio** text-to-speech `%{current_flow.say}` → End Flow.
+   Option **3** only: after Play Audio → **Forward to External Number** = the AI voice number (the Studio voice flow
+   that connects to Autopilot / the WellNest orchestration).
+   Execute Action *failure / timeout* exits → Play Audio "Thank you, goodbye." → End Flow.
+5. **Save → Publish**. In the flow list open **Request details**: copy the **flow ID** (and check the example body
+   lists the six input names above).
+
+### 3. Talkdesk: OAuth client (5 min)
+**Builder → OAuth Clients → create**: name `WellNest_Outbound_TeamXYZ`, grant type **Client Credentials**, scope
+**`flows-interactions:start`**. Copy the client ID and secret straight into Render (step 5), never into chat. (If the
+page shows "Thanks for your patience… Refresh", press Refresh; it loaded slowly in our sandbox.)
 
 ### 4. Talkdesk: Outreach agent (15 min)
 First: **MCP Servers → WellNest_TeamXYZ_MCP → Test connection / refresh** (37 tools; the 3 new ones are
