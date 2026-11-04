@@ -587,8 +587,8 @@ def run_reminders() -> int:
                                      subject=f"Reminder: your appointment with {v['with']} is tomorrow",
                                      body=f"Dear {r['full_name']},\n\nA reminder of your visit with {v['with']} on {v['date']} at "
                                           f"{v['time']}, room {v['room']}. Booking {v['booking_id']}.\n\nPlease report by {report} "
-                                          f"for vitals. {prep}\nParking: Basement P1 via Gate 3 (free for 3 hours with your slip); "
-                                          f"valet at Gate 2.\n\nTo cancel or change (free until 2 hours before): "
+                                          f"for vitals. {prep}\nParking: free for patients in Basement 2 for 3 hours; "
+                                          f"valet at the main entrance.\n\nTo cancel or change (free until 2 hours before): "
                                           f"{config.PUBLIC_BASE_URL}/portal/appointments\n\nWellNest Hospitals",
                                      sms=f"WellNest reminder: {v['with']} {v['date']} {v['time']}, {v['booking_id']}. Report by {report}.")
                 notify.to_caregiver(c, patient, template="reminder_24h", key=f"r24:{r['booking_code']}",
@@ -629,7 +629,7 @@ def run_review_expiry() -> int:
                                  subject=f"2 days left for your free review with {v['with']}",
                                  body=f"Dear {p['full_name']},\n\nYour visit on {v['date']} includes one free follow-up review "
                                       f"with {v['with']} for the same problem until {human_date(last)}. Book it in the chat or at "
-                                      f"{config.PUBLIC_BASE_URL}/book\n\nWellNest Hospitals",
+                                      f"{config.PUBLIC_BASE_URL}/portal/book\n\nWellNest Hospitals",
                                  sms=f"WellNest: free review with {v['with']} ends {human_date(last)}. Book in chat.")
             cal.upsert(c, ref=key, patient=p, kind="review", title=f"Last day: free follow-up with {v['with']}",
                        starts_at=datetime.combine(last, datetime.min.time()), minutes=0, all_day=True,

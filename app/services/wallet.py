@@ -168,7 +168,7 @@ def mark_paid(link_code: str) -> dict:
 
 # ------------------------------------------------------------------ tools
 def get_balance(phone, dob) -> Result:
-    with db.engine.connect() as c:
+    with db.engine.begin() as c:                # begin, not connect: failed identity checks must be saved for the lockout
         p, err = pt.check_identity(c, phone, dob)
         if err:
             return err

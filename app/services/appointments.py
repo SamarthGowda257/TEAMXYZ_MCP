@@ -576,6 +576,8 @@ def cancel(booking_id, phone="", date_of_birth="", reason="", channel="chat", ac
     if refunded:
         msg += (f" {refunded:,} HealthCredits are back in your wallet" + (" after the 150 rupee fee for cancelling within 2 hours." if late else "."))
     short = f"Cancelled booking {v['booking_id']}."
+    if refunded:                                # money facts stay in the short reply seniors hear
+        short += (f" {refunded:,} HealthCredits are back in your wallet" + (" after the 150 rupee late fee." if late else "."))
     if offer:
         msg += " The freed slot has been offered to the next patient on the waitlist."
     return ok(pt.say(p, msg, short), booking_id=v["booking_id"], cancelled=True, slot_released=True,

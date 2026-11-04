@@ -40,6 +40,17 @@ def _bal(pid):
         return wl.balance(c, pid)
 
 
+def _first_free_time(d):
+    s = ap.find_slots(d.isoformat(), department="General Medicine")
+    return next(x for x in s.data["doctors"] if x["free_slots"])["free_slots"][0]
+
+
+def test_failed_balance_checks_count_towards_the_lockout():
+    for _ in range(5):
+        assert wl.get_balance(RAHUL, "1990-01-01").error_code == "not_verified"
+    assert wl.get_balance(RAHUL, RAHUL_DOB).error_code == "locked_out"
+
+
 def test_stock_shows_restock_time_and_generic():
     r = ph.check_stock("Telma 40")
     assert r.ok and "out of stock" in r.message and "Cipla" in r.message and "prescription" in r.message
@@ -129,9 +140,7 @@ def test_booking_sends_calendar_invite_policies_and_caregiver_copy():
     d = config.today() + timedelta(days=2)
     while d.isoweekday() not in (1, 2, 3, 4, 5, 6):
         d += timedelta(days=1)
-    s = ap.find_slots(d.isoformat(), department="General Medicine")
-    t = s.data["slots"][0]["times"][0] if "slots" in s.data else None
-    assert t
+    t = _first_free_time(d)
     b = ap.book(SHAN, d.isoformat(), t, department="General Medicine", date_of_birth=SHAN_DOB)
     assert b.ok
     code = b.data["booking_id"]
@@ -139,7 +148,7 @@ def test_booking_sends_calendar_invite_policies_and_caregiver_copy():
         ev = cal.get(c, code)
         mail = c.execute(select(db.notifications).where(db.notifications.c.dedupe_key.like(f"%{code}%:email"))).mappings().first()
         files = c.execute(select(db.notification_files).where(db.notification_files.c.notification_id == mail["id"])).mappings().all()
-        cg = c.execute(select(db.notifications).where(db.notifications.c.template == "caregiver_update",
+        cg = c.execute(select(db.notifications).where(db.notifications.c.template == "caregiver_update_cg",
                                                       db.notifications.c.body.like(f"%{code}%"))).first()
     assert ev and ev["kind"] == "appointment" and ev["sync_status"] == "ics_only"
     assert "free follow-up" in mail["body"] and "calendar.google.com" in mail["body"]
@@ -182,8 +191,7 @@ def test_google_calendar_and_gmail_sync(monkeypatch):
     d = config.today() + timedelta(days=3)
     while d.isoweekday() == 7:
         d += timedelta(days=1)
-    s = ap.find_slots(d.isoformat(), department="General Medicine")
-    b = ap.book(RAHUL, d.isoformat(), s.data["slots"][0]["times"][0], department="General Medicine", date_of_birth=RAHUL_DOB)
+    b = ap.book(RAHUL, d.isoformat(), _first_free_time(d), department="General Medicine", date_of_birth=RAHUL_DOB)
     assert b.ok
     notify.flush(50)
     ev_calls = [x for x in calls if "calendar/v3" in x[1]]
