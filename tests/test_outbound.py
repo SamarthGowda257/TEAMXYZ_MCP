@@ -167,3 +167,10 @@ def test_stale_live_call_does_not_block_a_new_call():
     again = ob.trigger("WN-48213")
     assert again["ok"] and again["call_id"] != first["call_id"]
     assert _call(first["call_id"])["outcome"] == "no_choice"
+
+
+def test_reminder_for_a_cancelled_booking_says_why_instead_of_silently_cancelling():
+    from app.services import appointments as ap
+    assert ap.cancel("WN-48213", "9845000001", "1959-03-04").ok
+    r = ob.trigger("WN-48213")
+    assert r["ok"] is False and "cancelled" in r["error"] and "call_id" not in r

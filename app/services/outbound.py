@@ -437,6 +437,8 @@ def trigger(booking_id: str, kind: str = "appointment_reminder") -> dict:
         p = pt.get_by_id(c, a["patient_id"])
         if _opted_out(c, p["phone"]):
             return {"ok": False, "error": "patient opted out of calls"}
+        if kind == "appointment_reminder" and a["status"] != "booked":
+            return {"ok": False, "error": f"booking {a['booking_code']} is {a['status']}: a reminder call needs a booked appointment"}
         # a live call with no news for 10 minutes ended without a final event (caller hung up mid-IVR): close it
         c.execute(update(OC).where(OC.c.appointment_id == a["id"], OC.c.status.in_(("dialing", "in_progress")),
                                    OC.c.updated_at < config.now() - timedelta(minutes=10))
