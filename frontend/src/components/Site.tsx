@@ -4,6 +4,7 @@ import { Ambulance, Clock, Mail, MapPin, Menu, MessageCircle, Phone, X } from "l
 import { session } from "../lib/api";
 import { chatConfigured, onChatFallback, openChat, resetChat, voiceNumber } from "../lib/chat";
 import { useLoggedIn, useTextSize } from "../lib/hooks";
+import { AILauncher } from "./WellNestAI";
 import { CENTRES, HOSPITAL } from "../content";
 
 /** WellNest logo: a medical cross inside a rounded shield. */
@@ -21,7 +22,7 @@ function TopBar() {
     <div className="topbar">
       <div className="wrap topbar-in">
         <span className="tb-item tb-hide"><Clock size={15} aria-hidden="true" /> OPD Mon–Sat, 8 AM – 8 PM</span>
-        <a className="tb-item" href={HOSPITAL.phoneHref}><Phone size={15} aria-hidden="true" /> Helpline {HOSPITAL.phone}</a>
+        <a className="tb-item" href={voiceNumber().href}><Phone size={15} aria-hidden="true" /> Helpline {voiceNumber().label}</a>
         <a className="tb-item tb-hide" href={`mailto:${HOSPITAL.email}`}><Mail size={15} aria-hidden="true" /> {HOSPITAL.email}</a>
         <a className="tb-emergency" href="tel:108"><Ambulance size={16} aria-hidden="true" /> Emergency: call 108</a>
       </div>
@@ -58,6 +59,7 @@ export function SiteHeader() {
           <NavLink to="/about">About us</NavLink>
           <NavLink to="/specialities">Specialities</NavLink>
           <NavLink to="/doctors">Find a doctor</NavLink>
+          <NavLink to="/assistant">WellNest AI</NavLink>
           <NavLink to="/visitors">Patients &amp; visitors</NavLink>
           <NavLink to="/insurance">Insurance</NavLink>
           <NavLink to="/contact">Contact</NavLink>
@@ -109,13 +111,14 @@ export function SiteFooter() {
           <Link to="/portal/reports">Lab reports</Link>
           <Link to="/insurance">Insurance &amp; TPA</Link>
           <Link to="/visitors">Visitor information</Link>
+          <Link to="/policies">Hospital policies</Link>
           <Link to="/architecture">How WellNest works</Link>
           <Link to="/portal">Patient login</Link>
         </div>
         <div className="footer-contact">
           <h2 className="footer-h">Reach us</h2>
           <p><MapPin size={16} aria-hidden="true" /> {HOSPITAL.address}</p>
-          <p><Phone size={16} aria-hidden="true" /> <a href={HOSPITAL.phoneHref}>{HOSPITAL.phone}</a></p>
+          <p><Phone size={16} aria-hidden="true" /> <a href={voiceNumber().href}>{voiceNumber().label}</a></p>
           <p><Mail size={16} aria-hidden="true" /> <a href={`mailto:${HOSPITAL.email}`}>{HOSPITAL.email}</a></p>
           <p><Clock size={16} aria-hidden="true" /> OPD Mon–Sat 8 AM – 8 PM · Emergency 24×7</p>
         </div>
@@ -161,7 +164,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <SiteHeader />
       <main id="main">{children}</main>
       <SiteFooter />
-      <ChatFallback />
+      <AILauncher />
     </>
   );
 }

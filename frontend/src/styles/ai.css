@@ -1,0 +1,171 @@
+/*
+  WellNest AI surfaces: the launcher, the side sheet and the /assistant page.
+  Everything here is the frame around the Talkdesk widget. The widget's own panel is not restyled:
+  when it is hosted inside our frame we only strip its fixed positioning so it can fill the slot.
+*/
+
+/* ---------- mark ---------- */
+.ai-avatar { position: relative; display: inline-flex; flex: none; }
+.ai-avatar svg { display: block; border-radius: 50%; }
+.ai-dot {
+  position: absolute; right: -1px; bottom: -1px; width: 30%; height: 30%; min-width: 9px; min-height: 9px;
+  border-radius: 50%; background: var(--teal); border: 2px solid #fff;
+}
+
+.ai-thinking { display: inline-flex; gap: 6px; align-items: center; }
+.ai-thinking i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: .35; animation: ai-pulse 1.25s var(--ease-out) infinite; }
+.ai-thinking i:nth-child(2) { animation-delay: .16s; }
+.ai-thinking i:nth-child(3) { animation-delay: .32s; }
+@keyframes ai-pulse { 0%, 100% { opacity: .25; transform: translateY(0); } 45% { opacity: 1; transform: translateY(-4px); } }
+
+/* ---------- launcher ---------- */
+.ai-launcher {
+  position: fixed; right: 24px; bottom: 24px; z-index: 60;
+  width: 60px; height: 60px; border-radius: 50%; border: 1.5px solid var(--border);
+  background: #fff; box-shadow: var(--shadow); cursor: pointer;
+  display: grid; place-items: center; padding: 0;
+  transition: transform .2s var(--ease-out), border-color .2s;
+}
+.ai-launcher:hover { transform: translateY(-2px); border-color: var(--accent); }
+.ai-launcher.is-open { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.ai-hint {
+  position: fixed; right: 96px; bottom: 38px; z-index: 60;
+  background: var(--ink); color: #fff; border: 0; cursor: pointer;
+  padding: 10px 16px; border-radius: 999px; font-weight: 700; font-size: .95rem;
+  box-shadow: var(--shadow); animation: ai-hint-in .5s var(--ease-out) both;
+}
+@keyframes ai-hint-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+
+/* ---------- side sheet ---------- */
+.ai-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(13, 34, 64, .38); }
+.ai-sheet {
+  position: fixed; right: 24px; bottom: 24px; z-index: 71;
+  width: 420px; height: min(680px, calc(100vh - 48px));
+  background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgba(13, 34, 64, .22); overflow: hidden;
+  display: flex; flex-direction: column;
+  animation: ai-sheet-in .24s var(--ease-out) both;
+}
+@keyframes ai-sheet-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* ---------- shared frame ---------- */
+.ai-frame { display: flex; flex-direction: column; min-height: 0; height: 100%; background: #fff; }
+.ai-frame-page {
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+  height: clamp(520px, 72vh, 760px);
+}
+
+.ai-head {
+  display: flex; align-items: center; gap: 12px; flex: none;
+  padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.ai-head-text { display: grid; line-height: 1.3; margin-right: auto; }
+.ai-head-text strong { font-family: var(--font-display); font-size: 1.05rem; }
+.ai-head-text span { font-size: var(--step-small); color: var(--muted); }
+.ai-icon-btn {
+  display: grid; place-items: center; width: 38px; height: 38px; flex: none;
+  border: 0; background: transparent; border-radius: 10px; cursor: pointer; color: var(--muted);
+}
+.ai-icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+
+.ai-slot { position: relative; flex: 1 1 auto; min-height: 0; background: #fff; }
+.ai-waiting {
+  position: absolute; inset: 0; display: grid; align-content: center; justify-items: center;
+  gap: 12px; padding: 24px; text-align: center; color: var(--muted);
+}
+.ai-waiting p { max-width: 36ch; }
+
+.ai-foot { flex: none; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+.ai-foot-note { font-size: .8125rem; color: var(--faint); line-height: 1.5; }
+
+/*
+  When the widget is hosted inside .ai-slot it must stop floating and fill the slot instead.
+  Only layout is touched; the panel's own look is Talkdesk's.
+*/
+[data-chat-hosted] .ai-slot > #tdWebchat { position: absolute; inset: 0; width: 100%; height: 100%; }
+[data-chat-hosted] .ai-slot > #tdWebchat > div,
+[data-chat-hosted] .ai-slot > #tdWebchat iframe {
+  position: absolute !important; inset: 0 !important;
+  width: 100% !important; height: 100% !important;
+  max-width: none !important; max-height: none !important;
+  right: auto !important; bottom: auto !important;
+  border-radius: 0 !important; box-shadow: none !important;
+}
+/* the widget's own bubble would be a second launcher inside our frame */
+[data-chat-hosted] .ai-slot > #tdWebchat [class*="launcher"],
+[data-chat-hosted] .ai-slot > #tdWebchat [class*="Launcher"] { display: none !important; }
+
+/* ---------- /assistant ---------- */
+.assistant-page { padding: 40px 0 72px; background: var(--surface); min-height: 70vh; }
+.assistant-intro { max-width: 68ch; margin-bottom: 28px; }
+.assistant-intro h1 { font-size: var(--step-head); }
+.assistant-intro .lead { margin-top: 12px; font-size: var(--step-lead); color: var(--muted); }
+
+.assistant-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 24px; align-items: start; }
+
+.ai-rail { display: grid; gap: 16px; }
+.ai-rail h2 { font-size: 1.05rem; font-family: var(--font-display); }
+.ai-prompts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ai-prompts button {
+  width: 100%; text-align: left; cursor: pointer;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; font-weight: 600; color: var(--ink);
+  transition: border-color .15s, background-color .15s;
+}
+.ai-prompts button:hover { border-color: var(--accent); background: var(--sky); color: var(--accent-deep); }
+
+.ai-rail-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; display: grid; gap: 8px; justify-items: start; }
+.ai-rail-card h3 { font-size: 1rem; font-family: var(--font-display); }
+.ai-rail-card p { font-size: var(--step-small); color: var(--muted); }
+.ai-rail-urgent { background: var(--alert-tint); border-color: #f3c7c4; }
+.ai-rail-urgent h3 { color: var(--alert); }
+.ai-rail-urgent p { color: #7b2b28; }
+
+@media (max-width: 1024px) {
+  .assistant-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .ai-sheet { right: 0; bottom: 0; width: 100vw; height: 100dvh; border-radius: 0; border: 0; }
+  .ai-launcher { right: 16px; bottom: 16px; }
+  .ai-hint { right: 86px; bottom: 30px; }
+  .ai-frame-page { height: 78vh; }
+}
+
+/* ---------- /policies ---------- */
+.pol-page { padding: 40px 0 72px; }
+.pol-head { max-width: 68ch; margin-bottom: 24px; }
+.pol-head h1 { font-size: var(--step-head); }
+.pol-head .lead { margin-top: 12px; font-size: var(--step-lead); color: var(--muted); }
+
+.pol-jump { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+.pol-jump a {
+  font-size: .875rem; font-weight: 700; text-decoration: none; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: #fff;
+}
+.pol-jump a:hover { border-color: var(--accent); color: var(--accent); background: var(--sky); }
+
+.pol-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.pol-list li { border-bottom: 1px solid var(--border); scroll-margin-top: 110px; }
+.pol-list h2 { margin: 0; font-size: 1.0625rem; }
+.pol-list h2 button {
+  width: 100%; display: flex; align-items: center; gap: 16px; justify-content: space-between;
+  background: transparent; border: 0; cursor: pointer; text-align: left;
+  padding: 18px 4px; font-family: var(--font-display); font-weight: 700; font-size: 1.0625rem; color: var(--ink);
+}
+.pol-list h2 button:hover { color: var(--accent); }
+.pol-list h2 button svg { flex: none; color: var(--muted); transition: transform .2s var(--ease-out); }
+.pol-list li.is-open h2 button svg { transform: rotate(180deg); }
+.pol-body { padding: 0 4px 22px; max-width: 72ch; display: grid; gap: 12px; justify-items: start; }
+.pol-body p { color: var(--muted); }
+.pol-anchor { display: inline-flex; align-items: center; gap: 6px; font-size: .8125rem; font-weight: 700; text-decoration: none; }
+
+.pol-skel { display: grid; gap: 10px; }
+.pol-skel i { display: block; height: 56px; border-radius: 10px; background: var(--surface); }
+
+.pol-ask {
+  margin-top: 32px; padding: 24px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between;
+}
+.pol-ask h2 { font-family: var(--font-display); font-size: 1.125rem; }
+.pol-ask p { color: var(--muted); font-size: var(--step-small); margin-top: 4px; }

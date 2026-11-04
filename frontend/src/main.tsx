@@ -8,6 +8,8 @@ import "./styles/tokens.css";
 import "./styles/site.css";
 import "./styles/pages.css";
 import "./styles/app.css";
+import "./styles/ai.css";
+import "./styles/admin.css";
 
 try { if (localStorage.getItem("wellnest_size") === "lg") document.documentElement.dataset.size = "lg"; } catch { /* private mode */ }
 

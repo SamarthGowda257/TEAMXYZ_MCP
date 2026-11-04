@@ -9,6 +9,9 @@ import { Book } from "./pages/Book";
 import { Dashboard, Pay } from "./pages/Dashboard";
 import { Architecture } from "./pages/Architecture";
 import { Checkin } from "./pages/Checkin";
+import { Assistant } from "./pages/Assistant";
+import { Policies } from "./pages/Policies";
+import { Admin } from "./pages/Admin";
 import { loadChat } from "./lib/chat";
 
 function ScrollTop() {
@@ -27,11 +30,15 @@ export default function App() {
       <ScrollTop />
       <Routes>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/admin/*" element={<Admin />} />
         <Route path="*" element={
           <SiteLayout>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/doctors" element={<Doctors />} />
+              <Route path="/assistant" element={<Assistant />} />
+              <Route path="/policies" element={<Policies />} />
+              <Route path="/departments" element={<Specialities />} />
               <Route path="/about" element={<About />} />
               <Route path="/specialities" element={<Specialities />} />
               <Route path="/visitors" element={<Visitors />} />
