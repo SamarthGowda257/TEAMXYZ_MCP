@@ -39,8 +39,8 @@ function Chip({ kind, children }: { kind: string; children: React.ReactNode }) {
 
 function statusKind(s: string) {
   if (s === "cancelled" || s === "no_show") return "off";
-  if (s === "completed" || s === "resolved") return "ok";
-  if (s === "in_progress") return "work";
+  if (s === "completed" || s === "closed") return "ok";
+  if (s === "assigned") return "work";
   return "live";
 }
 
@@ -154,7 +154,7 @@ function Escalations() {
   }, [data]);
 
   const list = (data?.handoffs || []) as any[];
-  const open = list.filter((h) => h.status !== "resolved");
+  const open = list.filter((h) => h.status === "open" || h.status === "assigned");
   const current = list.find((h) => h.handoff_code === picked) || open[0] || null;
 
   const setStatus = async (code: string, status: string) => {
@@ -221,10 +221,10 @@ function Escalations() {
               <a className="btn btn-primary btn-sm" href={TALKDESK_CONVERSATIONS} target="_blank" rel="noreferrer">
                 <ExternalLink size={16} aria-hidden="true" /> Open in Talkdesk
               </a>
-              <button type="button" className="btn btn-quiet btn-sm" disabled={busy || current.status === "in_progress"}
-                      onClick={() => setStatus(current.handoff_code, "in_progress")}>Mark in progress</button>
+              <button type="button" className="btn btn-quiet btn-sm" disabled={busy || current.status === "assigned"}
+                      onClick={() => setStatus(current.handoff_code, "assigned")}>Mark in progress</button>
               <button type="button" className="btn btn-quiet btn-sm" disabled={busy}
-                      onClick={() => setStatus(current.handoff_code, "resolved")}>Resolve</button>
+                      onClick={() => setStatus(current.handoff_code, "closed")}>Resolve</button>
             </div>
           </>
         )}

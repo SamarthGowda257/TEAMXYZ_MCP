@@ -924,7 +924,7 @@ def ops_handoffs(status: str = "", limit: int = Query(default=100, le=300)):
     for r in rows:
         r["created_at"] = r["created_at"].isoformat() if r.get("created_at") else None
         r["phone"] = mask_phone(r.get("phone") or "")
-    counts = {k: sum(1 for r in rows if r["status"] == k) for k in ("open", "in_progress", "resolved")}
+    counts = {k: sum(1 for r in rows if r["status"] == k) for k in ("open", "assigned", "closed")}
     return {"counts": counts, "open_urgent": sum(1 for r in rows if r["status"] == "open" and r["priority"] == "urgent"),
             "handoffs": rows}
 
@@ -935,8 +935,12 @@ class HandoffStatus(BaseModel):
 
 @router.post("/api/ops/handoffs/{code}/status", dependencies=[Depends(admin_only)])
 def ops_handoff_status(code: str, body: HandoffStatus, request: Request):
-    """Mark a handoff in progress or resolved. The reply itself still happens in Talkdesk Conversations."""
-    if body.status not in ("open", "in_progress", "resolved"):
+    """Mark a handoff assigned or closed. The reply itself still happens in Talkdesk Conversations.
+
+    The vocabulary is open / assigned / closed because that is what the rest of the system already uses:
+    get_handoff_status (app/services/support.py) looks the status up in a dict with no default, so any other
+    value would make that MCP tool fail for the patient who asks what happened to their handoff."""
+    if body.status not in ("open", "assigned", "closed"):
         raise HTTPException(400, detail={"error_code": "invalid_input", "message": "Unknown status."})
     who = (admin_session(request) or {}).get("adm", "admin")
     with db.engine.begin() as c:
