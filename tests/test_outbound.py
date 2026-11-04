@@ -133,3 +133,27 @@ def test_outreach_tools_after_transfer():
     assert ob.confirm("WN-48213", "9845000002").error_code == "not_allowed"
     out = ob.record_outcome("9845000001", "confirmed", "Patient confirmed with the assistant.")
     assert out.ok and _call(r["call_id"])["outcome"] == "confirmed"
+
+
+def test_waitlist_offer_call_books_the_slot_by_keypress():
+    from app.services import appointments as ap
+    assert ap.cancel("WN-48213", "9845000001", "1959-03-04").data.get("offered_to_waitlist")
+    assert ob.plan() >= 1
+    with db.engine.connect() as c:
+        row = c.execute(select(db.outbound_calls).where(db.outbound_calls.c.kind == "waitlist_offer")).mappings().first()
+    ob.dispatch()
+    assert "held for you" in ob.handle_event(row["call_code"], "answered")["say"]
+    booked = ob.handle_event(row["call_code"], "choice", "book it")
+    assert booked["outcome"] == "offer_accepted" and "WN-" in booked["say"]
+
+
+def test_lab_report_call_emails_link_and_agent_schedules_call_back():
+    ob.plan()
+    with db.engine.connect() as c:
+        row = c.execute(select(db.outbound_calls).where(db.outbound_calls.c.dedupe_key == "report:LR-20931")).mappings().first()
+    assert row and row["patient_id"] == 3
+    ob.dispatch()
+    assert "never read results" in ob.handle_event(row["call_code"], "answered")["say"]
+    assert "pr***@" in ob.handle_event(row["call_code"], "choice", "1")["say"]
+    later = ob.record_outcome("9845000003", "call_back_later", "Busy now.", call_back_at="tomorrow at 5 pm")
+    assert later.ok and "5:00 PM" in later.message and later.data["call_back_id"].startswith("OC-")
