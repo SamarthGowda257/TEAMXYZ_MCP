@@ -11,8 +11,8 @@ function Status({ label, value, good }: { label: string; value: string; good: bo
 
 const LAYERS = [
   { icon: MessageCircle, title: "Patients", items: ["Website chat (Talkdesk widget)", "Phone (Talkdesk voice)", "Website and patient portal"] },
-  { icon: Bot, title: "Talkdesk AI Agent Platform", items: ["Receptionist supervisor: emergencies first, routing", "8 specialist agents, max 5 skills each", "Human handoff to Talkdesk Conversations"] },
-  { icon: Lock, title: "WellNest MCP gateway (/mcp)", items: ["34 tools over Streamable HTTP", "Bearer token, constant-time check, rate limits", "Every reply: ok + speakable message + small data"] },
+  { icon: Bot, title: "Talkdesk AI Agent Platform", items: ["Receptionist supervisor: emergencies first, routing", "10 specialist agents, max 5 skills each", "Human handoff to Talkdesk Conversations"] },
+  { icon: Lock, title: "WellNest MCP gateway (/mcp)", items: ["45 tools over Streamable HTTP", "Bearer token, constant-time check, rate limits", "Every reply: ok + speakable message + small data"] },
   { icon: Server, title: "Services (one set of rules)", items: ["Same code for bot, website and jobs", "Identity: phone + date of birth checked on the server", "Waitlist auto-offer, coverage, reports, memory", "Hybrid search for memory, FAQs and symptoms"] },
 ];
 

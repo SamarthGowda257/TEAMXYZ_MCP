@@ -332,6 +332,13 @@ payment_links = Table("payment_links", md, _id(),
     Column("provider", String(12)), Column("provider_id", String(64)), Column("provider_url", String(300)),
     _ts(), Column("paid_at", DateTime))
 
+wallet_shares = Table("wallet_shares", md, _id(),                   # a family member may draw on the owner's credits
+    Column("owner_patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("member_patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("per_txn_limit", Integer), Column("daily_limit", Integer),
+    Column("active", Boolean, nullable=False, default=True), _ts(), Column("updated_at", DateTime),
+    Index("uq_wallet_share", "owner_patient_id", "member_patient_id", unique=True))
+
 credit_refunds = Table("credit_refunds", md, _id(),
     Column("refund_code", String(16), unique=True, nullable=False),
     Column("patient_id", ForeignKey("patients.id"), nullable=False),

@@ -598,12 +598,14 @@ def run_reminders() -> int:
                                     sms=f"{r['full_name']}: {v['with']} tomorrow {v['time']} ({v['booking_id']}).")
                 n += 1
             elif 1.5 <= hours <= 2.5:
+                aid = c.execute(select(db.assistance_requests.c.id).where(db.assistance_requests.c.appointment_id == r["id"])).scalar()
+                token = f" Your porter token is AS-{10000 + aid}; please show it at Gate 2." if aid else ""
                 notify.email_and_sms(c, patient=patient, template="reminder_2h", key=f"r2e:{r['booking_code']}",
                                      subject=f"2 hours to your visit: report by {report}",
                                      body=f"Dear {r['full_name']},\n\nYour visit with {v['with']} is at {v['time']} today, room "
                                           f"{v['room']}. Please report by {report}. This is the last chance to cancel or change it "
-                                          f"free of charge: {config.PUBLIC_BASE_URL}/portal/appointments\n\nWellNest Hospitals",
-                                     sms=f"WellNest: {v['with']} at {v['time']} today. Report by {report}.")
+                                          f"free of charge: {config.PUBLIC_BASE_URL}/portal/appointments{token}\n\nWellNest Hospitals",
+                                     sms=f"WellNest: {v['with']} at {v['time']} today. Report by {report}.{token}")
                 notify.queue(c, patient_id=r["patient_id"], channel="voice_call", template="reminder_2h", to=r["phone"],
                              body=f"Reminder call: {v['with']} at {v['time']} today.", dedupe_key=f"r2:{r['booking_code']}")
                 n += 1
@@ -632,8 +634,8 @@ def run_review_expiry() -> int:
                                       f"{config.PUBLIC_BASE_URL}/portal/book\n\nWellNest Hospitals",
                                  sms=f"WellNest: free review with {v['with']} ends {human_date(last)}. Book in chat.")
             cal.upsert(c, ref=key, patient=p, kind="review", title=f"Last day: free follow-up with {v['with']}",
-                       starts_at=datetime.combine(last, datetime.min.time()), minutes=0, all_day=True,
-                       details=f"Your free review for booking {v['booking_id']} ends today.")
+                       starts_at=datetime.combine(last - timedelta(days=1), datetime.min.time()), minutes=0, all_day=True,
+                       details=f"Tomorrow is the last day to claim your free follow-up review for booking {v['booking_id']}.")
             n += 1
     return n
 

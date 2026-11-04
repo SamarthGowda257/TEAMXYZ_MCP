@@ -243,8 +243,17 @@ class LabReportReady(CallKind):
         return r.message + " Goodbye."
 
 
+class CaregiverUpdate(CallKind):
+    """Operational voice alert to a consented caregiver (doctor delay, nurse alert). The words are stored per call."""
+    name, label = "caregiver_update", "Caregiver update"
+    options = {"1": "acknowledged", "3": "transfer_to_ai"}
+
+    def topic(self, c, p, a, ref=""):
+        return f"an update about {p['full_name'].split()[0]}'s visit", "How can I help?"
+
+
 KINDS: dict[str, CallKind] = {k.name: k for k in (AppointmentReminder(), PostVisitFollowup(), WaitlistOfferCall(),
-                                                  LabReportReady())}
+                                                  LabReportReady(), CaregiverUpdate())}
 SPOKEN = {"confirm": "1", "yes": "1", "book": "1", "email": "1", "better": "1", "fine": "1", "good": "1",
           "change": "2", "reschedule": "2", "help": "2", "worse": "2", "problem": "2", "decline": "2",
           "assistant": "3", "agent": "3", "talk": "3", "stop": "9"}
@@ -276,14 +285,14 @@ def mode() -> str:
 
 
 # ------------------------------------------------------------------ planning and dispatch (jobs runner)
-def _queue(c, kind: str, item: dict, p: dict) -> dict | None:
+def _queue(c, kind: str, item: dict, p: dict, to: str | None = None) -> dict | None:
     if c.execute(select(OC.c.id).where(OC.c.dedupe_key == item["dedupe_key"][:80])).first():
         return None                                        # already queued once: never call twice for one event
     try:
         with (c.begin_nested() if db.IS_POSTGRES else _nullctx()):     # the unique key is the final guard
             cid = c.execute(insert(OC).values(
                 call_code=_new_code(c), kind=kind, patient_id=p["id"], appointment_id=item.get("appointment_id"),
-                to_number=config.OUTBOUND_TEST_NUMBER or p["phone"], dedupe_key=item["dedupe_key"][:80], status="scheduled",
+                to_number=config.OUTBOUND_TEST_NUMBER or to or p["phone"], dedupe_key=item["dedupe_key"][:80], status="scheduled",
                 due_at=item["due_at"], next_attempt_at=item["due_at"], attempts=0, created_at=config.now(),
                 updated_at=config.now())).inserted_primary_key[0]
     except IntegrityError:
@@ -296,6 +305,21 @@ def _new_code(c) -> str:
         code = pt.random_code("OC", 6)
         if not c.execute(select(OC.c.id).where(OC.c.call_code == code)).first():
             return code
+
+
+def queue_caregiver_call(c, p: dict, text: str, ref: str) -> bool:
+    """Queue an automated call to the patient's consented caregiver. Dispatched by the next jobs run, not in a tool call."""
+    if not (p.get("caregiver_consent") and p.get("caregiver_phone")) or not _allowed(p["phone"]) or _opted_out(c, p["phone"]):
+        return False
+    call = _queue(c, CaregiverUpdate.name, {"appointment_id": None, "due_at": config.now(), "dedupe_key": f"cg:{ref}"}, p,
+                  to=p["caregiver_phone"])
+    if not call:
+        return False
+    who = p.get("caregiver_name") or "there"
+    c.execute(update(OC).where(OC.c.id == call["id"]).values(
+        prompt=f"Hello {who}, this is an automated update from WellNest Hospitals about {p['full_name']}. {text} "
+               "To confirm you heard this, press 1. To talk to our assistant, press 3."))
+    return True
 
 
 def plan() -> int:
@@ -343,7 +367,7 @@ def _dial(call_id: int) -> dict:
             c.execute(update(OC).where(OC.c.id == call_id).values(status="cancelled", outcome="not_needed",
                                                                   completed_at=config.now(), updated_at=config.now()))
             return {"call_id": call["call_code"], "status": "cancelled"}
-        prompt = kind.prompt(c, p, a, _ref(call))
+        prompt = call["prompt"] or kind.prompt(c, p, a, _ref(call))
         if not prompt:                                     # the offer or report is gone: nothing to say
             c.execute(update(OC).where(OC.c.id == call_id).values(status="cancelled", outcome="not_needed",
                                                                   completed_at=config.now(), updated_at=config.now()))

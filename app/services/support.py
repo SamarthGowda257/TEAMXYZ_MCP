@@ -32,10 +32,13 @@ def create_handoff(summary, priority="normal", phone="", reason_code="", channel
         bb.add(p_norm, "handoff", f"{'Urgent' if pr == 'urgent' else 'A'} handoff to a person is open ({code}); do not continue with bookings.", 0, code)
     if pr == "urgent":
         return ok(EMERGENCY_SAY, handoff_id=code, priority=pr, say=EMERGENCY_SAY, transfer=True)
-    say = "I'm passing you to a team member now with a summary, so you won't need to repeat yourself. Please hold for a moment."
+    say = ("I'm passing you to a team member now with a summary, so you won't need to repeat yourself. "
+           "If we get disconnected, we'll call you back within 2 hours.")
     if rc == "complaint":
-        say = ("I'm sorry about this. I've passed your complaint to our patient care team with a summary, reference "
-               f"{code}; a team member will follow up with you.")
+        grv = "GRV-" + code.split("-")[1]
+        say = (f"I'm sorry about this. I've logged your complaint as {grv} and passed it to our patient relations team with a summary, "
+               "so you won't need to repeat yourself. If we get disconnected, we'll call you back within 2 hours.")
+        return ok(say, handoff_id=code, grievance_id=grv, priority=pr, say=say, transfer=True)
     return ok(say, handoff_id=code, priority=pr, say=say, transfer=True)
 
 
@@ -148,15 +151,22 @@ def flag_nurse_alert(phone, reason, patient=None, conn=None) -> Result:
         p = patient or (pt.get_by_phone(c, p_norm) if p_norm else None)
         aid = c.execute(insert(db.nurse_alerts).values(patient_id=p["id"] if p else None, phone=p_norm, reason=clean(reason)[:300] or "Follow-up needed",
                                                        status="open", created_at=config.now())).inserted_primary_key[0]
-        pt.log(c, p["id"] if p else None, "flag_nurse_alert", f"NA-{10000 + aid}", True, clean(reason)[:200])
+        pt.log(c, p["id"] if p else None, "flag_nurse_alert", f"ALT-{10000 + aid}", True, clean(reason)[:200])
+        if p:                                # caregiver: that a nurse is calling, never the symptoms (DPDP)
+            notify.to_caregiver(c, p, template="nurse_alert", key=f"alert:{aid}", subject=f"Nurse follow-up for {p['full_name']}",
+                                body=f"Our nurse team is calling {p['full_name']} within 15 minutes after their check-in.",
+                                sms=f"Our nurse team is calling {p['full_name']} within 15 minutes.")
+            from . import outbound
+            outbound.queue_caregiver_call(c, p, f"Our nurse team is calling {p['full_name']} within 15 minutes after their check-in. "
+                                                "If it is an emergency, please call 108.", f"alert{aid}")
         return aid
     if conn is not None:
         aid = _do(conn)
     else:
         with db.engine.begin() as c:
             aid = _do(c)
-    return ok("I've alerted our nurse team; a nurse will call you shortly. If you feel worse, call 108.",
-              alert_id=f"NA-{10000 + aid}")
+    return ok("I've flagged this to our nurse team; a nurse will call you within 15 minutes. If you feel much worse, call 108 or come to "
+              "our emergency entrance straight away.", alert_id=f"ALT-{10000 + aid}", callback_sla_minutes=15)
 
 
 def record_checkin(phone, dob, booking_id="", pain_score="", fever="", symptoms_worse="", notes="",
@@ -187,9 +197,10 @@ def record_checkin(phone, dob, booking_id="", pain_score="", fever="", symptoms_
             flag_nurse_alert(p["phone"], f"Check-in warning: pain {pain}, fever {fev}, worse {worse}. {clean(notes)[:150]}", p, c)
         pt.log(c, p["id"], "record_checkin", f"CI-{10000 + cid}", True, f"Check-in, alert={alert}", channel=channel)
     if alert:
-        return ok("Thank you. Because of your answers, a nurse will call you shortly. If you feel much worse, call 108.",
+        return ok("Thank you. Because of your answers, a nurse will call you within 15 minutes. If you feel much worse, call 108.",
                   checkin_id=f"CI-{10000 + cid}", alert_raised=True)
-    return ok("Thank you, that's good to hear. Keep following your doctor's advice.", checkin_id=f"CI-{10000 + cid}", alert_raised=False)
+    return ok("Thank you, that's good to hear. Keep following your doctor's advice. Your visit includes a free follow-up review "
+              "within 7 days if you'd like one.", checkin_id=f"CI-{10000 + cid}", alert_raised=False)
 
 
 def submit_feedback(phone, rating, comment="", booking_id="") -> Result:
@@ -232,8 +243,11 @@ def schedule_followup(phone, dob, doctor_name="", within_days="") -> Result:
         if not doc:
             return fail("invalid_input", "Which doctor is the follow-up with?")
         nxt = ap.next_available(c, [doc], config.today() + timedelta(days=1), "any", days)
+        until = ap.free_review_until(c, p["id"], doc["id"], nxt[0]) if nxt else None
     if not nxt:
         return ok(f"{doc['name']} has no free slots in the next {days} days. I can add you to the waitlist.", doctor=doc["name"])
     d, _, slots = nxt
-    return ok(f"For your follow-up, {doc['name']} is free on {human_date(d)} at {', '.join(human_time(t) for t in slots[:3])}. "
-              "Which time should I book?", doctor=doc["name"], date_iso=d.isoformat(), free_slots=[human_time(t) for t in slots[:3]])
+    free = f" This review is free if it is on or before {human_date(until)}." if until else ""
+    return ok(f"For your follow-up, {doc['name']} is free on {human_date(d)} at {', '.join(human_time(t) for t in slots[:3])}.{free} "
+              "Which time should I book?", doctor=doc["name"], date_iso=d.isoformat(), free_slots=[human_time(t) for t in slots[:3]],
+              free_review=bool(until))

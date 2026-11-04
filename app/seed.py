@@ -274,6 +274,16 @@ def ensure_extras() -> dict:
             real = config.DEMO_PERSONA_EMAILS.get(p["key"])
             if real:
                 c.execute(db.patients.update().where(db.patients.c.id == pid).values(email=real, web_email=real.lower()))
+        # Rahul's ready report: the lab status reply is where his medicine refill is offered. Ready 3 days ago, so it
+        # doesn't also start an automatic "report ready" call during a demo.
+        if c.execute(select(db.patients.c.id).where(db.patients.c.id == 4, db.patients.c.phone == "+919845000004")).first() and \
+                not c.execute(select(db.lab_reports.c.id).where(db.lab_reports.c.report_code == "LR-20950")).first():
+            summ, res = LAB_TESTS["Lipid Profile"]
+            c.execute(db.lab_reports.insert().values(
+                report_code="LR-20950", patient_id=4, doctor_id=11, test_name="Lipid Profile", status="ready",
+                ordered_at=NOW - timedelta(days=4), ready_at=NOW - timedelta(days=3), summary=summ,
+                results={k: {"value": v[0], "range": v[1]} for k, v in res.items()}))
+            done["lab_reports"] = 1
         for rx in _persona_rx(T):
             if not c.execute(select(db.prescriptions.c.id).where(db.prescriptions.c.patient_id == rx["patient_id"],
                                                                  db.prescriptions.c.medicine_name == rx["medicine_name"])).first():

@@ -160,7 +160,8 @@ async def main():
             shan_bid = next(a["booking_id"] for a in up["data"]["appointments"] if "Iyer" in a["with"])
             b, ms, _ = await call(s, "cancel_appointment", dict(booking_id=shan_bid, **ARJUN))
             check("A4 Arjun cannot cancel Shanthamma's booking", not b["ok"] and b["error_code"] == "not_allowed", b, ms)
-            b, ms, _ = await call(s, "cancel_appointment", {"booking_id": shan_bid, "phone": SHAN["phone"]})
+            # a number not verified earlier in this run: verified numbers are remembered for VERIFIED_SESSION_MIN
+            b, ms, _ = await call(s, "cancel_appointment", {"booking_id": shan_bid, "phone": "9845000005"})
             check("V1-style cancel without DOB asks for it", not b["ok"] and b["error_code"] == "not_verified", b, ms)
 
             # A5 cancel -> waitlist offer -> accept

@@ -214,3 +214,102 @@ def test_refill_reminder_job_and_verified_session():
     assert wl.get_balance(RAHUL, "").error_code == "not_verified"    # cold: needs the date of birth
     assert wl.get_balance(RAHUL, RAHUL_DOB).ok
     assert wl.get_balance(RAHUL, "").data["balance_credits"] == 1800
+
+
+def test_shared_family_wallet_limits_sms_and_refund():
+    r = wl.set_share(SHAN, SHAN_DOB, PRIYA, per_txn_limit="1000")
+    assert r.ok and r.data["shared"]
+    assert wl.set_share(SHAN, "1990-01-01", PRIYA).error_code == "not_verified"
+    o = ph.order(PRIYA, PRIYA_DOB, "5 Gelusil", confirm="yes")       # 600 rupees: 400 her own, 200 from Shanthamma
+    assert o.ok and o.data["credits_used"] == 600 and o.data["amount_by_link_inr"] == 0
+    assert _bal(3) == 0 and _bal(1) == 3300
+    with db.engine.connect() as c:
+        assert c.execute(select(db.notifications).where(db.notifications.c.template == "shared_wallet_debit",
+                                                        db.notifications.c.to_address == "+919845000001")).first()
+    assert ph.track(PRIYA, PRIYA_DOB, o.data["order_id"], "cancel").ok
+    assert _bal(3) == 400 and _bal(1) == 3500                        # each payer gets their own share back
+    assert wl.set_share(SHAN, SHAN_DOB, PRIYA, action="stop").data["shared"] is False
+    with db.engine.connect() as c:
+        assert wl.pool_available(c, 3) == (None, 0)
+
+
+def test_off_campus_wheelchair_deposit_held_and_released():
+    needs_dob = ap.request_assistance("WN-48213", SHAN, "wheelchair", off_campus="yes")
+    assert needs_dob.error_code == "not_verified"
+    r = ap.request_assistance("WN-48213", SHAN, "wheelchair", "Gate 2", date_of_birth=SHAN_DOB, off_campus="yes")
+    assert r.ok and _bal(1) == 2500 and r.data["assistance_id"].startswith("AS-")
+    assert wl.release_wheelchair_deposit("WN-48213").ok and _bal(1) == 3500
+    assert wl.release_wheelchair_deposit("WN-48213").ok and _bal(1) == 3500     # releasing twice pays once
+
+
+def test_two_way_escort_token_and_caregiver_copy():
+    r = ap.request_assistance("WN-48213", SHAN, "wheelchair", "Gate 1, 9:40 AM")
+    assert r.ok and r.data["two_way"] and r.data["gate"] == "Gate 1" and r.data["assistance_id"] in r.message
+    assert "back to your vehicle" in r.message                       # Shanthamma is a senior: short reply, same promise
+    with db.engine.connect() as c:
+        assert c.execute(select(db.notifications).where(db.notifications.c.template == "assistance_cg")).first()
+
+
+def test_cancellation_reference_and_grievance_code():
+    from app.services import support
+    c = ap.cancel("WN-48213", SHAN, SHAN_DOB)
+    assert c.data["cancellation_id"].startswith("CN-") and c.data["cancellation_id"] in c.message
+    h = support.create_handoff("Charged twice", "normal", RAHUL, "complaint")
+    assert h.data["grievance_id"].startswith("GRV-") and h.data["grievance_id"] in h.message
+    assert support.handoff_status(h.data["grievance_id"]).ok         # the patient can quote either reference
+
+
+def test_free_review_within_seven_days_once():
+    from app.services import support
+    with db.engine.connect() as c:
+        a = c.execute(select(db.appointments).where(db.appointments.c.patient_id == 1, db.appointments.c.doctor_id == 5)).mappings().first()
+    doc = ref.REF.doctors[5]
+    with db.engine.begin() as c:                                     # her visit was 3 days ago
+        c.execute(update(db.appointments).where(db.appointments.c.id == a["id"]).values(appt_date=config.today() - timedelta(days=3)))
+    d = config.today() + timedelta(days=1)
+    while d.isoweekday() not in doc["days"]:
+        d += timedelta(days=1)
+    s = ap.find_slots(d.isoformat(), doctor_name=doc["name"])
+    first = ap.book(SHAN, d.isoformat(), s.data["doctors"][0]["free_slots"][0], doctor_name=doc["name"], date_of_birth=SHAN_DOB)
+    if (d - (config.today() - timedelta(days=3))).days <= 7:
+        assert first.ok and first.data["fee_inr"] == 0 and "free" in first.message
+        assert wl.pay(SHAN, first.data["booking_id"], "").data["paid_credits"] == 0 and _bal(1) == 3500
+        s2 = ap.find_slots(d.isoformat(), doctor_name=doc["name"])
+        second = ap.book(SHAN, d.isoformat(), s2.data["doctors"][0]["free_slots"][0], doctor_name=doc["name"])
+        assert second.ok and second.data["fee_inr"] == doc["fee_inr"]    # only one free review
+    assert support.schedule_followup(SHAN, "", doc["name"]).ok
+
+
+def test_refill_offered_with_lab_status_and_in_verify():
+    from app.services import patients as pt, records
+    r = records.lab_status(RAHUL, RAHUL_DOB)
+    assert "Lipid Profile is ready" in r.message and "runs out" in r.message
+    assert "runs out" in records.email_report(RAHUL, "").message
+    assert pt.verify(RAHUL, RAHUL_DOB).data["refill_due"]
+
+
+def test_caregiver_voice_alert_is_queued_after_nurse_alert_without_symptoms():
+    from app.services import outbound as ob, support
+    support.flag_nurse_alert(SHAN, "severe wound bleeding")
+    with db.engine.connect() as c:
+        call = c.execute(select(db.outbound_calls).where(db.outbound_calls.c.kind == "caregiver_update")).mappings().first()
+    assert call and call["to_number"] == "+919845000011" and "bleeding" not in call["prompt"]
+    assert ob._dial(call["id"])["status"] == "simulated"
+    assert ob.handle_event(call["call_code"], "choice", "1")["outcome"] == "acknowledged"
+
+
+def test_scan_event_starts_with_the_fast_and_signed_calendar_link():
+    from fastapi.testclient import TestClient
+    from app.api import create_app
+    d = config.today() + timedelta(days=2)
+    while d.isoweekday() == 7:
+        d += timedelta(days=1)
+    s = ap.find_slots(d.isoformat(), procedure="Ultrasound Abdomen", phone="")
+    b = ap.book(RAHUL, d.isoformat(), s.data["free_slots"][-1], procedure="Ultrasound Abdomen", date_of_birth=RAHUL_DOB)
+    with db.engine.connect() as c:
+        ev = cal.get(c, b.data["booking_id"])
+    assert ev["title"].startswith("Prep & Scan") and ev["minutes"] == 20 + 6 * 60 and "Fasting: 6 hours" in ev["details"]
+    web = TestClient(create_app(), follow_redirects=False)
+    path = b.data["calendar_link"].split(config.PUBLIC_BASE_URL)[1]
+    assert web.get(path).headers["location"].startswith("https://calendar.google.com/")
+    assert web.get("/cal/not-a-real-token").status_code == 404

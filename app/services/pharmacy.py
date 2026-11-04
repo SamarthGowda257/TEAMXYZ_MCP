@@ -208,8 +208,8 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
             return fail("prescription_required",
                         f"{_label(r)} is {kind} under Schedule {r['schedule_class']}, and I can't find a prescription for it "
                         "from the last 6 months on your record, so by law our pharmacy can't send it. I can book a quick "
-                        f"consultation with {GP} in General Medicine, 600 rupees, so a doctor can review it and prescribe "
-                        f"the right treatment. Shall I check his slots?"
+                        f"consultation, in person or by video, with {GP} in General Medicine, 600 rupees, so a doctor can review "
+                        f"it and prescribe the right treatment. Shall I check his slots?"
                         + (f" The other items ({', '.join(x['brand_name'] for x in otc)}) don't need a prescription; I can "
                            "order those on their own." if otc else ""),
                         next_step="book_consultation", department="General Medicine", doctor=GP)
@@ -241,8 +241,9 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
         if backorder:
             eta = max([r["restock_eta"] for r, q in rows if r["stock_qty"] < q and r["restock_eta"]] + [eta]) + timedelta(minutes=30)
         cold = any(r["cold_chain"] for r, _ in rows)
-        bal = wallet.balance(c, p["id"])
+        bal = wallet.spendable(c, p)                   # own credits plus any family wallet they may draw on
         child = wallet.minor(p)
+        rx_doc = next((rx for r, _ in rows if r["schedule_class"] in ("H", "H1") and (rx := active_prescription(c, p["id"], r))), None)
         credits = 0 if (method == "payment_link" or child) else min(bal, total)
         due = total - credits
         summary = ", ".join(f"{i['qty']} x {i['name'].split(' (')[0]}" for i in items)
@@ -257,12 +258,12 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
                         ("As this is a child's account, the payment link will go to the parent or guardian. Shall I place it?"
                          if child else f"I'll send a secure payment link for {rupees(total)}. Shall I place the order?"))
             when = "within 90 minutes" if zone == "express" and not backorder else _eta_text(eta)
-            return ok(f"{summary}: {rupees(subtotal)}"
+            return ok(("Your prescription on file is valid. " if rx_doc else "") + f"{summary}: {rupees(subtotal)}"
                       + (f", plus {rupees(fee)} delivery (free from 500 rupees)" if fee else ", with free delivery")
                       + f", total {rupees(total)}. Delivery to {address} {when}. {pay_line}{cold_note}",
                       quote={"items": items, "subtotal_inr": subtotal, "delivery_fee_inr": fee, "total_inr": total,
                              "credits_to_use": credits, "amount_by_link_inr": due, "balance_credits": bal},
-                      needs="confirm")
+                      needs="confirm", prescription_verified=bool(rx_doc))
         # 5. place it (idempotent: the same order in the same minute is the same order)
         key = hashlib.sha256(f"{p['id']}|{sorted((i['code'], i['qty']) for i in items)}|{total}|{address}|"
                              f"{config.now().strftime('%Y%m%d%H%M')}".encode()).hexdigest()[:40]
@@ -277,7 +278,7 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
                                      delivery_address=address[:200], zone=zone, status=status, cold_chain=cold, eta=eta,
                                      idempotency_key=key, created_at=config.now(), updated_at=config.now()))
         if credits:
-            good, txn = wallet.debit(c, p["id"], credits, "pharmacy", code, f"order:{code}")
+            good, txn = wallet.debit_with_pool(c, p, credits, "pharmacy", code, f"order:{code}")
             if not good:
                 raise RuntimeError("balance changed")      # rolls the order back; the guard returns a retry message
         link = None
@@ -287,7 +288,7 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
         for r, q in rows:
             if r["stock_qty"] >= q:
                 c.execute(update(INV).where(INV.c.id == r["id"]).values(stock_qty=INV.c.stock_qty - q, updated_at=config.now()))
-        new_bal = wallet.balance(c, p["id"])
+        new_bal = wallet.spendable(c, p)
         pt.log(c, p["id"], "order_medicine", code, True, f"{summary}; total {total}; credits {credits}; due {due}")
         _order_messages(c, p, code, items, subtotal, fee, total, credits, new_bal, due, link, address, eta, zone, cold,
                         backorder, child)
@@ -357,6 +358,26 @@ def _order_messages(c, p, code, items, subtotal, fee, total, credits, new_bal, d
                                f"call 080 4000 1240, or visit {config.PUBLIC_BASE_URL}.")
 
 
+def refill_due(conn, patient_id, within_days: int = 5) -> list[dict]:
+    """Maintenance medicines whose supply runs out soon (the proactive restock offer)."""
+    T = config.today()
+    rows = conn.execute(select(RX).where(RX.c.patient_id == patient_id, RX.c.end_date >= T,
+                                         RX.c.end_date <= T + timedelta(days=within_days))).mappings().all()
+    out = []
+    for rx in rows:
+        item = find(conn, rx["medicine_name"])
+        if item and item["chronic"]:
+            out.append({"medicine": rx["medicine_name"], "runs_out": human_date(rx["end_date"])})
+    return out[:3]
+
+
+def refill_line(due: list[dict]) -> str:
+    if not due:
+        return ""
+    return (f" Your supply of {due[0]['medicine']} runs out on {due[0]['runs_out']}. Would you like our pharmacy to deliver a "
+            "refill, or would you prefer a review with your doctor?")
+
+
 def payment_received(conn, order_code) -> None:
     o = conn.execute(select(ORD).where(ORD.c.order_code == order_code)).mappings().first()
     if not o or o["status"] != "awaiting_payment":
@@ -393,7 +414,7 @@ def track(phone, dob="", order_id="", action="") -> Result:
                 return ok(f"Order {o['order_code']} is already cancelled.", order_id=o["order_code"], status="cancelled")
             c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="cancelled", updated_at=config.now()))
             back = o["credits_used"]
-            wallet.credit(c, p["id"], back, "refund", o["order_code"], f"order_refund:{o['order_code']}")
+            wallet.give_back(c, p["id"], back, o["order_code"], f"order:{o['order_code']}", f"order_refund:{o['order_code']}")
             for i in o["items"]:
                 if not i.get("backorder"):
                     c.execute(update(INV).where(INV.c.medicine_code == i["code"]).values(stock_qty=INV.c.stock_qty + i["qty"]))
@@ -446,7 +467,10 @@ def advance() -> dict:
             notify.email_and_sms(c, patient=p, template="pharmacy_dispatched", key=f"disp:{o['order_code']}",
                                  subject=f"Dispatched: medicine order {o['order_code']} is on its way",
                                  body=f"Dear {p['full_name']},\n\nOrder {o['order_code']} has left the pharmacy and is expected "
-                                      f"{_eta_text(eta)}.\nLive tracking: {track_url}\n"
+                                      f"{_eta_text(eta)}.\nLive tracking: {track_url}\n\n"
+                                      + "\n".join(f"  {i['qty']} x {i['name']} ({i['pack']}) = {i['line_total']} rupees" for i in o["items"])
+                                      + f"\n  Delivery: {o['delivery_fee_inr']} rupees\n  Total: {o['total_inr']} rupees"
+                                        f"\n  Paid with HealthCredits: {o['credits_used']}\n"
                                       + ("\nCold-chain medicine: the rider will ask for an OTP; an adult must receive it.\n" if o["cold_chain"] else "")
                                       + "\nWellNest Hospitals",
                                  sms=f"WellNest: order {o['order_code']} is on its way, expected {_eta_text(eta)}. {track_url}")
@@ -459,7 +483,7 @@ def advance() -> dict:
         n["delivered"] = res.rowcount or 0
         for o in c.execute(select(ORD).where(ORD.c.status == "awaiting_payment", ORD.c.created_at <= now - timedelta(hours=24))).mappings().all():
             c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="cancelled", updated_at=now))
-            wallet.credit(c, o["patient_id"], o["credits_used"], "refund", o["order_code"], f"order_refund:{o['order_code']}")
+            wallet.give_back(c, o["patient_id"], o["credits_used"], o["order_code"], f"order:{o['order_code']}", f"order_refund:{o['order_code']}")
             n["expired"] += 1
     return n
 

@@ -112,6 +112,19 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
     return {"ok": True}
 
 
+@router.get("/cal/{token}", include_in_schema=False)
+def calendar_redirect(token: str):
+    """The short link in chat and SMS: opens Google Calendar with the event filled in. The link is signed, so booking
+    details can't be read by guessing a booking ID."""
+    from .security import read_token
+    body = read_token(token)
+    with db.engine.connect() as c:
+        e = cal.get(c, body["cal"]) if body and body.get("cal") else None
+    if not e or e["status"] == "cancelled":
+        return _page("Calendar", "<h1>Link not available</h1><p>This booking may have changed. Please check your latest message.</p>", 404)
+    return RedirectResponse(cal.google_link(e), status_code=302)
+
+
 @router.get("/track/{order}", include_in_schema=False)
 def track_page(order: str):
     s = ph.public_status(order)
@@ -145,6 +158,19 @@ def my_ics(code: str, authorization: str = Header(default="")):
 def _ops(request: Request, token: str = "", x_dashboard_token: str = Header(default="")):
     from .api import ops_auth
     return ops_auth(request, token, x_dashboard_token)
+
+
+class WheelchairBack(BaseModel):
+    booking_id: str
+
+
+@router.post("/api/ops/wheelchair-returned", dependencies=[Depends(_ops)])
+def wheelchair_returned(b: WheelchairBack):
+    """Staff: the off-campus wheelchair came back; release the deposit."""
+    res = wl.release_wheelchair_deposit(norm_code(b.booking_id, "WN") or "").as_dict()
+    if not res["ok"]:
+        raise HTTPException(404, detail={"message": res["message"]})
+    return res
 
 
 class Delay(BaseModel):
@@ -182,10 +208,9 @@ def doctor_delay(b: Delay):
                                 subject=f"Update for {p['full_name']}: doctor running late",
                                 body=f"{p['full_name']}'s visit: {text}",
                                 sms=f"{p['full_name']}'s visit with {doc['name']} now ~{when} ({b.minutes} min delay).")
-            if p.get("caregiver_consent") and p.get("caregiver_phone") and b.minutes >= 20:
-                notify.queue(c, patient_id=p["id"], channel="voice_call", template="doctor_delay_call", to=p["caregiver_phone"],
-                             body=f"Hello {p.get('caregiver_name') or ''}, this is an automated update from WellNest Hospitals about "
-                                  f"{p['full_name']}. {text}", dedupe_key=f"delaycall:{a['booking_code']}:{b.minutes}")
+            if b.minutes >= 20:
+                from .services import outbound
+                outbound.queue_caregiver_call(c, p, text, f"delay:{a['booking_code']}:{b.minutes}")
             e = cal.get(c, a["booking_code"])
             if e and b.minutes >= 20:
                 cal.upsert(c, ref=a["booking_code"], patient=p, kind="appointment", title=e["title"] + " (delayed)",

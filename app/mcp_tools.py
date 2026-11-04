@@ -294,6 +294,18 @@ def request_credits_refund(phone: Phone, date_of_birth: SDob = "",
     return wl.request_refund(phone, amount, date_of_birth)
 
 
+@tool
+def set_shared_wallet(phone: Phone,
+                      family_phone: Annotated[S, Field(description="Mobile number of the registered family member who may use these credits.")],
+                      date_of_birth: SDob = "",
+                      per_transaction_limit: Annotated[S, Field(description="Optional. Most they can spend per order, in rupees, e.g. 1500.")] = "",
+                      daily_limit: Annotated[S, Field(description="Optional. Most they can spend per day, in rupees.")] = "",
+                      action: Annotated[S, Field(description="Optional. 'stop' to remove their access; empty to allow or change limits.")] = "") -> dict:
+    """Let a registered family member pay from this patient's HealthCredits, with optional limits. phone and date of birth are
+    those of the wallet owner. The owner gets an SMS for every use."""
+    return wl.set_share(phone, date_of_birth, family_phone, per_transaction_limit, daily_limit, action)
+
+
 # ======================================================================== Info
 @tool
 def get_doctors(department: Dept = "", doctor_name: Doc = "") -> dict:
@@ -350,9 +362,12 @@ def set_patient_preferences(phone: Phone, date_of_birth: SDob = "",
 @tool
 def request_assistance(booking_id: BookingId, phone: Phone,
                        assistance_type: Annotated[S, Field(description="wheelchair, escort, interpreter or transport_desk.")],
-                       notes: Annotated[S, Field(description="Optional. Any detail for the help desk.")] = "") -> dict:
-    """Arrange wheelchair, escort, interpreter or transport-desk help for the patient's own booking."""
-    return ap.request_assistance(booking_id, phone, assistance_type, notes)
+                       notes: Annotated[S, Field(description="Optional. Arrival gate and time, e.g. 'Gate 2, 9:40 AM'.")] = "",
+                       off_campus: Annotated[S, Field(description="Optional. yes only if the wheelchair will leave the hospital grounds: holds a 1,000 credit refundable deposit.")] = "",
+                       date_of_birth: OptDob = "") -> dict:
+    """Arrange free wheelchair, escort, interpreter or transport-desk help for the patient's own booking. Wheelchair and
+    escort are two-way: the porter meets them at the gate and takes them back to their vehicle. Returns the token (AS-xxxxx)."""
+    return ap.request_assistance(booking_id, phone, assistance_type, notes, date_of_birth=date_of_birth, off_campus=off_campus)
 
 
 @tool

@@ -17,6 +17,7 @@ from .ref import REF
 P = db.patients
 LOCK_AFTER = 5
 LOCK_WINDOW_MIN = 15
+UHID_FEE = 150
 NOT_VERIFIED = "I couldn't verify those details. Please check the registered mobile number and date of birth and try again."
 ASK_IDENTITY = "Please share the registered mobile number and date of birth so I can check that securely."
 
@@ -144,13 +145,15 @@ def snapshot(conn, p: dict) -> dict:
         upcoming.append({"booking_id": a["booking_code"], "date": human_date(a["appt_date"]),
                          "time": human_time(a["appt_time"]), "with": who})
     open_offer = current_offer(conn, p["id"])
+    from . import pharmacy
+    refills = pharmacy.refill_due(conn, p["id"])
     ins = REF.insurers.get(p["insurer_id"]) if p["insurer_id"] else None
     return {"open_offer": open_offer, "patient_ref": p["patient_code"], "name": p["full_name"], "age": age_on(p["date_of_birth"]),
             "is_senior": is_senior(p), "upcoming": upcoming, "pending_reports": pending, "ready_reports": ready,
             "insurer": ins["name"] if ins else "none",
             "recent_notes": [f"{n['created_at'].strftime('%d %b')}: {n['summary']}" for n in notes],
             "caregiver_on_file": bool(p["caregiver_name"]), "preferred_language": p["preferred_language"],
-            "mobility_needs": p["mobility_needs"]}
+            "mobility_needs": p["mobility_needs"], "refill_due": refills}
 
 
 def verify(phone, dob) -> Result:
@@ -218,9 +221,13 @@ def register(name, phone, dob, email, gender="", insurance_provider="", channel=
             pid, code = existing["id"], existing["patient_code"]
         else:
             pid = c.execute(insert(P).values(patient_code=code, **vals)).inserted_primary_key[0]
+        c.execute(insert(db.bills).values(bill_code=random_code("BL"), patient_id=pid, description="Lifetime digital health record (UHID)",
+                                          amount_inr=UHID_FEE, insurer_paid_inr=0, status="due",
+                                          due_date=config.today() + timedelta(days=15), created_at=config.now()))
         log(c, pid, "register_patient", code, True, f"Registered {name}", channel=channel)
         senior = age_on(d) >= 60
-    msg = f"Welcome to WellNest, {name.split()[0]}. You're registered with patient ID {code}."
+    msg = (f"Welcome to WellNest, {name.split()[0]}. You're registered with patient ID {code}. "
+           f"There is a one-time {UHID_FEE} rupee charge for your lifetime digital health record.")
     if ins:
         msg += f" I've noted your insurer as {ins['name']}."
     return ok(msg, patient_ref=code, is_senior=senior)

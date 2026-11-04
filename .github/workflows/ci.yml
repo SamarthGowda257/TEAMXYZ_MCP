@@ -51,7 +51,7 @@ jobs:
         env:
           SEARCH_URL: http://localhost:8000
           DASHBOARD_TOKEN: ci-token
-      - name: MCP acceptance checks (34) over the real transport
+      - name: MCP acceptance checks over the real transport
         run: python scripts/smoke_mcp.py
         env:
           MCP_URL: http://localhost:8000/mcp

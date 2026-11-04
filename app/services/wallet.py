@@ -14,17 +14,18 @@ import logging
 from datetime import timedelta
 
 import httpx
-from sqlalchemy import insert, select, update
+from sqlalchemy import func, insert, select, update
 
 from .. import config, db, events, notify
 from ..util import Result, age_on, clean, fail, norm_code, ok, rupees
 from . import patients as pt
 
 log = logging.getLogger("wellnest.wallet")
-W, T, L = db.health_credit_wallets, db.health_credit_txns, db.payment_links
+W, T, L, S = db.health_credit_wallets, db.health_credit_txns, db.payment_links, db.wallet_shares
 # Top-up bonus tiers (credits added per rupee deposited): 5,000 or more -> 7%, 2,000 or more -> 5%.
 BONUS_TIERS = [(5000, 7), (2000, 5)]
 LATE_CANCEL_FEE = 150          # cancelled within 2 hours of the slot (or no-show)
+WHEELCHAIR_DEPOSIT = 1000      # held only if a wheelchair leaves the campus; back in full when it is returned
 
 
 def bonus_for(amount: int) -> int:
@@ -80,6 +81,123 @@ def credit(conn, patient_id, amount: int, service: str, reference: str, key: str
     _ensure(conn, patient_id)
     conn.execute(update(W).where(W.c.patient_id == patient_id).values(balance=W.c.balance + amount, updated_at=config.now()))
     return _txn(conn, patient_id, "credit", amount, service, reference, key)
+
+
+# ------------------------------------------------------------------ shared family wallet
+def _pool_key(member_id, key: str) -> str:
+    return f"pool:{member_id}:{key}"[:100]
+
+
+def pool_available(conn, member_id) -> tuple[int | None, int]:
+    """(owner_id, credits this family member may draw right now), within the owner's limits."""
+    s = conn.execute(select(S).where(S.c.member_patient_id == member_id, S.c.active.is_(True))).mappings().first()
+    if not s:
+        return None, 0
+    start = config.now().replace(hour=0, minute=0, second=0)
+    spent = conn.execute(select(func.coalesce(func.sum(T.c.amount), 0)).where(
+        T.c.patient_id == s["owner_patient_id"], T.c.direction == "debit", T.c.created_at >= start,
+        T.c.idempotency_key.like(f"pool:{member_id}:%"))).scalar() or 0
+    room = balance(conn, s["owner_patient_id"])
+    if s["per_txn_limit"]:
+        room = min(room, s["per_txn_limit"])
+    if s["daily_limit"]:
+        room = min(room, max(0, s["daily_limit"] - int(spent)))
+    return s["owner_patient_id"], max(0, room)
+
+
+def spendable(conn, p: dict) -> int:
+    return balance(conn, p["id"]) + pool_available(conn, p["id"])[1]
+
+
+def debit_with_pool(conn, p: dict, amount: int, service: str, reference: str, key: str) -> tuple[bool, str]:
+    """The patient's own credits first, then the family pool. The owner gets an SMS for every draw. Idempotent."""
+    done = prior(conn, key) or prior(conn, _pool_key(p["id"], key))
+    if done:
+        return True, done["txn_code"]
+    own = min(balance(conn, p["id"]), amount)
+    owner_id, room = pool_available(conn, p["id"])
+    if own + room < amount:
+        return False, "insufficient"
+    good, txn = debit(conn, p["id"], own, service, reference, key)
+    if not good:
+        return False, txn
+    rest = amount - own
+    if rest:
+        good, pool_txn = debit(conn, owner_id, rest, service, reference, _pool_key(p["id"], key))
+        if not good:
+            raise RuntimeError("family wallet balance changed")     # rolls the whole payment back
+        txn = txn or pool_txn
+        owner = pt.get_by_id(conn, owner_id)
+        notify.queue(conn, patient_id=owner_id, channel="sms", template="shared_wallet_debit", to=owner["phone"],
+                     body=f"WellNest: {rest:,} credits used from your wallet for {p['full_name']} ({reference}). "
+                          f"Balance {balance(conn, owner_id):,}.", dedupe_key=f"sw:{p['id']}:{key}"[:80])
+    return True, txn
+
+
+def give_back(conn, patient_id, amount: int, reference: str, debit_key: str, refund_key: str) -> None:
+    """Return credits to whoever paid: the family pool's share to its owner, the rest to the patient."""
+    pool = prior(conn, _pool_key(patient_id, debit_key))
+    pool_part = min(amount, pool["amount"]) if pool else 0
+    if pool_part:
+        credit(conn, pool["patient_id"], pool_part, "refund", reference, f"{refund_key}:pool"[:100])
+    credit(conn, patient_id, amount - pool_part, "refund", reference, refund_key)
+
+
+def set_share(phone, dob, family_phone, per_txn_limit="", daily_limit="", action="") -> Result:
+    def limit(v):
+        return int(float(clean(v).replace(",", ""))) if clean(v) else None
+    try:
+        per, day = limit(per_txn_limit), limit(daily_limit)
+    except ValueError:
+        return fail("invalid_input", "Please say the limits as amounts in rupees, for example 1,500.")
+    stop = clean(action).lower() in ("stop", "remove", "revoke", "off", "cancel")
+    with db.engine.begin() as c:
+        owner, err = pt.check_identity(c, phone, dob)
+        if err:
+            return err
+        member = pt.get_by_phone(c, family_phone)
+        if not member or member["id"] == owner["id"]:
+            return fail("not_found", "I couldn't find another WellNest patient on that mobile number. They need to be registered first.")
+        if minor(owner):
+            return fail("not_allowed", "A child's account can't share credits. A parent or guardian can set this up from their own account.")
+        row = c.execute(select(S).where(S.c.owner_patient_id == owner["id"], S.c.member_patient_id == member["id"])).mappings().first()
+        first = member["full_name"].split()[0]
+        if stop:
+            if row:
+                c.execute(update(S).where(S.c.id == row["id"]).values(active=False, updated_at=config.now()))
+            pt.log(c, owner["id"], "set_shared_wallet", member["patient_code"], True, "Stopped sharing credits")
+            return ok(f"Done. {first} can no longer use your HealthCredits.", shared=False)
+        vals = dict(per_txn_limit=per, daily_limit=day, active=True, updated_at=config.now())
+        if row:
+            c.execute(update(S).where(S.c.id == row["id"]).values(**vals))
+        else:
+            c.execute(insert(S).values(owner_patient_id=owner["id"], member_patient_id=member["id"], created_at=config.now(), **vals))
+        pt.log(c, owner["id"], "set_shared_wallet", member["patient_code"], True, f"Shared credits, limits {per} / {day}")
+    limits = "".join([f", up to {rupees(per)} per order" if per else "", f", up to {rupees(day)} a day" if day else ""])
+    return ok(f"Done. {first} can now pay from your HealthCredits{limits}. You'll get an SMS every time they do.",
+              shared=True, per_transaction_limit=per, daily_limit=day)
+
+
+# ------------------------------------------------------------------ wheelchair deposit
+def hold_wheelchair_deposit(conn, p: dict, booking_code: str) -> tuple[bool, int]:
+    good, _ = debit(conn, p["id"], WHEELCHAIR_DEPOSIT, "wheelchair_deposit", booking_code, f"wheelchair:{booking_code}")
+    return good, balance(conn, p["id"])
+
+
+def release_wheelchair_deposit(booking_code: str) -> Result:
+    """Staff: the wheelchair came back to Gate 2. The deposit returns to the wallet exactly once."""
+    with db.engine.begin() as c:
+        held = prior(c, f"wheelchair:{booking_code}")
+        if not held:
+            return fail("not_found", f"There's no wheelchair deposit held for {booking_code}.")
+        p = pt.get_by_id(c, held["patient_id"])
+        credit(c, p["id"], held["amount"], "refund", booking_code, f"wheelchair_back:{booking_code}")
+        pt.log(c, p["id"], "wheelchair_deposit_released", booking_code, True, f"Released {held['amount']} credits", "system", "web")
+        notify.queue(c, patient_id=p["id"], channel="sms", template="wheelchair_deposit_back", to=p["phone"],
+                     body=f"WellNest: wheelchair returned. {held['amount']:,} credits are back in your wallet.",
+                     dedupe_key=f"wcback:{booking_code}")
+        bal = balance(c, p["id"])
+    return ok(f"Released. {held['amount']:,} credits are back in the wallet.", balance_credits=bal, booking_id=booking_code)
 
 
 def minor(p: dict) -> bool:
@@ -240,16 +358,18 @@ def pay(phone, reference, dob="") -> Result:
                 return fail("not_allowed", f"Booking {a['booking_code']} is {a['status']}, so there is nothing to pay.")
             code, v = a["booking_code"], ap._appt_view(a)
             amount, service, label = v["fee_inr"], ("opd" if a["doctor_id"] else "lab"), f"your {v['with']} booking {code}"
+            if not amount:
+                return ok(f"Nothing to pay: {label} is your free follow-up review.", reference=code, paid_credits=0)
         key = f"pay:{code}"
-        if prior(c, key):
+        if prior(c, key) or prior(c, _pool_key(p["id"], key)):
             return ok(f"{label[0].upper() + label[1:]} is already paid with HealthCredits.", reference=code,
                       balance_credits=balance(c, p["id"]))
-        bal = balance(c, p["id"])
+        bal = spendable(c, p)
         if bal < amount:
             return fail("insufficient_credits", f"That's {rupees(amount)} and you have {bal:,} HealthCredits. I can send a "
                                                 f"top-up link, or a payment link for the full amount.",
                         amount_inr=amount, balance_credits=bal)
-        good, txn = debit(c, p["id"], amount, service, code, key)
+        good, txn = debit_with_pool(c, p, amount, service, code, key)
         if not good:
             return fail("insufficient_credits", "Your balance changed just now. Please check it and try again.")
         if service == "bill":
@@ -269,12 +389,13 @@ def pay(phone, reference, dob="") -> Result:
 def refund_for_cancelled_booking(conn, p: dict, a: dict, starts_at) -> int:
     """If the fee was paid with HealthCredits, return it: in full when cancelled more than 2 hours ahead,
     otherwise minus the 150 rupee late fee. Returns the credits refunded."""
-    paid = prior(conn, f"pay:{a['booking_code']}")
+    key = f"pay:{a['booking_code']}"
+    paid = sum(t["amount"] for t in (prior(conn, key), prior(conn, _pool_key(p["id"], key))) if t)
     if not paid:
         return 0
     late = (starts_at - config.now()) < timedelta(hours=2)
-    amount = max(0, paid["amount"] - (LATE_CANCEL_FEE if late else 0))
-    credit(conn, p["id"], amount, "refund", a["booking_code"], f"refund:{a['booking_code']}")
+    amount = max(0, paid - (LATE_CANCEL_FEE if late else 0))
+    give_back(conn, p["id"], amount, a["booking_code"], key, f"refund:{a['booking_code']}")
     return amount
 
 

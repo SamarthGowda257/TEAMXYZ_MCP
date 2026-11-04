@@ -4,6 +4,8 @@ Copy-paste instructions for building the WellNest bot in the Talkdesk sandbox
 (`pesit-hackathon.mytalkdesk.com`), orchestration **`WellNest_TeamXYZ`**.
 Everything here matches the live MCP server exactly (tool names, input names, replies).
 
+> **Pharmacy, HealthCredits and the latest routing:** apply `docs/TALKDESK_AGENT_UPDATE.md` after this sheet.
+>
 > **Safety rules (shared sandbox)**
 > - Touch only things named `*_TeamXYZ`. Every action is audit-logged.
 > - One person edits the canvas at a time. Click **both** Saves (panel + top) after every change.
