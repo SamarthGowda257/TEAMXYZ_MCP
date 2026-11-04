@@ -19,7 +19,7 @@ import re
 import time as _time
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, insert, select, update
+from sqlalchemy import and_, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .. import config, db, notify, talkdesk
@@ -599,7 +599,7 @@ def record_outcome(phone: str, outcome: str, summary: str = "", call_code: str =
 def recent(limit: int = 30) -> list[dict]:
     with db.engine.connect() as c:
         rows = c.execute(select(OC, P.c.full_name).join(P, P.c.id == OC.c.patient_id)
-                         .order_by(OC.c.id.desc()).limit(limit)).mappings().all()
+                         .order_by(func.coalesce(OC.c.updated_at, OC.c.created_at).desc(), OC.c.id.desc()).limit(limit)).mappings().all()
     return [{"call_id": r["call_code"], "kind": r["kind"], "patient": r["full_name"].split()[0], "to": mask_phone(r["to_number"]),
              "status": r["status"], "outcome": r["outcome"], "attempts": r["attempts"], "last_event": r["last_event"],
              "due_at": r["due_at"].strftime("%d %b %H:%M"), "updated": (r["updated_at"] or r["created_at"]).strftime("%d %b %H:%M:%S"),
