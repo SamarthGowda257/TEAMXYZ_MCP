@@ -485,14 +485,15 @@ def _booked_result(patient, a: dict, repeat=False) -> Result:
     lead = "You already have this booking." if repeat else "Booked."
     free = (a.get("reason") or "").startswith(FREE_REVIEW)
     fee = "no fee, this is your free follow-up review" if free else f"fee {rupees(v['fee_inr'])}"
-    msg = f"{lead} {v['with']}, {v['date']} at {v['time']}, room {v['room']}, {fee}. Your booking ID is {v['booking_id']}."
+    # the ID comes first: when an agent shortens the reply, the end of it is what gets dropped
+    msg = f"{lead} Your booking ID is {v['booking_id']}. {v['with']}, {v['date']} at {v['time']}, room {v['room']}, {fee}."
     if a.get("doctor_id") and not free:
         msg += " The fee includes one free follow-up review within 7 days."
     if patient.get("is_guest"):
         msg += " Please register with us to manage this booking later."
     if not patient.get("email"):
         msg += " Share your email address if you'd like the details and a calendar invite by email."
-    short = f"{lead} {v['with']}, {v['date']} at {v['time']}. Booking ID {v['booking_id']}."
+    short = f"{lead} Booking ID {v['booking_id']}. {v['with']}, {v['date']} at {v['time']}."
     if free:
         short += " No fee: this is your free follow-up review."
     ref = REF.procedures[a["procedure_id"]]["code"] if a.get("procedure_id") else None

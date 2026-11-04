@@ -17,8 +17,8 @@ export function Overview() {
 }
 
 function OverviewBody({ me }: { me: Me }) {
-  const appts = useApi<Appointment[]>("/api/me/appointments?scope=upcoming");
-  const reports = useApi<any[]>("/api/me/reports");
+  const appts = useApi<Appointment[]>("/api/me/appointments?scope=upcoming", [], { live: true });
+  const reports = useApi<any[]>("/api/me/reports", [], { live: true });
   const next = appts.data?.find((a) => a.status === "booked");
   const offer = me.snapshot.open_offer;
   const later = (appts.data || []).filter((a) => a.status === "booked" && a !== next).slice(0, 3);
@@ -118,7 +118,7 @@ export function Appointments() {
 }
 
 function ApptList({ scope }: { scope: "upcoming" | "past" }) {
-  const { data, loading, error, reload } = useApi<Appointment[]>(`/api/me/appointments?scope=${scope}`, [scope]);
+  const { data, loading, error, reload } = useApi<Appointment[]>(`/api/me/appointments?scope=${scope}`, [scope], { live: true });
   if (loading) return <Loading />;
   if (error) return <ErrorNote message={error} onRetry={reload} />;
   if (!data?.length) return <Empty title={scope === "upcoming" ? "No upcoming visits" : "No past visits yet"}>{scope === "upcoming" && <Link className="btn btn-primary btn-sm token-shape" to="/portal/book">Book a visit</Link>}</Empty>;
@@ -211,7 +211,7 @@ export function Reports() {
 }
 
 function ReportsBody() {
-  const list = useApi<Report[]>("/api/me/reports");
+  const list = useApi<Report[]>("/api/me/reports", [], { live: true });
   const initial = new URLSearchParams(window.location.search).get("open");
   const [open, setOpen] = useState<string | null>(initial);
   const detail = useApi<any>(open ? `/api/me/reports/${open}` : null, [open]);
@@ -271,7 +271,7 @@ export function Waitlist() {
 }
 
 function WaitlistBody() {
-  const wl = useApi<{ entries: any[]; offers: any[] }>("/api/me/waitlist");
+  const wl = useApi<{ entries: any[]; offers: any[] }>("/api/me/waitlist", [], { live: true });
   const depts = useApi<{ name: string }[]>("/api/departments");
   const docs = useApi<{ name: string; department: string }[]>("/api/doctors");
   const [msg, setMsg] = useState<{ ok?: string; err?: string }>({});
