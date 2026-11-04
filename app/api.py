@@ -432,6 +432,7 @@ def my_bills(cp: CurrentPatient = Depends(current_patient)):
 def warm(cp: CurrentPatient = Depends(current_patient)):
     """Called when the logged-in patient opens the chat widget: pre-build their snapshot."""
     from . import events
+    pt.remember_verified(cp.phone, config.WEB_SESSION_MIN)   # signed in with a password: chat tools skip the DOB
     events.publish("session.warm", patient_id=cp.id)
     return {"ok": True}
 

@@ -39,6 +39,10 @@ TALKDESK_TOUCHPOINT_ID = env("TALKDESK_TOUCHPOINT_ID")
 TALKDESK_REGION = env("TALKDESK_REGION", "td-us-1")
 TALKDESK_VOICE_NUMBER = env("TALKDESK_VOICE_NUMBER")      # the Talkdesk number that reaches the AI receptionist
 DEMO_PASSWORD = env("DEMO_PASSWORD", "WellNest@2026")
+# After a phone + date of birth match, tools accept the phone alone for this many minutes (no re-asking).
+VERIFIED_SESSION_MIN = int(env("VERIFIED_SESSION_MIN", "30"))
+# A patient signed in on the website who opens the chat counts as verified for this long.
+WEB_SESSION_MIN = int(env("WEB_SESSION_MIN", "120"))
 
 # --- autonomous outbound calls (Talkdesk Flows API -> Studio "API request" flow) ---
 TALKDESK_ACCOUNT = env("TALKDESK_ACCOUNT")                  # account name in <account>.mytalkdesk.com

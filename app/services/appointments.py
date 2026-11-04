@@ -428,7 +428,7 @@ def find_appointments(phone="", date_of_birth="", booking_id="", include_past=""
             return ok(f"Booking {v['booking_id']} with {v['with']} on {v['date']} at {v['time']} {st}. "
                       "To change it I'll need the registered mobile number and date of birth.",
                       appointments=[{k: v[k] for k in ("booking_id", "with", "date", "date_iso", "time", "status")}])
-        if not clean(date_of_birth):
+        if not clean(date_of_birth) and not (norm_phone(phone) and pt.recently_verified(norm_phone(phone))):
             p = pt.get_by_phone(c, phone)
             if not norm_phone(phone):
                 return fail("invalid_input", "Please share the registered mobile number, or the booking ID.")

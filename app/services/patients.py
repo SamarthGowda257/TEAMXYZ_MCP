@@ -7,6 +7,7 @@ from datetime import timedelta
 from sqlalchemy import and_, func, insert, select, update
 
 from .. import config, db
+from ..store import store
 from ..util import (Result, age_on, clean, fail, human_date, human_time, mask_email, mask_phone, norm_phone, ok,
                     parse_dob, split_list, yes_no)
 from .. import events
@@ -56,9 +57,28 @@ def _locked(conn, phone: str) -> bool:
     return n >= LOCK_AFTER
 
 
+def remember_verified(phone, minutes: int | None = None) -> None:
+    """After a phone + date of birth match (or a signed-in website session), later tools in the same conversation
+    may skip the date of birth for this phone until the window ends. Re-asking every turn is what patients hate."""
+    ref = bb.ref_for(phone)
+    if ref:
+        store.set_json(f"verified:{ref}", 1, ttl=60 * (minutes or config.VERIFIED_SESSION_MIN))
+
+
+def recently_verified(phone) -> bool:
+    ref = bb.ref_for(phone)
+    return bool(ref and store.get_json(f"verified:{ref}", count=False))
+
+
 def check_identity(conn, phone, dob) -> tuple[dict | None, Result | None]:
-    """Server-side identity check. Returns (patient, None) or (None, failure Result). Generic failures only."""
+    """Server-side identity check. Returns (patient, None) or (None, failure Result). Generic failures only.
+    The date of birth may be left out when this phone was verified (or signed in on the website) within the
+    session window; a wrong date of birth still fails."""
     p_norm, d = norm_phone(phone), parse_dob(dob)
+    if clean(phone) and not clean(dob) and p_norm and recently_verified(p_norm):
+        p = get_by_phone(conn, p_norm)
+        if p and not p["is_guest"] and not _locked(conn, p_norm):
+            return p, None
     if not clean(phone) or not clean(dob):
         return None, fail("not_verified", ASK_IDENTITY)
     if not p_norm:
@@ -73,6 +93,7 @@ def check_identity(conn, phone, dob) -> tuple[dict | None, Result | None]:
     conn.execute(insert(db.verification_attempts).values(phone=p_norm, success=good, attempted_at=config.now()))
     if not good:
         return None, fail("not_verified", NOT_VERIFIED)
+    remember_verified(p_norm)
     return p, None
 
 
