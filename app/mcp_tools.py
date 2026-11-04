@@ -387,7 +387,9 @@ def confirm_appointment(booking_id: BookingId, phone: Phone, date_of_birth: OptD
 def record_call_outcome(phone: Phone,
                         outcome: Annotated[S, Field(description="One of: confirmed, reschedule_requested, rescheduled, feeling_well, needs_help, opted_out, wrong_person, call_back_later, question_answered.")],
                         summary: Annotated[S, Field(description="Optional. One or two sentences on what the patient said and what was done.")] = "",
-                        call_id: CallId = "") -> dict:
+                        call_id: CallId = "",
+                        call_back_at: Annotated[S, Field(description="Optional. When the patient wants us to call again, as they said it, e.g. 'tomorrow at 5 pm', 'after 6', 'in 2 hours'.")] = "") -> dict:
     """Save how an outbound call ended, with a short summary. needs_help alerts a nurse; opted_out stops future
-    calls. Call it once at the end of every outbound call conversation."""
-    return ob.record_outcome(phone, outcome, summary, call_id)
+    calls; call_back_later (with call_back_at) schedules WellNest to call again. Call it once at the end of every
+    outbound call conversation."""
+    return ob.record_outcome(phone, outcome, summary, call_id, call_back_at)

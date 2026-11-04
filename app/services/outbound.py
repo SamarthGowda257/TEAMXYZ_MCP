@@ -15,6 +15,7 @@ bill due, vaccination due...) are added to KINDS without touching the dispatcher
 
 import contextlib
 import logging
+import re
 import time as _time
 from datetime import datetime, timedelta
 
@@ -22,7 +23,7 @@ from sqlalchemy import and_, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .. import config, db, notify, talkdesk
-from ..util import Result, clean, fail, human_date, human_time, mask_phone, norm_code, norm_phone, ok
+from ..util import Result, clean, fail, human_date, human_time, mask_phone, norm_code, norm_phone, ok, parse_date
 from . import patients as pt
 from .ref import REF
 
@@ -53,17 +54,31 @@ class CallKind:
     name = ""
     label = ""
     options: dict[str, str] = {}
+    outside: tuple = ()          # outcomes handled by another service after our transaction commits
 
     def due(self, c, now: datetime) -> list[dict]:
         """[{patient_id, appointment_id, due_at, dedupe_key}] for events that need a call."""
         return []
 
-    def prompt(self, p: dict, a: dict | None) -> str:
+    def prompt(self, c, p: dict, a: dict | None, ref: str = "") -> str:
         return ""
+
+    def topic(self, c, p: dict, a: dict | None, ref: str = "") -> tuple[str, str]:
+        """(what we called about, what to ask) for the AI assistant."""
+        return "your recent visit", "How can I help?"
 
     def act(self, c, call: dict, p: dict, a: dict | None, outcome: str) -> str:
         """Do what the patient's answer means; return what the flow says next."""
         return "Thank you. Goodbye."
+
+    def act_outside(self, call: dict, p: dict, outcome: str, ref: str) -> str:
+        return "Thank you. Goodbye."
+
+
+def _ref(call: dict) -> str:
+    """The subject a call is about, kept in its dedupe key: offer:<code>, report:<code>."""
+    parts = call["dedupe_key"].split(":")
+    return parts[1] if parts[0] in ("offer", "report") else ""
 
 
 class AppointmentReminder(CallKind):
@@ -81,7 +96,11 @@ class AppointmentReminder(CallKind):
                             "due_at": max(now, start - timedelta(hours=24)), "dedupe_key": f"remind:{a['booking_code']}"})
         return out
 
-    def prompt(self, p, a):
+    def topic(self, c, p, a, ref=""):
+        return (f"your appointment with {_who(a)} on {human_date(a['appt_date'])} at {human_time(a['appt_time'])}, "
+                f"booking ID {a['booking_code']}", "Would you like to confirm it, or change the time?")
+
+    def prompt(self, c, p, a, ref=""):
         first = p["full_name"].split()[0]
         return (f"Hello {first}, this is WellNest Hospitals with a reminder. You have an appointment with {_who(a)} on "
                 f"{human_date(a['appt_date'])} at {human_time(a['appt_time'])}. To confirm, press 1 or say confirm. "
@@ -119,7 +138,11 @@ class PostVisitFollowup(CallKind):
                  "due_at": max(now, _start(a) + timedelta(hours=20)), "dedupe_key": f"followup:{a['booking_code']}"}
                 for a in rows]
 
-    def prompt(self, p, a):
+    def topic(self, c, p, a, ref=""):
+        return (f"how you are after your visit with {_who(a)} on {human_date(a['appt_date'])}",
+                "How are you feeling since the visit? Are you better, or is something worrying you?")
+
+    def prompt(self, c, p, a, ref=""):
         first = p["full_name"].split()[0]
         return (f"Hello {first}, this is WellNest Hospitals checking on you after your visit with {_who(a)} on "
                 f"{human_date(a['appt_date'])}. If you are feeling better, press 1 or say better. If you have any problem "
@@ -144,9 +167,87 @@ class PostVisitFollowup(CallKind):
         return "Thank you. Goodbye."
 
 
-KINDS: dict[str, CallKind] = {k.name: k for k in (AppointmentReminder(), PostVisitFollowup())}
-SPOKEN = {"confirm": "1", "yes": "1", "better": "1", "fine": "1", "good": "1", "change": "2", "reschedule": "2",
-          "help": "2", "worse": "2", "problem": "2", "assistant": "3", "agent": "3", "talk": "3", "stop": "9"}
+class WaitlistOfferCall(CallKind):
+    name, label = "waitlist_offer", "Waitlist slot offer"
+    options = {"1": "offer_accepted", "2": "offer_declined", "3": "transfer_to_ai", "9": "opted_out"}
+    outside = ("offer_accepted",)
+
+    def due(self, c, now):
+        WO, WL = db.waitlist_offers, db.waitlist
+        rows = c.execute(select(WO.c.offer_code, WL.c.patient_id).join(WL, WL.c.id == WO.c.waitlist_id)
+                         .where(WO.c.status == "open", WO.c.expires_at > now + timedelta(minutes=5),
+                                WO.c.created_at >= now - timedelta(minutes=30))).all()
+        return [{"patient_id": r.patient_id, "appointment_id": None, "due_at": now, "dedupe_key": f"offer:{r.offer_code}"}
+                for r in rows]
+
+    def _offer(self, c, ref):
+        WO = db.waitlist_offers
+        return c.execute(select(WO).where(WO.c.offer_code == ref)).mappings().first()
+
+    def topic(self, c, p, a, ref=""):
+        o = self._offer(c, ref)
+        if not o:
+            return "a waitlist slot", "Would you like me to check other free slots?"
+        return (f"a waitlist slot with {REF.doctors[o['doctor_id']]['name']} on {human_date(o['appt_date'])} at "
+                f"{human_time(o['appt_time'])}, offer code {ref}", "Would you like to take it?")
+
+    def prompt(self, c, p, a, ref=""):
+        o = self._offer(c, ref)
+        mins = max(1, int((o["expires_at"] - config.now()).total_seconds() // 60)) if o else 0
+        first = p["full_name"].split()[0]
+        return (f"Hello {first}, good news from WellNest Hospitals. A slot with {REF.doctors[o['doctor_id']]['name']} on "
+                f"{human_date(o['appt_date'])} at {human_time(o['appt_time'])} has opened from the waitlist and is held for you "
+                f"for {mins} minutes. To book it, press 1 or say book. If you don't want it, press 2. To talk to our "
+                "assistant, press 3. To stop these calls, press 9.") if o else ""
+
+    def act(self, c, call, p, a, outcome):
+        if outcome == "offer_declined":
+            _log(c, p["id"], "waitlist_offer_declined", _ref(call), "Declined the offered slot by phone")
+            return "No problem. You stay on the waitlist and we will let you know about other slots. Goodbye."
+        return "Thank you. Goodbye."
+
+    def act_outside(self, call, p, outcome, ref):
+        from . import appointments as ap
+        r = ap.accept_offer(ref, p["phone"], channel="voice", actor="system")
+        return r.message + " Goodbye."
+
+
+class LabReportReady(CallKind):
+    name, label = "lab_report_ready", "Lab report ready"
+    options = {"1": "report_emailed", "3": "transfer_to_ai", "9": "opted_out"}
+    outside = ("report_emailed",)
+
+    def due(self, c, now):
+        LR = db.lab_reports
+        rows = c.execute(select(LR.c.report_code, LR.c.patient_id).where(
+            LR.c.status == "ready", LR.c.ready_at >= now - timedelta(hours=48), LR.c.ready_at <= now)).all()
+        return [{"patient_id": r.patient_id, "appointment_id": None, "due_at": now, "dedupe_key": f"report:{r.report_code}"}
+                for r in rows]
+
+    def _test(self, c, ref):
+        r = c.execute(select(db.lab_reports.c.test_name).where(db.lab_reports.c.report_code == ref)).first()
+        return r[0] if r else "lab"
+
+    def topic(self, c, p, a, ref=""):
+        return f"your {self._test(c, ref)} report, which is ready", "Would you like a secure link to it by email?"
+
+    def prompt(self, c, p, a, ref=""):
+        first = p["full_name"].split()[0]
+        return (f"Hello {first}, this is WellNest Hospitals. Your {self._test(c, ref)} report is ready. We never read results "
+                "over the phone. To get a secure link by email, press 1 or say email. To talk to our assistant, press 3. "
+                "To stop these calls, press 9.")
+
+    def act_outside(self, call, p, outcome, ref):
+        from . import records
+        r = records.email_report("", "", ref, patient_id=p["id"], actor="system", channel="voice")
+        return r.message + " Goodbye."
+
+
+KINDS: dict[str, CallKind] = {k.name: k for k in (AppointmentReminder(), PostVisitFollowup(), WaitlistOfferCall(),
+                                                  LabReportReady())}
+SPOKEN = {"confirm": "1", "yes": "1", "book": "1", "email": "1", "better": "1", "fine": "1", "good": "1",
+          "change": "2", "reschedule": "2", "help": "2", "worse": "2", "problem": "2", "decline": "2",
+          "assistant": "3", "agent": "3", "talk": "3", "stop": "9"}
 
 
 # ------------------------------------------------------------------ guards
@@ -242,7 +343,11 @@ def _dial(call_id: int) -> dict:
             c.execute(update(OC).where(OC.c.id == call_id).values(status="cancelled", outcome="not_needed",
                                                                   completed_at=config.now(), updated_at=config.now()))
             return {"call_id": call["call_code"], "status": "cancelled"}
-        prompt = kind.prompt(p, a)
+        prompt = kind.prompt(c, p, a, _ref(call))
+        if not prompt:                                     # the offer or report is gone: nothing to say
+            c.execute(update(OC).where(OC.c.id == call_id).values(status="cancelled", outcome="not_needed",
+                                                                  completed_at=config.now(), updated_at=config.now()))
+            return {"call_id": call["call_code"], "status": "cancelled"}
         c.execute(update(OC).where(OC.c.id == call_id).values(prompt=prompt))
     inputs = {"call_id": call["call_code"], "patient_phone": call["to_number"], "patient_name": p["full_name"].split()[0],
               "call_type": call["kind"], "prompt": prompt, "booking_id": a["booking_code"] if a else "",
@@ -338,7 +443,7 @@ def handle_event(call_code: str, event: str, choice: str = "") -> dict:
             return {"ok": True, "say": "", "action": "end", "status": "retry" if call["attempts"] < config.OUTBOUND_MAX_ATTEMPTS else "failed"}
         if ev == "answered":
             c.execute(update(OC).where(OC.c.id == call["id"]).values(status="in_progress", last_event="answered", updated_at=config.now()))
-            return {"ok": True, "say": call["prompt"] or kind.prompt(p, a), "action": "ask"}
+            return {"ok": True, "say": call["prompt"] or kind.prompt(c, p, a, _ref(call)), "action": "ask"}
         if ev == "completed":
             if call["status"] not in FINAL:
                 c.execute(update(OC).where(OC.c.id == call["id"]).values(status="completed", last_event="completed",
@@ -350,7 +455,7 @@ def handle_event(call_code: str, event: str, choice: str = "") -> dict:
         digit = raw if raw in kind.options else next((d for w, d in SPOKEN.items() if w in raw), "")
         outcome = kind.options.get(digit)
         if not outcome:
-            return {"ok": True, "say": "Sorry, I didn't get that. " + (call["prompt"] or kind.prompt(p, a)), "action": "repeat"}
+            return {"ok": True, "say": "Sorry, I didn't get that. " + (call["prompt"] or kind.prompt(c, p, a, _ref(call))), "action": "repeat"}
         if outcome == "opted_out":
             if not _opted_out(c, p["phone"]):
                 c.execute(insert(db.call_optouts).values(phone=p["phone"], reason=f"Pressed 9 on {call['call_code']}",
@@ -360,12 +465,16 @@ def handle_event(call_code: str, event: str, choice: str = "") -> dict:
         elif outcome == "transfer_to_ai":
             _log(c, p["id"], "outbound_transfer", call["call_code"], f"{kind.label}: connected to the AI assistant")
             say, action = "Connecting you to our assistant now. Please hold.", "transfer"
+        elif outcome in kind.outside:
+            say, action = None, "end"                      # done by another service once this transaction commits
         else:
             say, action = kind.act(c, call, p, a, outcome), "end"
         c.execute(update(OC).where(OC.c.id == call["id"]).values(
             status="in_progress" if action == "transfer" else "completed", outcome=outcome, last_event=f"choice:{digit}",
             summary=f"Patient chose {digit} ({outcome.replace('_', ' ')}).",
             completed_at=None if action == "transfer" else config.now(), updated_at=config.now()))
+    if say is None:
+        say = kind.act_outside(call, p, outcome, _ref(call))
     return {"ok": True, "say": say, "action": action, "outcome": outcome}
 
 
@@ -387,17 +496,15 @@ def context_for(phone: str, call_code: str = "") -> Result:
             p = pt.get_by_id(c, row["patient_id"]) if row else None
         call = _recent_call(c, p["id"], call_code) if p else None
         a = c.execute(select(A).where(A.c.id == call["appointment_id"])).mappings().first() if call and call["appointment_id"] else None
+        kind = KINDS[call["kind"]] if call else None
+        about, ask = kind.topic(c, p, a, _ref(call)) if call else ("", "")
     if not call:
         return fail("not_found", "I don't see a recent call from WellNest to this number. How can I help you today?")
-    kind = KINDS[call["kind"]]
     first = p["full_name"].split()[0]
-    about = (f"your appointment with {_who(a)} on {human_date(a['appt_date'])} at {human_time(a['appt_time'])}, "
-             f"booking ID {a['booking_code']}") if a else "your recent visit"
-    ask = {"appointment_reminder": "Would you like to confirm it, or change the time?",
-           "post_visit_followup": "How are you feeling since the visit? Are you better, or is something worrying you?"}.get(call["kind"], "How can I help?")
     msg = f"Hi {first}, we called about {about}. {ask}"
     data = {"call_id": call["call_code"], "call_type": call["kind"], "purpose": kind.label, "patient_first_name": first,
-            "booking_id": a["booking_code"] if a else None, "outcome_so_far": call["outcome"], "status": call["status"]}
+            "booking_id": a["booking_code"] if a else None, "reference": _ref(call) or None,
+            "outcome_so_far": call["outcome"], "status": call["status"]}
     return ok(msg, **data)
 
 
@@ -431,7 +538,31 @@ OUTCOMES = ("confirmed", "reschedule_requested", "rescheduled", "feeling_well", 
             "call_back_later", "question_answered", "no_response")
 
 
-def record_outcome(phone: str, outcome: str, summary: str = "", call_code: str = "") -> Result:
+def _when(text: str) -> datetime:
+    """'tomorrow at 5 pm', 'after 6', 'in 2 hours', 'Monday morning' -> a time to call back (default: in 2 hours)."""
+    t, now = clean(text).lower(), config.now()
+    m = re.search(r"in (\d+) (hour|hr|minute|min)", t)
+    if m:
+        n = int(m.group(1))
+        return now + (timedelta(hours=n) if m.group(2).startswith("h") else timedelta(minutes=n))
+    d = now.date() + timedelta(days=1) if "tomorrow" in t else None
+    if d is None:
+        d = next((x for x in (parse_date(w) for w in t.split()) if x and x >= now.date()), now.date())
+    m = re.search(r"(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?", t)
+    if m:
+        hh = int(m.group(1)) % 24
+        if m.group(3) == "pm" and hh < 12 or (not m.group(3) and 1 <= hh <= 7):
+            hh += 12                                       # "after 6" means 6 PM
+        hm = (hh, int(m.group(2) or 0))
+    else:
+        hm = (10, 0) if "morning" in t else (15, 0) if "afternoon" in t else (18, 0) if "evening" in t else None
+    if hm is None:
+        return now + timedelta(hours=2) if d == now.date() else datetime.combine(d, datetime.min.time()).replace(hour=10)
+    when = datetime.combine(d, datetime.min.time()).replace(hour=hm[0], minute=hm[1])
+    return when if when > now else when + timedelta(days=1)
+
+
+def record_outcome(phone: str, outcome: str, summary: str = "", call_code: str = "", call_back_at: str = "") -> Result:
     out = clean(outcome).lower().replace(" ", "_")
     if out not in OUTCOMES:
         return fail("invalid_input", "Outcome must be one of: " + ", ".join(OUTCOMES) + ".")
@@ -451,6 +582,16 @@ def record_outcome(phone: str, outcome: str, summary: str = "", call_code: str =
                                                                  summary=clean(summary)[:1000] or None,
                                                                  completed_at=config.now(), updated_at=config.now()))
         _log(c, p["id"], "record_call_outcome", call["call_code"], f"{out.replace('_', ' ')}: {clean(summary)[:150]}")
+        again = None
+        if out == "call_back_later" or clean(call_back_at):
+            when = _when(call_back_at)
+            again = _queue(c, call["kind"], {"appointment_id": call["appointment_id"], "due_at": when,
+                                             "dedupe_key": f"{call['dedupe_key'].split(':')[0]}:{_ref(call) or 'again'}:"
+                                                           f"{call['call_code']}:{_time.time_ns()}"}, p)
+    if again:
+        return ok(f"Okay, we'll call you back on {human_date(again['due_at'].date())} at "
+                  f"{human_time(again['due_at'].strftime('%H:%M'))}.", call_id=call["call_code"], outcome=out,
+                  call_back_id=again["call_code"])
     say = {"opted_out": "Done, we won't call you again for this.", "needs_help": "I've asked a nurse to call you shortly."}
     return ok(say.get(out, "Thank you, I've noted that."), call_id=call["call_code"], outcome=out)
 

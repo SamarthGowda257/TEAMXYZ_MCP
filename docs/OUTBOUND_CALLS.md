@@ -5,8 +5,11 @@ WellNest calls patients by itself. Nobody presses a button:
 
 | Call | When | Patient can |
 |---|---|---|
-| **Appointment reminder** | the day before a booked visit (2–26 h ahead) | 1 confirm · 2 change (text with link + call back) · 3 talk to the AI assistant · 9 stop calls |
+| **Appointment reminder** | the day before a booked visit (2–26 h ahead) | 1 confirm · 2 change (text with link + call back) · 3 AI assistant · 9 stop calls |
 | **Post-visit follow-up** | the day after a completed doctor visit | 1 feeling better (check-in saved) · 2 problem (nurse alert) · 3 AI assistant · 9 stop calls |
+| **Waitlist slot offer** | as soon as a cancelled slot is offered to the patient | 1 book it on the call · 2 decline · 3 AI assistant · 9 stop calls |
+| **Lab report ready** | within 48 h of a report becoming ready | 1 email a secure link (never results) · 3 AI assistant · 9 stop calls |
+| **Call back** (any of the above) | when the patient told the AI "call me tomorrow at 5" | same as the original call |
 
 Answers can be keys or words ("confirm", "change", "better", "help", "stop") when the flow uses Voice IVR.
 New call types (lab report ready, bill due, vaccination due) are one small class in `app/services/outbound.py`;
@@ -80,27 +83,58 @@ Studio → Create flow → **API request** trigger.
    that connects to Autopilot).
 5. Save → **Publish**. Open **Request details** on the flow and copy the **flow ID**.
 
-### 4. Talkdesk: Outreach agent (10 min)
-Add agent **Outreach Agent** next to the others.
-- **Description:** `Continues WellNest's outbound reminder and follow-up calls: knows why we called, confirms or changes the appointment, takes how the patient feels, and records the outcome.`
-- **Instructions:**
+### 4. Talkdesk: Outreach agent (15 min)
+First: **MCP Servers → WellNest_TeamXYZ_MCP → Test connection / refresh** (37 tools; the 3 new ones are
+`get_call_context`, `confirm_appointment`, `record_call_outcome`).
+
+**Variables** ({ } → + Add variable):
+| Variable | Description |
+|---|---|
+| `call_id` | The WellNest call reference like OC-123456, only if the patient reads it out. Usually empty. |
+| `call_outcome` | How the call ended: confirmed, rescheduled, reschedule_requested, feeling_well, needs_help, opted_out, wrong_person, call_back_later or question_answered. |
+
+**Add Agent → AI agent → Configuration**
+- **Name:** `Outreach Agent`
+- **Description:** `Continues WellNest's own calls to patients: appointment reminders, checks after a visit, waitlist slots and ready lab reports. Knows why we called, confirms or changes the appointment, records how the patient feels, books call backs and saves the outcome.`
+- **Agent Instructions:** see the block below.
+- **Advanced settings:** Require authentication **off** · Use Knowledge Management **off**.
+
 ```
-The patient was just called by WellNest (an appointment reminder or a check after a visit) and chose to talk to you.
-1. Ask for their mobile number if you do not have it, then call get_call_context to learn why we called. Say its message.
-2. Reminder: if they will come, call confirm_appointment with the booking ID and mobile number. If they want another time, ask for their date of birth and the new day and time, then call reschedule_appointment.
-3. Follow-up: ask about pain (0 to 10), fever and whether they feel worse, then call record_checkin with their mobile number and date of birth. Warning answers alert a nurse. If it sounds like an emergency, tell them to call 108 now.
-4. At the end call record_call_outcome once with the outcome (confirmed, rescheduled, reschedule_requested, feeling_well, needs_help, opted_out, wrong_person, call_back_later or question_answered) and a one-sentence summary. If they say "stop calling me", use opted_out.
-Return each tool's message in full. Never repeat the patient's mobile number or date of birth.
+You are WellNest Hospitals' outreach assistant. WellNest calls patients by itself: appointment reminders, a check after a visit, a waitlist slot that has opened, or a lab report that is ready. You take over when the patient chooses to talk to the assistant or says "you called me".
+
+1. CONTEXT FIRST: If you do not have the patient's mobile number, ask for it. Then call get_call_context with the mobile number and say its message. If it finds no recent call, say so and help with what they need.
+2. APPOINTMENT REMINDER: If they will come, call confirm_appointment with the booking ID and mobile number. If they want another day or time, ask for their date of birth and the new day and time exactly as they say them, then call reschedule_appointment with the booking ID.
+3. AFTER A VISIT: Ask about pain from 0 to 10, fever, and whether they feel worse, then call record_checkin with their mobile number and date of birth. Warning answers alert a nurse automatically. If it sounds like an emergency (chest pain, breathing trouble, heavy bleeding, fainting), tell them to call 108 now.
+4. WAITLIST SLOT OR LAB REPORT: Say what get_call_context told you. If they want the slot, include the offer code in your answer so it can be booked; if they want the report, include the report ID so it can be emailed. Never read out or explain lab results.
+5. NOT NOW: If they are busy or ask us to call later, call record_call_outcome with outcome call_back_later and call_back_at as they said it (for example "tomorrow at 5 pm").
+6. END: Call record_call_outcome once at the end with the outcome and a one-sentence summary. If they say "stop calling me", use opted_out. If the person is not the patient, use wrong_person and share nothing.
+
+Return each tool's message in full. Never repeat the patient's mobile number, date of birth or email. Never give medical advice. Keep replies short and natural for a phone call.
 ```
-- **Skills (5):** `get_call_context` (phone → `patient_phone`, call_id → leave empty), `confirm_appointment`
-  (booking_id → `booking_id`, phone → `patient_phone`, date_of_birth → `date_of_birth`), `record_call_outcome`
-  (phone → `patient_phone`, outcome → new variable `call_outcome` "how the call ended: confirmed, rescheduled,
-  reschedule_requested, feeling_well, needs_help, opted_out, wrong_person, call_back_later or question_answered",
-  summary → `conversation_summary`), `reschedule_appointment` (as on the Changes agent), `record_checkin` (as on
-  the Aftercare agent).
-- **Conditions:** add as line 2 (after Support):
-  `2. Outreach Agent: the caller says WellNest just called them, was transferred from a WellNest reminder or follow-up call, or wants to confirm an appointment we called about.`
-- Refresh the MCP server `TeamXYZ_MCP` first so the 3 new tools appear (37 in total).
+
+**Skills (5/5)** — + Add Skill → **MCP** → server `WellNest_TeamXYZ_MCP` → tool; the description fills in.
+| # | Tool | Inputs → Variables |
+|---|---|---|
+| 1 | `get_call_context` | phone → `patient_phone` · call_id → `call_id` |
+| 2 | `confirm_appointment` | booking_id\* → `booking_id` · phone\* → `patient_phone` · date_of_birth → `date_of_birth` |
+| 3 | `reschedule_appointment` | booking_id\* → `booking_id` · new_date\* → `appointment_date` · new_time\* → `appointment_time` · phone → `patient_phone` · date_of_birth → `date_of_birth` · doctor_name → `doctor_name` |
+| 4 | `record_checkin` | phone\* → `patient_phone` · date_of_birth\* → `date_of_birth` · booking_id → `booking_id` · pain_score → `pain_score` · fever → `has_fever` · symptoms_worse → `symptoms_worse` · notes → `conversation_summary` |
+| 5 | `record_call_outcome` | phone\* → `patient_phone` · outcome\* → `call_outcome` · summary → `conversation_summary` · call_id → `call_id` · call_back_at → `callback_time` |
+
+**Conditions:** replace the whole box with
+```
+1. Support Agent: FIRST CHECK. Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning or suicidal thoughts (urgent handoff). Also: wants a person, a call back or to complain; asks what they talked about with us before; asks about a handoff; asks us to remember something.
+2. Outreach Agent: says WellNest just called them, was transferred from a WellNest reminder, follow-up, waitlist or lab report call, or answers a question we asked on that call.
+3. Booking Agent: wants a NEW appointment, test or scan; asks if or when a doctor or department is free or next available, on any day; is a new patient to register; wants to check their details are on file; wants to JOIN or be added to a waitlist (no booking needed).
+4. Changes Agent: wants to see, cancel or reschedule an EXISTING booking; asks if they are on a waitlist; has a waitlist OFFER CODE to accept.
+5. Care Assist Agent: wheelchair, escort, interpreter or transport help; sending booking details to a son, daughter, caregiver or family member; adding a caregiver; language or time preferences.
+6. Records Agent: lab or scan reports, emailing a report, past visits, prescription refills.
+7. Billing & Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, paying.
+8. Aftercare Agent: after a visit or new medicine reports how they feel, wants a nurse to call, gives feedback or a rating, wants a follow-up.
+9. Info Agent: symptoms and which department to see (non-urgent); doctors, their days, fees and languages; address, parking, visiting, food, facilities, hospital policies and other hospital questions; preparing for a test or visit.
+```
+Panel **Save**, then top **Save**. Test in **Test → Chat**: "Hi, you just called me about my appointment, my number is 9845000001" (after
+triggering a reminder for WN-48213 in step 6).
 
 ### 5. Render environment (5 min)
 | Variable | Value |
