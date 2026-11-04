@@ -638,6 +638,81 @@ def ops_system():
             "search": search.status()}
 
 
+def _timed(fn, n: int) -> dict:
+    ms = []
+    for _ in range(n):
+        t0 = time.perf_counter()
+        fn()
+        ms.append((time.perf_counter() - t0) * 1000)
+    s = sorted(ms)
+    return {"p50_ms": round(s[len(s) // 2], 3), "p95_ms": round(s[min(len(s) - 1, int(0.95 * len(s)))], 3)}
+
+
+@router.get("/api/ops/benchmark", dependencies=[Depends(ops_auth)])
+def ops_benchmark(n: int = Query(default=20, ge=3, le=100)):
+    """Architecture A/B measured inside the server (no network noise), read-only except one coverage fact.
+    'plain' = what a plain MCP server does on every call (rebuild from Postgres);
+    'wellnest' = what this server does (Redis blackboard, in-process reference cache, combined replies)."""
+    personas = ["+919845000001", "+919845000002", "+919845000003", "+919845000004", "+919845000005"]
+    with db.engine.connect() as c:
+        pats = [p for p in (pt.get_by_phone(c, x) for x in personas) if p]
+        for p in pats:                                           # make sure the blackboard holds P1 for each
+            if not bb.get_snapshot(p["phone"]):
+                bb.put_snapshot(p["phone"], pt.snapshot(c, p), source="benchmark")
+
+    def cold_ctx():
+        with db.engine.connect() as c:
+            for x in personas:
+                p = pt.get_by_phone(c, x)
+                if p:
+                    pt.snapshot(c, p)
+
+    def warm_ctx():
+        for x in personas:
+            bb.get_snapshot(x)
+
+    card = next(d for d in REF.departments.values() if d["name"] == "Cardiology")
+
+    def cold_ref():
+        with db.engine.connect() as c:
+            c.execute(select(db.doctors).where(db.doctors.c.department_id == card["id"])).mappings().all()
+            c.execute(select(db.departments)).mappings().all()
+
+    def warm_ref():
+        ref.doctors_in(card["id"])
+
+    ctx_plain, ctx_ours = _timed(cold_ctx, n), _timed(warm_ctx, n)
+    ref_plain, ref_ours = _timed(cold_ref, n), _timed(warm_ref, n)
+    one_call = _timed(lambda: ap.find_slots("tomorrow", "Cardiology"), max(3, n // 4))
+    two_calls = _timed(lambda: (ap.find_slots("tomorrow", "Cardiology"), rc.get_doctors("Cardiology")), max(3, n // 4))
+
+    # context carried between agents: Billing's coverage result rides along in Booking's later replies
+    shan = "+919845000001"
+    rc.check_coverage("Star Health", "MRI Knee", "", shan, "1959-03-04")
+    carried = [f["text"] for f in bb.related(shan, k=3)]
+
+    def speedup(a, b):
+        return round(a["p50_ms"] / b["p50_ms"], 1) if b["p50_ms"] else None
+
+    live = metrics.snapshot()
+    return {
+        "measured_inside": "server", "rounds": n, "blackboard_backend": bb.stats()["backend"],
+        "db_kind": "postgres" if db.IS_POSTGRES else "sqlite",
+        "patient_context_5_patients": {"plain_mcp_rebuild_from_db": ctx_plain, "wellnest_redis_blackboard": ctx_ours,
+                                       "speedup_x": speedup(ctx_plain, ctx_ours)},
+        "reference_data_lookup": {"plain_mcp_db_query": ref_plain, "wellnest_in_process_cache": ref_ours,
+                                  "speedup_x": speedup(ref_plain, ref_ours)},
+        "slots_plus_fees_question": {
+            "plain_mcp": {"tool_calls": 2, "agent_hops": 2, "server": two_calls},
+            "wellnest": {"tool_calls": 1, "agent_hops": 1, "server": one_call},
+            "note": "each avoided agent hop saves one LLM step in Talkdesk (about 1-2 s), far more than server time"},
+        "context_carried_between_agents": {"facts_in_next_reply": carried, "extra_tool_calls_needed": 0},
+        "blackboard_live": bb.stats(),
+        "talkdesk_traffic": {"tool_calls": live["total_calls"], "server_p50_ms": live["p50_ms"],
+                             "server_p95_ms": live["p95_ms"], "per_tool": live["tools"][:12]},
+    }
+
+
 @router.get("/api/ops/search", dependencies=[Depends(ops_auth)])
 def ops_search(q: str, phone: str = "", scope: str = "kb", raw: bool = False):
     """Staff/debug view of hybrid search: every hit with its keyword, fuzzy, meaning and code signals.

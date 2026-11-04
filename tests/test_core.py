@@ -258,3 +258,16 @@ def test_eval_fixes_v3():
     assert "waitlist" in ap.accept_offer("ZZZZ9999QQ", "9845000002").message
     from app.services import records
     assert "Kannada" in records.get_doctors(department="Cardiology").message
+
+
+def test_ops_benchmark_compares_architecture():
+    from fastapi.testclient import TestClient
+    from app.api import create_app
+    from app.services import blackboard as bb
+    seed.reset(verbose=False); ref.load(); bb.clear_all()
+    c = TestClient(create_app())
+    assert c.get("/api/ops/benchmark?n=3").status_code == 401
+    r = c.get(f"/api/ops/benchmark?n=3&token={config.DASHBOARD_TOKEN}").json()
+    ctx = r["patient_context_5_patients"]
+    assert ctx["wellnest_redis_blackboard"]["p50_ms"] < ctx["plain_mcp_rebuild_from_db"]["p50_ms"]
+    assert any("pre-approval" in f for f in r["context_carried_between_agents"]["facts_in_next_reply"])
