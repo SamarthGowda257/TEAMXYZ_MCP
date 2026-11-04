@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, R
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import and_, func, insert, select, update
+from sqlalchemy import and_, func, insert, select, text, update
 
 from . import config, db, metrics, notify, ratelimit, seed
 from .security import hash_password, read_token, sign_token, token_matches, verify_password
@@ -711,6 +711,32 @@ def ops_benchmark(n: int = Query(default=20, ge=3, le=100)):
         "talkdesk_traffic": {"tool_calls": live["total_calls"], "server_p50_ms": live["p50_ms"],
                              "server_p95_ms": live["p95_ms"], "per_tool": live["tools"][:12]},
     }
+
+
+@router.get("/api/ops/kb", dependencies=[Depends(ops_auth)])
+def ops_kb(kind: str = "", full: bool = False):
+    """Everything the hospital RAG holds: each passage with whether it has an embedding, plus the hospital context
+    on the blackboard. kind = info | dept | proc | ins | faq | policy | doc to filter; full=true for whole texts."""
+    from . import search
+    from .services import hospital_ctx
+    emb = "embedding IS NOT NULL" if (db.IS_POSTGRES and db.SEARCH.get("vector")) else "NULL"
+    sql = f"SELECT ref, title, body, {emb} AS embedded FROM search_docs WHERE kind = 'kb'"
+    with db.engine.connect() as c:
+        if db.IS_POSTGRES:
+            search._pg_path(c)
+        rows = [dict(r) for r in c.execute(text(sql + " ORDER BY ref")).mappings()]
+    if kind:
+        rows = [r for r in rows if r["ref"].split(":")[1] == kind]
+    by_kind = {}
+    for r in rows:
+        k = r["ref"].split(":")[1]
+        by_kind.setdefault(k, {"passages": 0, "embedded": 0})
+        by_kind[k]["passages"] += 1
+        by_kind[k]["embedded"] += 1 if r["embedded"] else 0
+    return {"passages": len(rows), "by_kind": by_kind, "search": search.status(brief=True),
+            "redis_hospital_profile": hospital_ctx.profile(), "redis_cached_answers": hospital_ctx.cached_answers(),
+            "items": [{"ref": r["ref"], "title": r["title"], "embedded": r["embedded"],
+                       "text": r["body"] if full else r["body"][:140]} for r in rows]}
 
 
 @router.get("/api/ops/search", dependencies=[Depends(ops_auth)])

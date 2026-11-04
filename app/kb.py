@@ -5,7 +5,16 @@ below, which matches what the website says. Each passage is one short, speakable
 passage as its message, so there is no generation step and nothing to hallucinate.
 """
 
+import re
+from pathlib import Path
+
+from . import config
 from .services.ref import REF
+
+# Hospital documents you add: data/hospital/*.md or *.txt. Each "## Heading" section (or paragraph block) becomes
+# one passage; see data/hospital/README.md. They are indexed and embedded like the passages below.
+DOCS_DIR = config.ROOT / "data" / "hospital"
+MAX_PASSAGE = 700
 
 # Lay words patients actually use, per department code. Used by both the keyword and the meaning legs.
 DEPT_WORDS = {
@@ -62,7 +71,7 @@ FAQ = [
     ("cancel_policy", "Cancelling or changing a booking", "You can cancel or reschedule a booking free of charge on chat, by phone or in "
      "the patient portal. If your doctor is fully booked, we can add you to the waitlist and message you when a slot opens."),
     ("waitlist", "Waitlist", "If the doctor you want is full, join the waitlist. When a slot opens we send you an offer by SMS and email; "
-     "accept it within 2 hours to confirm."),
+     "the slot is held for you for 30 minutes, so accept it from the link or on chat to confirm."),
     ("senior", "Senior citizen help", "Our senior citizen desk at entrance B offers wheelchair help, priority billing, early-morning slots "
      "and updates to a family member if you wish."),
     ("wheelchair", "Wheelchairs and accessibility", "Wheelchairs are free at the main entrance and entrance B. All floors have lifts and "
@@ -90,6 +99,46 @@ FAQ = [
     ("emergency_signs", "Emergency warning signs", "Chest pain or pressure, trouble breathing, a face drooping or slurred speech, sudden "
      "weakness on one side, fainting or not responding, heavy bleeding, a seizure, a severe burn or head injury are emergencies. "
      "Call 108 now or come to emergency entrance B, open 24 hours."),
+]
+
+
+# Hospital policies (demo wording, to be replaced by the real policies via data/hospital/). (ref, title, answer)
+POLICIES = [
+    ("visitors", "Visitor policy", "Visitors are welcome during ward visiting hours, 11 AM to 1 PM and 5 PM to 7 PM, two at a time per "
+     "patient. Please carry a photo ID and the visitor pass from the front desk. The ICU allows one visitor from 5 PM to 6 PM."),
+    ("cancellation", "Cancellation and refund policy", "You can cancel or reschedule an outpatient booking free of charge until the "
+     "appointment time. Prepaid consultation fees are refunded to the original payment method within 5 to 7 working days. "
+     "Health check packages cancelled less than 24 hours before are refunded after a 10 percent fee."),
+    ("payment_deposit", "Admission deposit and billing policy", "Planned admissions need an advance deposit, which depends on the "
+     "procedure and room type; the billing desk gives an estimate in writing. Cashless insurance patients pay only items the "
+     "policy does not cover. Final bills are settled at discharge."),
+    ("privacy", "Patient privacy and records policy", "Your medical information is shared only with you, people you authorise in "
+     "writing, and your treating team. Reports are sent only to your registered email or the patient portal. Copies of records "
+     "are given to the patient or an authorised family member with a photo ID."),
+    ("consent", "Consent policy", "Procedures and surgeries need your written informed consent after the doctor explains the benefits "
+     "and risks. For a child or a patient who cannot decide, a parent or legal guardian gives consent."),
+    ("patient_rights", "Patient rights", "You have the right to respectful care, to know your diagnosis and treatment options in a "
+     "language you understand, to a second opinion, to see your bill in detail, to privacy, and to raise a complaint without it "
+     "affecting your care."),
+    ("complaints", "Complaint and grievance policy", "Raise a complaint on chat, by phone, by email to care@wellnest.test, or with the "
+     "patient relations officer at the front desk. We acknowledge within 24 hours and aim to resolve within 7 working days."),
+    ("smoking", "No smoking and no alcohol", "The whole campus is no smoking, no tobacco and no alcohol, including the parking areas."),
+    ("valuables", "Valuables policy", "Please do not bring jewellery or large amounts of cash. The hospital is not responsible for "
+     "valuables left in rooms; the nursing station can keep small items in a locker."),
+    ("outside_food", "Outside food policy", "Outside food for patients needs the nurse's or dietitian's approval. Visitors may use the "
+     "cafeteria on the ground floor."),
+    ("photography", "Photography and mobile phones", "Please do not take photos or videos of other patients or staff. Mobile phones "
+     "should be on silent in wards and switched off in the ICU and operating areas."),
+    ("discharge_policy", "Discharge policy", "Discharge usually happens before 12 noon after the doctor's review. You receive a "
+     "discharge summary, medicine list and follow-up date. Leaving against medical advice needs a signed form."),
+    ("children_policy", "Children and minors policy", "Patients under 18 must be accompanied by a parent or guardian, who gives consent "
+     "for treatment. Children under 12 cannot visit the ICU."),
+    ("emergency_policy", "Emergency care policy", "Emergency treatment is never delayed for payment or paperwork. Call 108 or come to "
+     "emergency entrance B, open 24 hours. Medico-legal cases are reported to the police as the law requires."),
+    ("medicine_policy", "Medicine and prescription policy", "Prescription refills are approved only by a doctor. The pharmacy needs a "
+     "valid prescription for prescription-only medicines. We never recommend medicines over chat or phone."),
+    ("appointment_policy", "Appointment and late arrival policy", "Please arrive 15 minutes before your appointment. If you are more "
+     "than 15 minutes late, the doctor may see you after the next patient or we can reschedule you at no charge."),
 ]
 
 
@@ -129,4 +178,45 @@ def documents() -> list[dict]:
                      "body": f"We accept {i['name']} ({mode}). {i.get('notes') or ''} Documents: {i.get('documents') or 'insurance card and photo ID'}."})
     docs += [{"ref": f"kb:faq:{r}", "title": f"{t}: {FAQ_KEYWORDS[r]}" if r in FAQ_KEYWORDS else t, "body": b}
              for r, t, b in FAQ]
+    docs += [{"ref": f"kb:policy:{r}", "title": t, "body": b} for r, t, b in POLICIES]
+    return docs + hospital_documents()
+
+
+def _slug(text: str, n: int) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")[:n] or "x"
+
+
+def _passages(text: str) -> list[str]:
+    """Split a section into speakable passages of at most MAX_PASSAGE characters, at paragraph or sentence ends."""
+    out, cur = [], ""
+    for part in re.split(r"\n\s*\n|(?<=[.!?])\s+", text.strip()):
+        part = " ".join(part.split())
+        if not part:
+            continue
+        if cur and len(cur) + 1 + len(part) > MAX_PASSAGE:
+            out.append(cur)
+            cur = part
+        else:
+            cur = f"{cur} {part}".strip()
+    return out + ([cur] if cur else [])
+
+
+def hospital_documents(folder: Path | None = None) -> list[dict]:
+    """Passages from data/hospital/*.md|*.txt: one per '## ' section (split further if long). README.md is skipped."""
+    folder = folder or DOCS_DIR
+    docs, seen = [], set()
+    for f in sorted(folder.glob("*")) if folder.exists() else []:
+        if f.suffix.lower() not in (".md", ".txt") or f.name.lower() == "readme.md":
+            continue
+        text = f.read_text(encoding="utf-8")
+        doc_title = f.stem.replace("_", " ").replace("-", " ").title()
+        sections = re.split(r"(?m)^#{1,3}\s+(.+)$", text)
+        pairs = [(doc_title, sections[0])] + list(zip(sections[1::2], sections[2::2]))
+        for head, body in pairs:
+            for i, chunk in enumerate(_passages(body)):
+                ref = f"kb:doc:{_slug(f.stem, 14)}:{_slug(head, 18)}" + (f":{i + 1}" if i else "")
+                while ref in seen:
+                    ref += "_"
+                seen.add(ref)
+                docs.append({"ref": ref[:48], "title": f"{head.strip()} ({doc_title})"[:160], "body": chunk})
     return docs

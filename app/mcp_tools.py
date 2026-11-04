@@ -236,9 +236,10 @@ def suggest_department(symptoms: Annotated[S, Field(description="The patient's m
 
 @tool
 def get_hospital_info(topic: Annotated[S, Field(description="Optional. A topic (address, hours, parking, visiting, emergency, facilities, pharmacy, contact) or the caller's question in their own words, e.g. 'can I bring food for my mother in the ward'.")] = "") -> dict:
-    """Hospital facts and FAQs: address, hours, parking, visiting and ICU rules, attendants, food, payment, cashless
-    insurance, records, packages, test preparation and more. Pass the caller's question as topic; the answer comes
-    from hybrid search over the hospital knowledge base and is ready to read out."""
+    """Hospital facts, FAQs and policies: address, hours, parking, visiting and ICU rules, attendants, food, payment,
+    cashless insurance, records, packages, test preparation, and policies such as refunds and cancellation, privacy,
+    consent, patient rights, complaints, smoking, valuables, discharge and late arrival. Pass the caller's question as
+    topic; the answer comes from the hospital knowledge base and is ready to read out."""
     return rc.hospital_info(topic)
 
 

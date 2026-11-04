@@ -271,3 +271,18 @@ def test_ops_benchmark_compares_architecture():
     ctx = r["patient_context_5_patients"]
     assert ctx["wellnest_redis_blackboard"]["p50_ms"] < ctx["plain_mcp_rebuild_from_db"]["p50_ms"]
     assert any("pre-approval" in f for f in r["context_carried_between_agents"]["facts_in_next_reply"])
+
+
+def test_hospital_policies_and_redis_answer_cache(tmp_path):
+    from app import kb, search
+    from app.services import blackboard as bb, hospital_ctx, records
+    seed.reset(verbose=False); ref.load(); bb.clear_all(); search.sync_kb()
+    hospital_ctx.publish(kb.documents())
+    assert hospital_ctx.profile()["passages_by_kind"]["policy"] >= 10
+    q = "Can I smoke in the parking area?"
+    first = records.hospital_info(q)
+    assert "no smoking" in first.message.lower() and first.data["matched_by"] != "redis cache"
+    assert records.hospital_info(q).data["matched_by"] == "redis cache"
+    (tmp_path / "rules.md").write_text("## Pets\nPets are not allowed, except guide dogs.\n")
+    docs = kb.hospital_documents(tmp_path)
+    assert docs[-1]["ref"] == "kb:doc:rules:pets" and "guide dogs" in docs[-1]["body"]

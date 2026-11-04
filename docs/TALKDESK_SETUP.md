@@ -420,7 +420,7 @@ MEMORY: When a conversation that changed something is ending, ask the Support Ag
 5. Records Agent: lab or scan reports, emailing a report, past visits, prescription refills.
 6. Billing & Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, paying.
 7. Aftercare Agent: after a visit or new medicine reports how they feel, wants a nurse to call, gives feedback or a rating, wants a follow-up.
-8. Info Agent: symptoms and which department to see (non-urgent); which doctors work here, their days, fees and languages; address, parking, visiting, food, facilities and other hospital questions; preparing for a test or visit.
+8. Info Agent: symptoms and which department to see (non-urgent); which doctors work here, their days, fees and languages; address, parking, visiting, food, facilities, hospital policies (refunds, privacy, consent, visitors, smoking, valuables, complaints) and other hospital questions; preparing for a test or visit.
 ```
 (Care Assist moves above Records: "send my booking to my son" went to Records and emailed a lab report.)
 

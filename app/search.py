@@ -181,6 +181,9 @@ def rebuild_async() -> None:
     def run():
         try:
             sync_kb()
+            from . import kb
+            from .services import hospital_ctx
+            hospital_ctx.publish(kb.documents())     # hospital profile + knowledge version on the blackboard
             sync()
             if vector_ready():
                 # Paced: Gemini's free tier counts each text against ~100 requests per minute, shared with live

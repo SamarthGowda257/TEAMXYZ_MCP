@@ -348,6 +348,17 @@ def hospital_info(topic="") -> Result:
         return ok(REF.info[t], topic=t)
     if not t:
         return ok(f"{REF.info['address']} {REF.info['hours']}", topic="address,hours")
+    from . import hospital_ctx
+    hit = hospital_ctx.cached_answer(t)            # same question asked before: answer from Redis, no search
+    if hit:
+        return ok(hit["message"], **{**hit["data"], "matched_by": "redis cache"})
+    res = _hospital_lookup(t, keys)
+    if res.ok and res.data.get("matched_by"):      # only real knowledge-base matches, never the keyword fallback
+        hospital_ctx.remember_answer(t, res.message, res.data)
+    return res
+
+
+def _hospital_lookup(t: str, keys: dict) -> Result:
     from .. import search
     # 1) The caller's own words: hybrid search over the knowledge base (FAQ, visiting, insurance, procedures,
     #    departments), so "can my son stay overnight with me?" finds the attendant rule, not opening hours.
@@ -362,7 +373,7 @@ def hospital_info(topic="") -> Result:
     for h in hits:
         sig = h["signals"]
         shared = sig.get("fts") or (sig.get("words") and not sig["words"].startswith("0/"))
-        if shared and h["ref"].startswith(("kb:faq:", "kb:info:")):
+        if shared and h["ref"].startswith(("kb:faq:", "kb:info:", "kb:policy:", "kb:doc:")):
             return ok(h["body"], topic=h["ref"].split(":", 1)[1], source=h["title"], matched_by=res["mode"] + " (partial)")
     # 3) Simple topic words ("where are you", "timings", "parking"), whole words only.
     words = set(re.findall(r"[a-z0-9]+", t))
