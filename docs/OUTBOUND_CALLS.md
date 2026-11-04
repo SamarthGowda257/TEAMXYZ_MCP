@@ -71,25 +71,25 @@ Build in this order; each step can be tested on its own. Menu paths checked in t
 - Test the action from the integration screen with `call_id` = any `OC-...` from `/api/ops/outbound`, `event` =
   `answered`: it should return a `say` sentence. (A wrong token returns 401.)
 
-### 2. Talkdesk: Studio flow `WellNest_Outreach_TeamXYZ` (20 min)
+### 2. Talkdesk: Studio flow `WellNest_Outreach_TeamXYZ` (built and published on 4 Nov)
 **Studio → Create flow → trigger type API request** (only API-request flows can be started by the Flows API and only
-they offer Make Outbound Call).
-1. **API request** node → input arguments (all strings), each saved to a flow variable of the same name:
-   `call_id`, `patient_phone`, `patient_name`, `call_type`, `prompt`, `booking_id`.
-2. **Make Outbound Call**: outbound (caller ID) number = our Talkdesk number from Admin → Numbers; destination =
-   variable `patient_phone`; ring time 30 s (allowed 10–35). Exits:
-   - *No answer* → **Execute Action** `outbound_event` (call_id = `call_id`, event = `no_answer`, choice empty) → End Flow.
-   - *Busy* → same with event `busy`; *Invalid number* → same with event `invalid_number`.
-   - *Answered* → **Execute Action** `outbound_event` (event = `answered`) → step 3.
-3. **Input IVR** (keys) or **Voice IVR** (spoken answers): message, text-to-speech: `%{current_flow.prompt}`.
-   Options **1, 2, 3, 9**. No input / invalid → repeat once → End Flow.
-4. For each option N: **Execute Action** `outbound_event` (call_id = `call_id`, event = `choice`, choice = `N`;
-   output `say` → flow variable `say`) → **Play Audio** text-to-speech `%{current_flow.say}` → End Flow.
-   Option **3** only: after Play Audio → **Forward to External Number** = the AI voice number (the Studio voice flow
-   that connects to Autopilot / the WellNest orchestration).
-   Execute Action *failure / timeout* exits → Play Audio "Thank you, goodbye." → End Flow.
-5. **Save → Publish**. In the flow list open **Request details**: copy the **flow ID** (and check the example body
-   lists the six input names above).
+they offer Make Outbound Call). The flow as built:
+
+| Node | Component | Settings | Exits |
+|---|---|---|---|
+| Initial node | API request | inputs `call_id`, `patient_phone`, `patient_name`, `call_type`, `prompt`, `booking_id` → same-name variables | → Call patient |
+| Call patient | Make outbound call | caller ID +12184437744 (WellNest_TeamXYZ), destination `patient_phone`, ring 30 s | Answered → Report answered; every other exit → Report not reached |
+| Report not reached | Execute Action `WellNest_Outbound_TeamXYZ / outbound_event` | call_id = `call_id`, event = `no_answer`, choice = `none` | Ok, Execution error → End call |
+| Report answered | Execute Action `outbound_event` | call_id = `call_id`, event = `answered`, choice = `none` | Ok, Execution error → Ask patient |
+| Ask patient | Standard IVR | text-to-speech `prompt`; selection → variable `choice` | 1, 2, 3, 9 → Report choice; Timeout (8 s), Invalid → Talk to assistant |
+| Report choice | Execute Action `outbound_event` | call_id = `call_id`, event = `choice`, choice = `choice`; outputs `say` → `say`, `action` → `next_action` | Ok → Say result; Execution error → Talk to assistant |
+| Say result | Play Audio | text-to-speech `say` | → Should transfer |
+| Should transfer | Conditional Statement | `next_action` Equals `transfer` | Transfer → Talk to assistant; No Match → End call |
+| Talk to assistant | Connect to autopilot voice | autopilot `WellNestAutopilotTeamXYZ`; `autopilot_result` → variable | Success, Escalation, Execution error → End call |
+| End call | End Flow | | |
+
+So key 3 (or silence, or an unclear answer) hands the live call to the AI orchestration, and the Receptionist routes
+"WellNest just called me" to the Outreach Agent. The flow ID is under the flow's **Request details** in the Studio list.
 
 ### 3. Talkdesk: OAuth client (5 min)
 **Builder → OAuth Clients → create**: name `WellNest_Outbound_TeamXYZ`, grant type **Client Credentials**, scope
