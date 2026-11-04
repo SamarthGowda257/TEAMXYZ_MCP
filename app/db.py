@@ -249,6 +249,29 @@ resolutions = Table("resolutions", md, _id(),
     Column("channel", String(10)), _ts(),
     Index("ix_res_patient", "patient_id", "created_at"), Index("ix_res_time", "created_at"))
 
+outbound_calls = Table("outbound_calls", md, _id(),
+    Column("call_code", String(12), unique=True, nullable=False),     # OC-48213, passed to the Studio flow as call_id
+    Column("kind", String(30), nullable=False),                       # appointment_reminder, post_visit_followup, ...
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("appointment_id", ForeignKey("appointments.id")),
+    Column("to_number", String(16), nullable=False),                  # number actually dialled (test number applied)
+    Column("dedupe_key", String(80), unique=True, nullable=False),    # one call per reminder, ever
+    Column("status", String(16), nullable=False, default="scheduled"),
+    # scheduled -> dialing -> in_progress -> completed | retry -> ... | failed | simulated | cancelled
+    Column("due_at", DateTime, nullable=False),
+    Column("next_attempt_at", DateTime, nullable=False),
+    Column("attempts", Integer, nullable=False, default=0),
+    Column("interaction_id", String(64)),
+    Column("last_event", String(30)),
+    Column("outcome", String(30)),                                    # confirmed, reschedule_requested, feeling_well, ...
+    Column("summary", Text), Column("prompt", Text), Column("error", String(300)),
+    _ts(), Column("updated_at", DateTime), Column("completed_at", DateTime),
+    Index("ix_outbound_due", "status", "next_attempt_at"), Index("ix_outbound_patient", "patient_id", "created_at"))
+
+call_optouts = Table("call_optouts", md,
+    Column("phone", String(16), primary_key=True),                   # patient's E.164 number
+    Column("reason", String(120)), _ts())
+
 notifications = Table("notifications", md, _id(),
     Column("patient_id", ForeignKey("patients.id")),
     Column("channel", String(10), nullable=False),   # email sms whatsapp voice_call

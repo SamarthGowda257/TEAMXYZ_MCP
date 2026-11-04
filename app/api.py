@@ -584,9 +584,14 @@ def jobs_run():
     from . import search
     search.sync()
     embedded = search.embed_pending(search.BACKFILL_BATCH)   # paced backfill, inside the free tier's per-minute limit
+    from .services import outbound
+    try:
+        calls = outbound.run()                                # autonomous reminder and follow-up calls
+    except Exception as e:                                    # never let calling break the other jobs
+        calls = {"calls_error": str(e)[:200]}
     return {"ok": True, "offers_expired": expired, "reminders_queued": reminders, "visits_completed": closed,
             "aftercare_checkins_queued": aftercare, "emails_processed": sent, "search_rows_embedded": embedded,
-            "ms": round((time.perf_counter() - t0) * 1000)}
+            **calls, "ms": round((time.perf_counter() - t0) * 1000)}
 
 
 @router.post("/ops/reset-demo", dependencies=[Depends(_job_auth)])
@@ -711,6 +716,44 @@ def ops_benchmark(n: int = Query(default=20, ge=3, le=100)):
         "talkdesk_traffic": {"tool_calls": live["total_calls"], "server_p50_ms": live["p50_ms"],
                              "server_p95_ms": live["p95_ms"], "per_tool": live["tools"][:12]},
     }
+
+
+# ------------------------------------------------------------------ autonomous outbound calls
+class OutboundEvent(BaseModel):
+    call_id: str
+    event: str = "choice"            # answered | choice | no_answer | busy | invalid_number | failed | completed
+    choice: str = ""                 # keypress digit or the words the patient said
+
+
+def _outbound_auth(token: str = Query(default=""), x_outbound_token: str = Header(default="")):
+    if not token_matches(token or x_outbound_token, config.OUTBOUND_WEBHOOK_TOKEN):
+        raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Outbound token required."})
+
+
+@router.post("/api/outbound/event", dependencies=[Depends(_outbound_auth)])
+def outbound_event(b: OutboundEvent):
+    """Called by the Studio flow's Execute Action steps. Returns what the flow says next and whether to end the
+    call, ask again or forward to the AI assistant (action = end | ask | repeat | transfer)."""
+    from .services import outbound
+    return outbound.handle_event(b.call_id, b.event, b.choice)
+
+
+@router.post("/api/ops/outbound/call", dependencies=[Depends(ops_auth)])
+def ops_outbound_call(booking_id: str, kind: str = "appointment_reminder"):
+    """Staff / demo: call the patient of this booking now (same path the scheduler uses)."""
+    from .services import outbound
+    return outbound.trigger(booking_id, kind)
+
+
+@router.get("/api/ops/outbound", dependencies=[Depends(ops_auth)])
+def ops_outbound(limit: int = Query(default=30, le=200)):
+    """Call queue and outcomes, the call mode (talkdesk or simulated) and any missing Talkdesk settings."""
+    from . import talkdesk
+    from .services import outbound
+    return {"mode": outbound.mode(), "missing_settings": talkdesk.missing(), "test_number": mask_phone(config.OUTBOUND_TEST_NUMBER) or None,
+            "allowlist": "everyone" if "*" in config.OUTBOUND_ALLOWLIST else len(config.OUTBOUND_ALLOWLIST),
+            "calling_hours_ist": "%d:00-%d:00" % config.OUTBOUND_CALL_HOURS, "kinds": list(outbound.KINDS),
+            "calls": outbound.recent(limit)}
 
 
 @router.get("/api/ops/kb", dependencies=[Depends(ops_auth)])

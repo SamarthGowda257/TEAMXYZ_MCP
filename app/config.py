@@ -35,6 +35,24 @@ TALKDESK_REGION = env("TALKDESK_REGION", "td-us-1")
 TALKDESK_VOICE_NUMBER = env("TALKDESK_VOICE_NUMBER")      # the Talkdesk number that reaches the AI receptionist
 DEMO_PASSWORD = env("DEMO_PASSWORD", "WellNest@2026")
 
+# --- autonomous outbound calls (Talkdesk Flows API -> Studio "API request" flow) ---
+TALKDESK_ACCOUNT = env("TALKDESK_ACCOUNT")                  # account name in <account>.mytalkdesk.com
+TALKDESK_CLIENT_ID = env("TALKDESK_CLIENT_ID")              # Builder -> OAuth Clients, Client Credentials,
+TALKDESK_CLIENT_SECRET = env("TALKDESK_CLIENT_SECRET")      # scope flows-interactions:start
+TALKDESK_OUTBOUND_FLOW_ID = env("TALKDESK_OUTBOUND_FLOW_ID")
+TALKDESK_API = {"td-us-1": "https://api.talkdeskapp.com", "td-eu-1": "https://api.talkdeskapp.eu",
+                "td-ca-1": "https://api.talkdeskappca.com", "td-uk-1": "https://api.talkdeskapp.co.uk"}.get(TALKDESK_REGION, "https://api.talkdeskapp.com")
+OUTBOUND_ENABLED = env("OUTBOUND_ENABLED", "false").lower() in ("1", "true", "yes")
+OUTBOUND_TEST_NUMBER = env("OUTBOUND_TEST_NUMBER")          # when set, every call rings this number (demo safety)
+# Patients the scheduler may call ("*" = everyone). Default: the demo personas only.
+OUTBOUND_ALLOWLIST = [x.strip() for x in env("OUTBOUND_ALLOWLIST", "+919845000001,+919845000002,+919845000003,"
+                                                                   "+919845000004,+919845000005").split(",") if x.strip()]
+OUTBOUND_WEBHOOK_TOKEN = env("OUTBOUND_WEBHOOK_TOKEN") or JOBS_TOKEN
+OUTBOUND_CALL_HOURS = tuple(int(x) for x in env("OUTBOUND_CALL_HOURS", "9-20").split("-"))   # IST, start-end hour
+OUTBOUND_MAX_ATTEMPTS = int(env("OUTBOUND_MAX_ATTEMPTS", "3"))
+OUTBOUND_RETRY_MIN = int(env("OUTBOUND_RETRY_MIN", "30"))
+OUTBOUND_MAX_PER_RUN = int(env("OUTBOUND_MAX_PER_RUN", "2"))
+
 # --- email ---
 SMTP_HOST = env("SMTP_HOST")
 SMTP_PORT = int(env("SMTP_PORT", "587"))

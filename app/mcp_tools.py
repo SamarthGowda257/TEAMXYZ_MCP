@@ -16,6 +16,7 @@ from . import metrics
 from .services import appointments as ap
 from .services import patients as pt
 from .services import records as rc
+from .services import outbound as ob
 from .services import support as sp
 from .util import Result, mask_phone
 
@@ -362,3 +363,31 @@ def schedule_followup(phone: Phone, date_of_birth: Dob, doctor_name: Doc = "",
     """Find follow-up slots with the patient's last doctor (or a named doctor) within N days. Then book with
     book_appointment. Requires mobile number and date of birth."""
     return sp.schedule_followup(phone, date_of_birth, doctor_name, within_days)
+
+
+# ======================================================================== Outreach (autonomous outbound calls)
+CallId = Annotated[S, Field(description="Optional. The WellNest call reference, e.g. OC-12345, if known.")]
+
+
+@tool
+def get_call_context(phone: OptPhone = "", call_id: CallId = "") -> dict:
+    """Why WellNest called this patient: the reminder or follow-up, the booking (doctor, date, time, ID) and what to
+    ask. Call this first when a patient is transferred from one of our outbound calls or says 'you called me'."""
+    return ob.context_for(phone, call_id)
+
+
+@tool
+def confirm_appointment(booking_id: BookingId, phone: Phone, date_of_birth: OptDob = "") -> dict:
+    """Confirm the patient will attend a booking (after a reminder call). Works without date of birth only for a
+    booking we just called this patient about; otherwise needs the date of birth."""
+    return ob.confirm(booking_id, phone, date_of_birth)
+
+
+@tool
+def record_call_outcome(phone: Phone,
+                        outcome: Annotated[S, Field(description="One of: confirmed, reschedule_requested, rescheduled, feeling_well, needs_help, opted_out, wrong_person, call_back_later, question_answered.")],
+                        summary: Annotated[S, Field(description="Optional. One or two sentences on what the patient said and what was done.")] = "",
+                        call_id: CallId = "") -> dict:
+    """Save how an outbound call ended, with a short summary. needs_help alerts a nurse; opted_out stops future
+    calls. Call it once at the end of every outbound call conversation."""
+    return ob.record_outcome(phone, outcome, summary, call_id)
