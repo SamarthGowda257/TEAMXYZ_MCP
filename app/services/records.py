@@ -33,8 +33,10 @@ def lab_status(phone, dob, patient_id=None) -> Result:
                 return err
         rows = [dict(r) for r in c.execute(select(LR).where(LR.c.patient_id == p["id"])
                                            .order_by(LR.c.ordered_at.desc()).limit(3)).mappings()]
+        from . import pharmacy
+        refill = pharmacy.refill_line(pharmacy.refill_due(c, p["id"]))
     if not rows:
-        return ok("You have no lab reports on record with us.", reports=[])
+        return ok("You have no lab reports on record with us." + refill, reports=[])
     reports, parts = [], []
     for r in rows:
         item = {"report_id": r["report_code"], "test": r["test_name"], "status": r["status"]}
@@ -48,6 +50,7 @@ def lab_status(phone, dob, patient_id=None) -> Result:
     msg = "; ".join(parts[:3]) + "."
     if any(r["status"] == "ready" for r in rows):
         msg += " I can email the ready report to your registered email."
+    msg += refill
     return Result(True, pt.say(p, msg[0].upper() + msg[1:], parts[0][0].upper() + parts[0][1:] + "."),
                   {"reports": reports}, related=bb.related(p["phone"]))
 
@@ -85,9 +88,11 @@ def email_report(phone, dob, report_id="", patient_id=None, actor="agent", chann
         if r["status"] == "ready":
             c.execute(update(LR).where(LR.c.id == r["id"]).values(status="collected"))
         pt.log(c, p["id"], "email_lab_report", r["report_code"], True, f"Emailed {r['test_name']}", actor, channel)
+        from . import pharmacy
+        refill = pharmacy.refill_line(pharmacy.refill_due(c, p["id"]))
     bb.invalidate(p["phone"])
     masked = mask_email(p["email"])
-    return ok(f"Done. I've emailed your {r['test_name']} report summary to {masked}, with a link to view it securely in the portal.",
+    return ok(f"Done. I've emailed your {r['test_name']} report summary to {masked}, with a link to view it securely in the portal.{refill}",
               sent_to=masked, report_id=r["report_code"])
 
 

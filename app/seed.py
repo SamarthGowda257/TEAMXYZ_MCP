@@ -197,6 +197,101 @@ LAB_TESTS = {
     "ECG Report": ("ECG report is ready; your doctor will explain it at your visit.", None),
 }
 
+# Hospital pharmacy list (prices per pack). code, brand, generic, strength, pack, schedule, chronic, stock, price,
+# restock in hours (None = in stock), cold chain, in-stock alternative code
+PHARMACY = [
+    ("DOLO650", "Dolo 650", "Paracetamol", "650 mg", "strip of 15 tablets", "OTC", False, 240, 32, None, False, None),
+    ("CROCIN", "Crocin Advance", "Paracetamol", "500 mg", "strip of 15 tablets", "OTC", False, 150, 25, None, False, None),
+    ("GELUSIL", "Gelusil MPS", "Antacid gel", "200 ml", "bottle", "OTC", False, 40, 120, None, False, None),
+    ("DIGENE", "Digene Gel", "Antacid gel", "200 ml", "bottle", "OTC", False, 0, 135, 20, False, "GELUSIL"),
+    ("UPRISED3", "Uprise D3 60K", "Vitamin D3 (cholecalciferol)", "60000 IU", "strip of 4 capsules", "OTC", False, 90, 130, None, False, None),
+    ("NEUROBION", "Neurobion Forte", "Vitamin B complex with B12", "", "strip of 30 tablets", "OTC", False, 80, 45, None, False, None),
+    ("ELECTRAL", "Electral ORS", "Oral rehydration salts", "21.8 g", "pack of 5 sachets", "OTC", False, 120, 110, None, False, None),
+    ("STREPSILS", "Strepsils", "Cough and throat lozenges", "", "strip of 8 lozenges", "OTC", False, 100, 40, None, False, None),
+    ("CETZINE", "Cetzine", "Cetirizine", "10 mg", "strip of 10 tablets", "OTC", False, 110, 35, None, False, None),
+    ("BANDAGE", "Sterile Gauze Bandage", "Sterile bandage roll", "10 cm", "roll", "OTC", False, 60, 60, None, False, None),
+    ("GLYCOMET", "Glycomet 500 SR", "Metformin", "500 mg SR", "strip of 10 tablets", "H", True, 200, 48, None, False, None),
+    ("AMARYL", "Amaryl 1", "Glimepiride", "1 mg", "strip of 30 tablets", "H", True, 70, 110, None, False, None),
+    ("TELMA40", "Telma 40", "Telmisartan", "40 mg", "strip of 15 tablets", "H", True, 0, 110, 24, False, "TELMICIPLA"),
+    ("TELMICIPLA", "Telmisartan 40 (Cipla)", "Telmisartan", "40 mg", "strip of 15 tablets", "H", True, 120, 75, None, False, None),
+    ("AMLONG5", "Amlong 5", "Amlodipine", "5 mg", "strip of 15 tablets", "H", True, 150, 38, None, False, None),
+    ("ATORVA10", "Atorva 10", "Atorvastatin", "10 mg", "strip of 15 tablets", "H", True, 130, 95, None, False, None),
+    ("ROSUVAS10", "Rosuvas 10", "Rosuvastatin", "10 mg", "strip of 15 tablets", "H", True, 90, 160, None, False, None),
+    ("THYRONORM", "Thyronorm 50", "Levothyroxine", "50 mcg", "bottle of 100 tablets", "H", True, 60, 180, None, False, None),
+    ("ECOSPRINAV", "Ecosprin-AV 75", "Aspirin + Atorvastatin", "75/10 mg", "strip of 15 capsules", "H", True, 0, 58, 26, False, "ASPATORSUN"),
+    ("ASPATORSUN", "Aspirin + Atorvastatin 75/10 (Sun Pharma)", "Aspirin + Atorvastatin", "75/10 mg", "strip of 15 capsules", "H", True, 80, 42, None, False, None),
+    ("PAN40", "Pan 40", "Pantoprazole", "40 mg", "strip of 15 tablets", "H", False, 140, 150, None, False, None),
+    ("MONTAIRLC", "Montair LC", "Montelukast + Levocetirizine", "10/5 mg", "strip of 10 tablets", "H", False, 75, 210, None, False, None),
+    ("ASTHALIN", "Asthalin Inhaler", "Salbutamol", "100 mcg", "inhaler (200 doses)", "H", True, 50, 150, None, False, None),
+    ("BUDECORT", "Budecort 200 Inhaler", "Budesonide", "200 mcg", "inhaler (200 doses)", "H", True, 40, 480, None, False, None),
+    ("FORACORT", "Foracort 200 Inhaler", "Formoterol + Budesonide", "6/200 mcg", "inhaler (120 doses)", "H", True, 35, 560, None, False, None),
+    ("AUGMENTIN", "Augmentin 625 Duo", "Amoxicillin + Clavulanic acid", "625 mg", "strip of 6 tablets", "H1", False, 90, 220, None, False, None),
+    ("AZITHRAL", "Azithral 500", "Azithromycin", "500 mg", "strip of 3 tablets", "H1", False, 120, 120, None, False, None),
+    ("LANTUS", "Lantus SoloStar", "Insulin glargine", "100 IU/ml", "1 pen (3 ml)", "H", True, 30, 780, None, True, None),
+    ("MIXTARD", "Human Mixtard 30/70", "Human insulin (biphasic isophane)", "40 IU/ml", "1 vial (10 ml)", "H", True, 25, 180, None, True, None),
+    ("ZOLFRESH", "Zolfresh 10", "Zolpidem", "10 mg", "strip of 10 tablets", "X", False, 20, 95, None, False, None),
+    ("ALPRAX", "Alprax 0.25", "Alprazolam", "0.25 mg", "strip of 15 tablets", "X", False, 20, 40, None, False, None),
+    ("CLONOTRIL", "Clonotril 0.5", "Clonazepam", "0.5 mg", "strip of 10 tablets", "X", False, 15, 55, None, False, None),
+]
+# Starting HealthCredits (1 credit = 1 rupee) by persona key; Priya's 400 shows the split payment.
+WALLETS = {"shanthamma": 3500, "rahul": 1800, "arjun": 1000, "priya": 400, "meera": 500}
+
+
+def _pharmacy_rows(now: datetime) -> list[dict]:
+    return [dict(medicine_code=c, brand_name=b, generic_name=g, strength=st, pack=pk, schedule_class=sch, chronic=ch,
+                 stock_qty=q, unit_price_inr=pr, restock_eta=(now + timedelta(hours=h)).replace(minute=0, second=0) if h else None,
+                 cold_chain=cold, alternative_code=alt, updated_at=now)
+            for c, b, g, st, pk, sch, ch, q, pr, h, cold, alt in PHARMACY]
+
+
+def _persona_rx(T: date) -> list[dict]:
+    """Maintenance medicines for the demo: Rahul's diabetes and BP prescriptions (refill due in 4 days),
+    Shanthamma's Metformin (refill due in 4 days). Dr. Anil Kumar = 11, Dr. Sneha Rao = 12, Dr. Rajesh Iyer = 1."""
+    return [dict(patient_id=4, doctor_id=11, medicine_name="Metformin 500 mg SR", dosage="Twice daily after meals",
+                 start_date=T - timedelta(days=20), end_date=T + timedelta(days=4)),
+            dict(patient_id=4, doctor_id=12, medicine_name="Telmisartan 40 mg", dosage="Once daily in the morning",
+                 start_date=T - timedelta(days=26), end_date=T + timedelta(days=4)),
+            dict(patient_id=1, doctor_id=1, medicine_name="Metformin 500 mg SR", dosage="Once daily after dinner",
+                 start_date=T - timedelta(days=26), end_date=T + timedelta(days=4))]
+
+
+def ensure_extras() -> dict:
+    """Repeat-safe additions for a database seeded before these features: pharmacy list, wallets, demo
+    prescriptions, and the real demo emails from DEMO_PERSONA_EMAILS. Runs at every start."""
+    done = {}
+    T, NOW = config.today(), config.now()
+    with db.engine.begin() as c:
+        if not c.execute(select(func.count()).select_from(db.pharmacy_inventory)).scalar():
+            c.execute(db.pharmacy_inventory.insert(), _pharmacy_rows(NOW))
+            done["pharmacy"] = len(PHARMACY)
+        for i, p in enumerate(PERSONAS):
+            pid = i + 1
+            if not c.execute(select(db.patients.c.id).where(db.patients.c.id == pid, db.patients.c.phone == p["phone"])).first():
+                continue
+            if not c.execute(select(db.health_credit_wallets.c.patient_id).where(db.health_credit_wallets.c.patient_id == pid)).first():
+                c.execute(db.health_credit_wallets.insert().values(patient_id=pid, balance=WALLETS.get(p["key"], 0), updated_at=NOW))
+                done["wallets"] = done.get("wallets", 0) + 1
+            real = config.DEMO_PERSONA_EMAILS.get(p["key"])
+            if real:
+                c.execute(db.patients.update().where(db.patients.c.id == pid).values(email=real, web_email=real.lower()))
+        # Rahul's ready report: the lab status reply is where his medicine refill is offered. Ready 3 days ago, so it
+        # doesn't also start an automatic "report ready" call during a demo.
+        if c.execute(select(db.patients.c.id).where(db.patients.c.id == 4, db.patients.c.phone == "+919845000004")).first() and \
+                not c.execute(select(db.lab_reports.c.id).where(db.lab_reports.c.report_code == "LR-20950")).first():
+            summ, res = LAB_TESTS["Lipid Profile"]
+            c.execute(db.lab_reports.insert().values(
+                report_code="LR-20950", patient_id=4, doctor_id=11, test_name="Lipid Profile", status="ready",
+                ordered_at=NOW - timedelta(days=4), ready_at=NOW - timedelta(days=3), summary=summ,
+                results={k: {"value": v[0], "range": v[1]} for k, v in res.items()}))
+            done["lab_reports"] = 1
+        for rx in _persona_rx(T):
+            if not c.execute(select(db.prescriptions.c.id).where(db.prescriptions.c.patient_id == rx["patient_id"],
+                                                                 db.prescriptions.c.medicine_name == rx["medicine_name"])).first():
+                c.execute(db.prescriptions.insert().values(**rx))
+                done["prescriptions"] = done.get("prescriptions", 0) + 1
+    return done
+
+
 # Demo personas (fixed, created first). Emails come from DEMO_PERSONA_EMAILS when set.
 PERSONAS = [
     dict(key="shanthamma", name="Shanthamma K", phone="+919845000001", dob=date(1959, 3, 4), gender="female",
@@ -647,6 +742,7 @@ def seed(verbose: bool = False) -> dict:
                     c.execute(text(f"SELECT setval(pg_get_serial_sequence('{name}', 'id'), "
                                    f"COALESCE((SELECT MAX(id) FROM {name}), 0) + 1, false)"))
     counts = {k: len(v) for k, v in rows.items()}
+    counts.update(ensure_extras())
     counts["seconds"] = round((datetime.now() - t0).total_seconds(), 1)
     if verbose:
         print(counts)

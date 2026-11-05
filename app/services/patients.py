@@ -7,6 +7,7 @@ from datetime import timedelta
 from sqlalchemy import and_, func, insert, select, update
 
 from .. import config, db
+from ..store import store
 from ..util import (Result, age_on, clean, fail, human_date, human_time, mask_email, mask_phone, norm_phone, ok,
                     parse_dob, split_list, yes_no)
 from .. import events
@@ -16,6 +17,7 @@ from .ref import REF
 P = db.patients
 LOCK_AFTER = 5
 LOCK_WINDOW_MIN = 15
+UHID_FEE = 150
 NOT_VERIFIED = "I couldn't verify those details. Please check the registered mobile number and date of birth and try again."
 ASK_IDENTITY = "Please share the registered mobile number and date of birth so I can check that securely."
 
@@ -56,9 +58,28 @@ def _locked(conn, phone: str) -> bool:
     return n >= LOCK_AFTER
 
 
+def remember_verified(phone, minutes: int | None = None) -> None:
+    """After a phone + date of birth match (or a signed-in website session), later tools in the same conversation
+    may skip the date of birth for this phone until the window ends. Re-asking every turn is what patients hate."""
+    ref = bb.ref_for(phone)
+    if ref:
+        store.set_json(f"verified:{ref}", 1, ttl=60 * (minutes or config.VERIFIED_SESSION_MIN))
+
+
+def recently_verified(phone) -> bool:
+    ref = bb.ref_for(phone)
+    return bool(ref and store.get_json(f"verified:{ref}", count=False))
+
+
 def check_identity(conn, phone, dob) -> tuple[dict | None, Result | None]:
-    """Server-side identity check. Returns (patient, None) or (None, failure Result). Generic failures only."""
+    """Server-side identity check. Returns (patient, None) or (None, failure Result). Generic failures only.
+    The date of birth may be left out when this phone was verified (or signed in on the website) within the
+    session window; a wrong date of birth still fails."""
     p_norm, d = norm_phone(phone), parse_dob(dob)
+    if clean(phone) and not clean(dob) and p_norm and recently_verified(p_norm):
+        p = get_by_phone(conn, p_norm)
+        if p and not p["is_guest"] and not _locked(conn, p_norm):
+            return p, None
     if not clean(phone) or not clean(dob):
         return None, fail("not_verified", ASK_IDENTITY)
     if not p_norm:
@@ -73,6 +94,7 @@ def check_identity(conn, phone, dob) -> tuple[dict | None, Result | None]:
     conn.execute(insert(db.verification_attempts).values(phone=p_norm, success=good, attempted_at=config.now()))
     if not good:
         return None, fail("not_verified", NOT_VERIFIED)
+    remember_verified(p_norm)
     return p, None
 
 
@@ -123,13 +145,15 @@ def snapshot(conn, p: dict) -> dict:
         upcoming.append({"booking_id": a["booking_code"], "date": human_date(a["appt_date"]),
                          "time": human_time(a["appt_time"]), "with": who})
     open_offer = current_offer(conn, p["id"])
+    from . import pharmacy
+    refills = pharmacy.refill_due(conn, p["id"])
     ins = REF.insurers.get(p["insurer_id"]) if p["insurer_id"] else None
     return {"open_offer": open_offer, "patient_ref": p["patient_code"], "name": p["full_name"], "age": age_on(p["date_of_birth"]),
             "is_senior": is_senior(p), "upcoming": upcoming, "pending_reports": pending, "ready_reports": ready,
             "insurer": ins["name"] if ins else "none",
             "recent_notes": [f"{n['created_at'].strftime('%d %b')}: {n['summary']}" for n in notes],
             "caregiver_on_file": bool(p["caregiver_name"]), "preferred_language": p["preferred_language"],
-            "mobility_needs": p["mobility_needs"]}
+            "mobility_needs": p["mobility_needs"], "refill_due": refills}
 
 
 def verify(phone, dob) -> Result:
@@ -197,9 +221,13 @@ def register(name, phone, dob, email, gender="", insurance_provider="", channel=
             pid, code = existing["id"], existing["patient_code"]
         else:
             pid = c.execute(insert(P).values(patient_code=code, **vals)).inserted_primary_key[0]
+        c.execute(insert(db.bills).values(bill_code=random_code("BL"), patient_id=pid, description="Lifetime digital health record (UHID)",
+                                          amount_inr=UHID_FEE, insurer_paid_inr=0, status="due",
+                                          due_date=config.today() + timedelta(days=15), created_at=config.now()))
         log(c, pid, "register_patient", code, True, f"Registered {name}", channel=channel)
         senior = age_on(d) >= 60
-    msg = f"Welcome to WellNest, {name.split()[0]}. You're registered with patient ID {code}."
+    msg = (f"Welcome to WellNest, {name.split()[0]}. You're registered with patient ID {code}. "
+           f"There is a one-time {UHID_FEE} rupee charge for your lifetime digital health record.")
     if ins:
         msg += f" I've noted your insurer as {ins['name']}."
     return ok(msg, patient_ref=code, is_senior=senior)

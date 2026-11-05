@@ -11,8 +11,9 @@ from sqlalchemy import and_, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .. import config, db, notify
-from ..util import (Result, clean, fail, human_date, human_time, in_pref, norm_code, norm_phone, norm_time_pref, ok,
-                    parse_date, parse_time, rupees, short_date, spoken_code)
+from ..util import (Result, clean, fail, human_date, human_time, in_pref, mask_email, norm_code, norm_phone, norm_time_pref, ok,
+                    parse_date, parse_time, rupees, short_date, spoken_code, yes_no)
+from ..security import sign_token
 from .. import events
 from . import blackboard as bb
 from . import patients as pt
@@ -258,10 +259,28 @@ def first_day_with_time(c, docs, proc, hh: str, days=14) -> date | None:
 
 
 # ------------------------------------------------------------------ helpers
+FREE_REVIEW = "Free follow-up review"
+REVIEW_DAYS = 7
+
+
+def free_review_until(conn, patient_id, doctor_id, d: date) -> date | None:
+    """A paid visit includes one free review with the same doctor within 7 days. Returns its last day if still unused."""
+    visit = conn.execute(select(A.c.appt_date).where(
+        A.c.patient_id == patient_id, A.c.doctor_id == doctor_id, A.c.status == "completed", A.c.appt_date < d,
+        A.c.appt_date >= d - timedelta(days=REVIEW_DAYS), or_(A.c.reason.is_(None), A.c.reason.notlike(f"{FREE_REVIEW}%")))
+        .order_by(A.c.appt_date.desc())).scalar()
+    if not visit:
+        return None
+    used = conn.execute(select(A.c.id).where(A.c.patient_id == patient_id, A.c.doctor_id == doctor_id, A.c.appt_date > visit,
+                                             A.c.status.in_(("booked", "completed")), A.c.reason.like(f"{FREE_REVIEW}%"))).first()
+    return None if used else visit + timedelta(days=REVIEW_DAYS)
+
+
 def _appt_view(a: dict) -> dict:
     if a["doctor_id"]:
         doc = REF.doctors[a["doctor_id"]]
-        who, room, fee, dept = doc["name"], doc["room"], doc["fee_inr"], doc["dept"]
+        free = (a.get("reason") or "").startswith(FREE_REVIEW)
+        who, room, fee, dept = doc["name"], doc["room"], 0 if free else doc["fee_inr"], doc["dept"]
     else:
         pr = REF.procedures[a["procedure_id"]]
         who, room, fee, dept = pr["name"], REF.resources[a["resource_id"]]["name"], pr["price_inr"], "Radiology and Diagnostics"
@@ -287,24 +306,80 @@ def _get_booking(conn, booking_id, lock=False) -> dict | None:
     return dict(r) if r else None
 
 
-def _confirm_email(conn, patient, view, subject_prefix="Booking confirmed", extra=""):
+POLICY_LINES = ("Please report 15 minutes early at the floor reception for vitals (BP, pulse, SpO2, weight).\n"
+                "Your fee includes one free follow-up review for the same problem within 7 days.\n"
+                "Free cancellation or rescheduling up to 2 hours before; later cancellations or no-shows have a 150 rupee fee.\n"
+                "Slots are held for 15 minutes past the time. Wheelchair and porter help at Gate 2 is free; just ask.\n"
+                "Helpline: 080 4000 1234. Emergency: call 108.")
+
+
+def _floor_of(dept_name: str) -> str:
+    d = next((x for x in REF.departments.values() if x["name"] == dept_name), None)
+    return d["floor"] if d and d.get("floor") else ""
+
+
+def calendar_event(conn, patient, view, appt) -> dict:
+    """Create or move the patient's calendar event for this booking (Google Calendar and/or invite.ics)."""
+    from . import calendar as cal
+    start = datetime.combine(date.fromisoformat(view["date_iso"]), datetime.strptime(appt["appt_time"], "%H:%M").time())
+    if appt.get("procedure_id"):
+        pr = REF.procedures[appt["procedure_id"]]
+        minutes, title = pr["duration_minutes"], f"Prep & Scan: {pr['name']} (WellNest Radiology)"
+        prep = pr["instructions"] or ""
+        if pr.get("fasting_hours"):                # the event starts when the fast starts and ends when the scan ends
+            fast_from = start - timedelta(hours=pr["fasting_hours"])
+            prep = f"Fasting: {pr['fasting_hours']} hours, starting at {fast_from.strftime('%I:%M %p').lstrip('0')}. Scan at {view['time']}. " + prep
+            start, minutes = fast_from, minutes + pr["fasting_hours"] * 60
+    else:
+        doc = REF.doctors[appt["doctor_id"]]
+        minutes, title, prep = doc["slot_minutes"] or 15, f"WellNest OPD: {view['with']} ({view['department']})", ""
+    floor = _floor_of(view["department"])
+    location = f"{view['room']}{', ' + floor if floor else ''}, WellNest Hospitals, Gate 2, 42 Outer Ring Road, Marathahalli, Bengaluru 560037"
+    details = (f"Patient: {patient['full_name']}\nBooking ID: {view['booking_id']}\nWith: {view['with']}\nRoom: {view['room']}"
+               f"\nFee: {view['fee_inr']} rupees\n" + (f"Preparation: {prep}\n" if prep else "") + "\n" + POLICY_LINES
+               + f"\n\nManage: {config.PUBLIC_BASE_URL}/portal/appointments")
+    return cal.upsert(conn, ref=view["booking_id"], patient=patient, kind="appointment", title=title, starts_at=start,
+                      minutes=minutes, location=location, details=details)
+
+
+def calendar_link(ref: str) -> str:
+    """Short signed link for chat and SMS: opens Google Calendar with the event filled in (see /cal in commerce_api)."""
+    return f"{config.PUBLIC_BASE_URL}/cal/{sign_token({'cal': ref}, 60 * 24 * 3600)}"
+
+
+def _confirm_email(conn, patient, view, subject_prefix="Booking confirmed", extra="", appt=None):
+    from . import calendar as cal
+    ev = calendar_event(conn, patient, view, appt) if appt else None
+    files = cal.invite_attachment(ev) if ev else []
+    add_cal = (f"Add to Google Calendar: {cal.google_link(ev)}\n" if ev else "")
     body = (f"Dear {patient['full_name']},\n\n{subject_prefix}: {view['with']} ({view['department']})\n"
             f"Date: {view['date']}\nTime: {view['time']}\nRoom: {view['room']}\nFee: Rs {view['fee_inr']}\n"
-            f"Booking ID: {view['booking_id']}\n\n{extra}Manage your bookings at {config.PUBLIC_BASE_URL}/portal\n\n"
+            f"Booking ID: {view['booking_id']}\n\n{extra}{POLICY_LINES}\n\n{add_cal}"
+            + ("The calendar invite is attached.\n" if files else "")
+            + f"Manage your bookings at {config.PUBLIC_BASE_URL}/portal\n\n"
             "WellNest Hospitals, 42 Outer Ring Road, Marathahalli, Bengaluru.\nFor emergencies call 108.")
-    sms = f"WellNest: {subject_prefix} {view['booking_id']} {view['with']} {short_date(date.fromisoformat(view['date_iso']))} {view['time']}."
+    sms = (f"WellNest: {subject_prefix} {view['booking_id']} {view['with']} {short_date(date.fromisoformat(view['date_iso']))} {view['time']}."
+           + (f" Add to calendar: {calendar_link(view['booking_id'])}" if ev else ""))
+    subject = (f"Confirmed: {view['with']} on {view['date']} at {view['time']} - WellNest Hospitals"
+               if subject_prefix == "Booking confirmed" else f"{subject_prefix} - {view['booking_id']}")
+    key = f"{subject_prefix[:12]}:{view['booking_id']}:{view['date_iso']}:{view['time']}"
     notify.email_and_sms(conn, patient=patient, template=subject_prefix.lower().replace(" ", "_"),
-                         subject=f"{subject_prefix} - {view['booking_id']}", body=body, sms=sms)
-    if patient.get("caregiver_consent") and patient.get("caregiver_email"):
-        notify.queue(conn, patient_id=patient["id"], channel="email", template="caregiver_update",
-                     to=patient["caregiver_email"], subject=f"Update for {patient['full_name']}: {subject_prefix}",
-                     body=f"Hello {patient['caregiver_name']},\n\n{patient['full_name']}: {subject_prefix.lower()} with "
-                          f"{view['with']} on {view['date']} at {view['time']} (booking {view['booking_id']}).\n\nWellNest Hospitals")
+                         subject=subject, body=body, sms=sms, key=key, attachments=files)
+    notify.to_caregiver(conn, patient, template="caregiver_update", key=key, attachments=files,
+                        subject=f"Update for {patient['full_name']}: {subject_prefix}",
+                        body=f"{patient['full_name']}: {subject_prefix.lower()} with {view['with']} on {view['date']} at "
+                             f"{view['time']}, {view['room']} (booking {view['booking_id']}). Please arrive 15 minutes early; "
+                             "free wheelchair and porter help is available at Gate 2.",
+                        sms=f"{patient['full_name']}: {subject_prefix.lower()} {view['booking_id']} {view['with']} "
+                            f"{short_date(date.fromisoformat(view['date_iso']))} {view['time']}.")
 
 
 # ------------------------------------------------------------------ book
 def book(phone, date_text, time_text, doctor_name="", department="", patient_name="", date_of_birth="", reason="",
-         procedure="", idempotency_key="", channel="chat", actor="agent", patient_id=None) -> Result:
+         procedure="", idempotency_key="", channel="chat", actor="agent", patient_id=None, email="") -> Result:
+    new_email = clean(email).lower()
+    if new_email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", new_email):
+        return fail("invalid_input", "That email address doesn't look right. Please spell it again.")
     p_norm = norm_phone(phone)
     if not patient_id and not p_norm:
         return fail("invalid_input", "Please share a valid 10 digit mobile number for the booking.")
@@ -347,6 +422,9 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
                         patient_code=pt.random_code("PT", 6), full_name=name, phone=p_norm, date_of_birth=dob,
                         is_guest=dob is None, created_at=config.now())).inserted_primary_key[0]
                     patient = pt.get_by_id(c, pid)
+            if new_email and not patient.get("email"):      # first email only: a caller can't redirect someone's mail
+                c.execute(update(db.patients).where(db.patients.c.id == patient["id"]).values(email=new_email))
+                patient["email"] = new_email
             if earliest:
                 d = first_day_with_time(c, docs, proc, hh)
                 if not d:
@@ -381,6 +459,8 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
                     msg += f" Free: {'; '.join(alts[:3])}." if alts else " I can check another day or add you to the waitlist."
                     return fail("slot_taken", msg, alternatives=alts[:3], date_iso=d.isoformat())
                 vals = dict(doctor_id=chosen["id"])
+                if free_review_until(c, patient["id"], chosen["id"], d):
+                    reason = f"{FREE_REVIEW}: {clean(reason)}" if clean(reason) else FREE_REVIEW
             code = new_booking_code(c)
             aid = c.execute(insert(A).values(booking_code=code, patient_id=patient["id"], appt_date=d, appt_time=hh,
                                              status="booked", reason=clean(reason)[:200] or (proc["name"] if proc else None),
@@ -388,7 +468,7 @@ def book(phone, date_text, time_text, doctor_name="", department="", patient_nam
                                              updated_at=config.now(), **vals)).inserted_primary_key[0]
             a = dict(c.execute(select(A).where(A.c.id == aid)).mappings().first())
             view = _appt_view(a)
-            _confirm_email(c, patient, view, extra=f"Before your visit: {instructions_for(a)}\n\n")
+            _confirm_email(c, patient, view, extra=f"Before your visit: {instructions_for(a)}\n\n", appt=a)
             pt.log(c, patient["id"], "book_appointment", code, True,
                    f"Booked {view['with']} {view['date']} {view['time']}", actor, channel)
     except IntegrityError:
@@ -403,14 +483,23 @@ def _booked_result(patient, a: dict, repeat=False) -> Result:
     v = _appt_view(a)
     ins = instructions_for(a)
     lead = "You already have this booking." if repeat else "Booked."
-    msg = (f"{lead} {v['with']}, {v['date']} at {v['time']}, room {v['room']}, fee {rupees(v['fee_inr'])}. "
-           f"Your booking ID is {v['booking_id']}.")
+    free = (a.get("reason") or "").startswith(FREE_REVIEW)
+    fee = "no fee, this is your free follow-up review" if free else f"fee {rupees(v['fee_inr'])}"
+    # the ID comes first: when an agent shortens the reply, the end of it is what gets dropped
+    msg = f"{lead} Your booking ID is {v['booking_id']}. {v['with']}, {v['date']} at {v['time']}, room {v['room']}, {fee}."
+    if a.get("doctor_id") and not free:
+        msg += " The fee includes one free follow-up review within 7 days."
     if patient.get("is_guest"):
         msg += " Please register with us to manage this booking later."
-    short = f"{lead} {v['with']}, {v['date']} at {v['time']}. Booking ID {v['booking_id']}."
+    if not patient.get("email"):
+        msg += " Share your email address if you'd like the details and a calendar invite by email."
+    short = f"{lead} Booking ID {v['booking_id']}. {v['with']}, {v['date']} at {v['time']}."
+    if free:
+        short += " No fee: this is your free follow-up review."
     ref = REF.procedures[a["procedure_id"]]["code"] if a.get("procedure_id") else None
     rel = bb.related(patient["phone"], ref=ref, skip_kinds=("booking",))
-    data = dict(v, instructions_short=ins[:160], patient_name=patient["full_name"])
+    data = dict(v, instructions_short=ins[:160], patient_name=patient["full_name"], calendar_link=calendar_link(v["booking_id"]),
+                confirmation_email=mask_email(patient.get("email")))
     return Result(True, pt.say(patient, msg, short), data, related=rel)
 
 
@@ -428,7 +517,7 @@ def find_appointments(phone="", date_of_birth="", booking_id="", include_past=""
             return ok(f"Booking {v['booking_id']} with {v['with']} on {v['date']} at {v['time']} {st}. "
                       "To change it I'll need the registered mobile number and date of birth.",
                       appointments=[{k: v[k] for k in ("booking_id", "with", "date", "date_iso", "time", "status")}])
-        if not clean(date_of_birth):
+        if not clean(date_of_birth) and not (norm_phone(phone) and pt.recently_verified(norm_phone(phone))):
             p = pt.get_by_phone(c, phone)
             if not norm_phone(phone):
                 return fail("invalid_input", "Please share the registered mobile number, or the booking ID.")
@@ -506,20 +595,39 @@ def cancel(booking_id, phone="", date_of_birth="", reason="", channel="chat", ac
                                                             cancel_reason=clean(reason)[:200] or None, updated_at=config.now()))
         pt.log(c, p["id"], "cancel_appointment", v["booking_id"], True, f"Cancelled {v['with']} {v['date']} {v['time']}",
                actor, channel)
+        from . import calendar as cal
+        from . import wallet
+        starts = datetime.combine(a["appt_date"], datetime.strptime(a["appt_time"], "%H:%M").time())
+        late = starts - config.now() < timedelta(hours=2)
+        refunded = wallet.refund_for_cancelled_booking(c, p, a, starts)
+        cal.cancel(c, v["booking_id"])
+        ev = cal.get(c, v["booking_id"])
+        files = cal.invite_attachment(ev) if ev else []          # METHOD:CANCEL removes it from their calendar
+        money = (f"{refunded:,} HealthCredits have been returned to your wallet"
+                 + (" (after the 150 rupee late-cancellation fee)" if late else "") + ".\n" if refunded else "")
         notify.email_and_sms(c, patient=p, template="booking_cancelled", subject=f"Booking cancelled - {v['booking_id']}",
                              body=f"Dear {p['full_name']},\n\nYour booking {v['booking_id']} with {v['with']} on {v['date']} "
-                                  f"at {v['time']} is cancelled.\n\nBook again any time at {config.PUBLIC_BASE_URL}.\n\nWellNest Hospitals",
-                             sms=f"WellNest: booking {v['booking_id']} cancelled.")
+                                  f"at {v['time']} is cancelled.\n{money}\nBook again any time at {config.PUBLIC_BASE_URL}.\n\nWellNest Hospitals",
+                             sms=f"WellNest: booking {v['booking_id']} cancelled.", key=f"cancel:{v['booking_id']}", attachments=files)
+        notify.to_caregiver(c, p, template="booking_cancelled", key=f"cancel:{v['booking_id']}", attachments=files,
+                            subject=f"Update for {p['full_name']}: booking cancelled",
+                            body=f"{p['full_name']}'s visit with {v['with']} on {v['date']} at {v['time']} ({v['booking_id']}) is cancelled.",
+                            sms=f"{p['full_name']}'s booking {v['booking_id']} on {v['date']} is cancelled.")
         offer = offer_slot(c, a["doctor_id"], a["appt_date"], a["appt_time"], exclude_patient=p["id"]) if a["doctor_id"] else None
     bb.invalidate(p["phone"])
     events.publish("appointment.cancelled", patient_id=p["id"], booking_id=v["booking_id"], channel=channel)
     if offer:
         events.publish("waitlist.offered", patient_id=offer["patient_id"], offer_code=offer["offer_code"])
-    msg = f"Cancelled. Booking {v['booking_id']} with {v['with']} on {v['date']} at {v['time']} is cancelled."
-    short = f"Cancelled booking {v['booking_id']}."
+    cn = f"CN-{10000 + a['id']}"
+    msg = f"Cancelled. Booking {v['booking_id']} with {v['with']} on {v['date']} at {v['time']} is cancelled, reference {cn}."
+    if refunded:
+        msg += (f" {refunded:,} HealthCredits are back in your wallet" + (" after the 150 rupee fee for cancelling within 2 hours." if late else "."))
+    short = f"Cancelled booking {v['booking_id']}, reference {cn}."
+    if refunded:                                # money facts stay in the short reply seniors hear
+        short += (f" {refunded:,} HealthCredits are back in your wallet" + (" after the 150 rupee late fee." if late else "."))
     if offer:
         msg += " The freed slot has been offered to the next patient on the waitlist."
-    return ok(pt.say(p, msg, short), booking_id=v["booking_id"], cancelled=True, slot_released=True,
+    return ok(pt.say(p, msg, short), booking_id=v["booking_id"], cancellation_id=cn, cancelled=True, slot_released=True,
               offered_to_waitlist=bool(offer))
 
 
@@ -567,7 +675,7 @@ def reschedule(booking_id, new_date, new_time, phone="", date_of_birth="", docto
             a2 = dict(c.execute(select(A).where(A.c.id == a["id"])).mappings().first())
             v = _appt_view(a2)
             pt.log(c, p["id"], "reschedule_appointment", v["booking_id"], True, f"Moved to {v['date']} {v['time']}", actor, channel)
-            _confirm_email(c, p, v, subject_prefix="Booking rescheduled")
+            _confirm_email(c, p, v, subject_prefix="Booking rescheduled", appt=a2)
             offer = offer_slot(c, *old, exclude_patient=p["id"]) if old[0] else None
             moved_code = v["booking_id"]
     except IntegrityError:
@@ -585,7 +693,13 @@ def reschedule(booking_id, new_date, new_time, phone="", date_of_birth="", docto
 
 
 # ------------------------------------------------------------------ assistance
-def request_assistance(booking_id, phone, assistance_type, notes="", channel="chat", actor="agent", patient_id=None) -> Result:
+def _gate(notes: str) -> str:
+    n = clean(notes).lower()
+    return "Gate 1" if "gate 1" in n or "emergency" in n else "the Basement P1 lift lobby" if "basement" in n or "p1" in n else "Gate 2"
+
+
+def request_assistance(booking_id, phone, assistance_type, notes="", channel="chat", actor="agent", patient_id=None,
+                       date_of_birth="", off_campus="") -> Result:
     t = clean(assistance_type).lower().replace(" ", "_")
     kinds = {"wheelchair": "wheelchair", "wheel_chair": "wheelchair", "escort": "escort", "interpreter": "interpreter",
              "translator": "interpreter", "transport": "transport_desk", "transport_desk": "transport_desk", "cab": "transport_desk"}
@@ -598,14 +712,39 @@ def request_assistance(booking_id, phone, assistance_type, notes="", channel="ch
         if not a or not p or a["patient_id"] != p["id"]:
             return fail("not_allowed", "That booking isn't under this mobile number, so I can't arrange help for it. "
                                        "Only the patient on the booking, or someone calling with their registered mobile number, can request it.")
+        leaves_campus = kind == "wheelchair" and yes_no(off_campus) is True
+        if leaves_campus:                       # money moves, so the identity check is required here
+            if not patient_id:
+                _, err = pt.check_identity(c, phone, date_of_birth)
+                if err:
+                    return err
+            from . import wallet
+            good, bal = wallet.hold_wheelchair_deposit(c, p, a["booking_code"])
+            if not good:
+                return fail("insufficient_credits", "Taking a wheelchair off campus needs a 1,000 rupee refundable deposit and a security "
+                                                    "gate pass. There aren't enough HealthCredits to hold it, so please pay it at the Gate 2 porter desk.")
         aid = c.execute(insert(db.assistance_requests).values(appointment_id=a["id"], type=kind, notes=clean(notes)[:200] or None,
                                                               created_at=config.now())).inserted_primary_key[0]
         pt.log(c, p["id"], "request_assistance", a["booking_code"], True, f"{kind} requested", actor, channel)
+        token, gate, label = f"AS-{10000 + aid}", _gate(notes), kind.replace("_", " ")
+        notify.to_caregiver(c, p, template="assistance", key=f"assist:{token}",
+                            subject=f"{label.capitalize()} help for {p['full_name']}",
+                            body=f"{label.capitalize()} help is arranged for {p['full_name']}'s visit on {_appt_view(a)['date']}, token {token}, at {gate}.",
+                            sms=f"{label.capitalize()} help for {p['full_name']}: token {token}, {gate}.")
     v = _appt_view(a)
-    label = kind.replace("_", " ")
-    bb.add(p["phone"], "assistance", f"{label.capitalize()} help is arranged for booking {v['booking_id']}.", 3, v["booking_id"])
-    return ok(f"Done. {label.capitalize()} help will be ready at the main entrance on {v['date']} before your {v['time']} visit.",
-              assistance_id=f"AS-{10000 + aid}", booking_id=v["booking_id"], type=kind)
+    bb.add(p["phone"], "assistance", f"{label.capitalize()} help is arranged for booking {v['booking_id']}, token {token}.", 3, v["booking_id"])
+    if leaves_campus:
+        return ok(f"Done. Your off-campus wheelchair is arranged under token {token}. A 1,000 credit refundable deposit is held and comes back "
+                  f"when it is returned to Gate 2; your balance is now {bal:,}. Please collect the gate pass from security.",
+                  assistance_id=token, booking_id=v["booking_id"], type=kind, deposit_held=wallet.WHEELCHAIR_DEPOSIT, balance_credits=bal)
+    if kind in ("wheelchair", "escort"):
+        msg = (f"Done. Free {label} help is booked under token {token}. Our porter will meet you at {gate} before your {v['time']} visit on "
+               f"{v['date']} and take you back to your vehicle afterwards. Please show the token at the porter desk.")
+    else:
+        msg = f"Done. {label.capitalize()} help is arranged for your {v['time']} visit on {v['date']}, token {token}."
+    return ok(pt.say(p, msg, (f"Done. Free {label} help, token {token}, at {gate}. The porter also takes you back to your vehicle."
+                                if kind in ("wheelchair", "escort") else f"Done. {label.capitalize()} help is arranged, token {token}.")), assistance_id=token, booking_id=v["booking_id"],
+              type=kind, gate=gate, two_way=kind in ("wheelchair", "escort"), complimentary=True)
 
 
 # ------------------------------------------------------------------ waitlist
@@ -766,7 +905,7 @@ def accept_offer(offer_code, phone, channel="chat", actor="agent") -> Result:
             c.execute(update(WL).where(WL.c.id == w["id"]).values(status="booked"))
             a = dict(c.execute(select(A).where(A.c.id == aid)).mappings().first())
             v = _appt_view(a)
-            _confirm_email(c, p, v, extra="Booked from the waitlist.\n\n")
+            _confirm_email(c, p, v, extra="Booked from the waitlist.\n\n", appt=a)
             pt.log(c, p["id"], "accept_waitlist_offer", code_b, True, f"Waitlist slot {v['with']} {v['date']} {v['time']}", actor, channel)
     except IntegrityError:
         return fail("offer_expired", "Sorry, that slot has just been taken. You're still on the waitlist.")

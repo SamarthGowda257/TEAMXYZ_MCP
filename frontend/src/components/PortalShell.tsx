@@ -18,7 +18,7 @@ const NAV = [
 /** Logged-in shell: names the product and the patient, keeps the main job (booking) one click away. */
 export function PortalShell({ title, children, actions }: { title: string; children: (me: Me, reloadMe: () => void) => ReactNode; actions?: ReactNode }) {
   const loc = useLocation();
-  const me = useApi<Me>(session.loggedIn() ? "/api/me" : null);
+  const me = useApi<Me>(session.loggedIn() ? "/api/me" : null, [], { live: true });
   useEffect(() => { document.title = `${title} · My WellNest`; }, [title]);
   useEffect(() => { if (me.data) setChatPatient({ name: me.data.name, phone: me.data.phone }); }, [me.data]);
   if (!session.loggedIn()) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;

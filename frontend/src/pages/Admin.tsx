@@ -305,10 +305,10 @@ function Reminders() {
             <thead><tr><th>Call</th><th>Kind</th><th>Due</th><th>Status</th><th>Outcome</th></tr></thead>
             <tbody>
               {calls.map((c) => (
-                <tr key={c.call_code}>
-                  <td><code className="ad-code">{c.call_code}</code></td>
+                <tr key={c.call_id}>
+                  <td><code className="ad-code">{c.call_id}</code></td>
                   <td>{String(c.kind || "").replace(/_/g, " ")}</td>
-                  <td>{c.due_at ? new Date(c.due_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                  <td>{c.due_at || "—"}</td>
                   <td><Chip kind={c.status === "completed" ? "ok" : c.status === "failed" ? "urgent" : "live"}>{c.status}</Chip></td>
                   <td>{c.outcome || "—"}</td>
                 </tr>

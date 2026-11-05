@@ -11,11 +11,13 @@ os.environ.setdefault("MCP_BEARER_TOKEN", "test-token")
 os.environ["DB_PATH"] = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.pop("DATABASE_URL", None)
 
-import pytest  # noqa: E402
+import pytest
+from app.store import store  # noqa: E402
 
 from app import config, db, seed  # noqa: E402
 from app.services import appointments as ap  # noqa: E402
 from app.services import patients as pt  # noqa: E402
+from app.services import records as rc  # noqa: E402
 from app.services import ref  # noqa: E402
 from app.util import (Result, norm_code, norm_phone, parse_date, parse_dob, parse_time, spoken_code)  # noqa: E402
 
@@ -79,8 +81,20 @@ def test_cancel_needs_owner():
     shan = pt.verify("9845000001", "1959-03-04").data["upcoming"][0]["booking_id"]
     r = ap.cancel(shan, "9845000002", "1992-06-15")
     assert not r.ok and r.error_code == "not_allowed"
+    store.flush()                                   # forget the verification above: a cold phone needs the DOB
     r = ap.cancel(shan, "9845000001", "")
     assert not r.ok and r.error_code == "not_verified"
+
+
+def test_verified_patient_is_not_asked_again():
+    store.flush()
+    assert rc.lab_status("9845000003", "").error_code == "not_verified"
+    assert pt.verify("9845000003", "20 January 1997").ok
+    assert rc.lab_status("98450 00003", "").ok                    # same conversation: no second DOB
+    assert rc.lab_status("9845000003", "1990-01-01").error_code == "not_verified"   # a wrong DOB still fails
+    assert rc.lab_status("9845000004", "").error_code == "not_verified"             # other patients untouched
+    pt.remember_verified("9845000004", 120)                        # signed in on the website, opened the chat
+    assert rc.bill_status("9845000004", "").ok
 
 
 def test_double_booking_is_impossible():

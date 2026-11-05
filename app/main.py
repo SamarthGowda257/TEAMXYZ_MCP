@@ -32,6 +32,12 @@ def init_data() -> None:
     if config.AUTO_SEED and not seed.is_seeded():
         log.info("Seeding demo data: %s", seed.seed())
     try:
+        extra = seed.ensure_extras()
+        if extra:
+            log.info("Added demo data: %s", extra)
+    except Exception as e:
+        log.warning("demo extras skipped: %s", e)
+    try:
         seed.migrate_brand()
     except Exception as e:
         log.warning("brand migration skipped: %s", e)

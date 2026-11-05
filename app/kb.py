@@ -68,8 +68,8 @@ FAQ = [
      "on the 1st floor with a photo ID. Copies are ready within 2 working days."),
     ("second_opinion", "Second opinion", "You can book a second-opinion consultation with any of our specialists. Bring your earlier reports "
      "and scans; the doctor will review them during the visit."),
-    ("cancel_policy", "Cancelling or changing a booking", "You can cancel or reschedule a booking free of charge on chat, by phone or in "
-     "the patient portal. If your doctor is fully booked, we can add you to the waitlist and message you when a slot opens."),
+    ("cancel_policy", "Cancelling or changing a booking", "You can cancel or reschedule a booking free of charge up to 2 hours before it, on chat, by phone or in "
+     "the patient portal. Later cancellations or no-shows have a 150 rupee fee. If your doctor is fully booked, we can add you to the waitlist and message you when a slot opens."),
     ("waitlist", "Waitlist", "If the doctor you want is full, join the waitlist. When a slot opens we send you an offer by SMS and email; "
      "the slot is held for you for 30 minutes, so accept it from the link or on chat to confirm."),
     ("senior", "Senior citizen help", "Our senior citizen desk at entrance B offers wheelchair help, priority billing, early-morning slots "
@@ -106,8 +106,9 @@ FAQ = [
 POLICIES = [
     ("visitors", "Visitor policy", "Visitors are welcome during ward visiting hours, 11 AM to 1 PM and 5 PM to 7 PM, two at a time per "
      "patient. Please carry a photo ID and the visitor pass from the front desk. The ICU allows one visitor from 5 PM to 6 PM."),
-    ("cancellation", "Cancellation and refund policy", "You can cancel or reschedule an outpatient booking free of charge until the "
-     "appointment time. Prepaid consultation fees are refunded to the original payment method within 5 to 7 working days. "
+    ("cancellation", "Cancellation and refund policy", "You can cancel or reschedule an outpatient booking free of charge up to 2 hours "
+     "before the appointment. Cancelling later than that, or not coming, has a 150 rupee fee and the rest is refunded. Refunds go to "
+     "the original payment method within 3 to 5 banking days. "
      "Health check packages cancelled less than 24 hours before are refunded after a 10 percent fee."),
     ("payment_deposit", "Admission deposit and billing policy", "Planned admissions need an advance deposit, which depends on the "
      "procedure and room type; the billing desk gives an estimate in writing. Cashless insurance patients pay only items the "
@@ -137,8 +138,8 @@ POLICIES = [
      "emergency entrance B, open 24 hours. Medico-legal cases are reported to the police as the law requires."),
     ("medicine_policy", "Medicine and prescription policy", "Prescription refills are approved only by a doctor. The pharmacy needs a "
      "valid prescription for prescription-only medicines. We never recommend medicines over chat or phone."),
-    ("appointment_policy", "Appointment and late arrival policy", "Please arrive 15 minutes before your appointment. If you are more "
-     "than 15 minutes late, the doctor may see you after the next patient or we can reschedule you at no charge."),
+    ("appointment_policy", "Appointment and late arrival policy", "Please arrive 15 minutes before your appointment. Your slot is held for "
+     "15 minutes past the time. If you are later than that, the doctor sees you at the end of the clinic, so you don't lose your visit."),
 ]
 
 

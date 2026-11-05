@@ -18,6 +18,8 @@ from .services import patients as pt
 from .services import records as rc
 from .services import outbound as ob
 from .services import support as sp
+from .services import pharmacy as ph
+from .services import wallet as wl
 from .util import Result, mask_phone
 
 log = logging.getLogger("wellnest")
@@ -37,7 +39,10 @@ S = str
 Phone = Annotated[S, Field(description="Patient's mobile number, any format, e.g. 98450 12345 or +91 9845012345.")]
 OptPhone = Annotated[S, Field(description="Optional. Patient's mobile number if known; helps carry facts between agents.")]
 Dob = Annotated[S, Field(description="Patient's date of birth exactly as they said it, any format, e.g. 10-2-1999, 10/02/1999 or 4 March 1958. Day-month-year (India): 10-2-1999 is 10 February 1999. Do not convert it or ask the patient for a format.")]
-OptDob = Annotated[S, Field(description="Optional. Patient's date of birth, e.g. 1958-03-04, for identity verification.")]
+OptDob = Annotated[S, Field(description="Optional. Patient's date of birth, e.g. 1958-03-04, for identity verification. Leave empty if it was already given in this conversation or the patient is signed in on the website.")]
+# Identity tools: the server remembers a verified patient (phone + date of birth, or a website sign-in) for a while,
+# so the date of birth is asked once per conversation, not before every tool.
+SDob = Annotated[S, Field(description="Patient's date of birth exactly as they said it, any format (day-month-year, e.g. 4 March 1958). Leave EMPTY if the patient already gave it earlier in this conversation or is signed in on the website: the server remembers verified patients. Ask for it only if this tool replies not_verified.")]
 Date = Annotated[S, Field(description="Date as the patient said it: 'tomorrow', 'Monday', '4 Nov', 04/11/2026 (day first) or 2026-11-04 (Asia/Kolkata). Never ask the patient for a format.")]
 Time = Annotated[S, Field(description="Time like 10:30, 10:30 AM or 14:15.")]
 Dept = Annotated[S, Field(description="Optional. Department or plain words, e.g. Cardiology, heart, skin, child.")]
@@ -70,7 +75,7 @@ def tool(fn):
 
 # ======================================================================== Booking
 @tool
-def verify_patient(phone: Phone, date_of_birth: Dob) -> dict:
+def verify_patient(phone: Phone, date_of_birth: SDob = "") -> dict:
     """Verify a patient by mobile number and date of birth (checked on the server). Returns their name, age,
     senior flag, upcoming bookings, report status, insurer and recent conversation notes. Call this first for
     anything about an existing patient; it often answers 'what are my appointments' with no extra call."""
@@ -105,15 +110,16 @@ def book_appointment(phone: Phone, date: Date, time: Time,
                      department: Dept = "", doctor_name: Doc = "",
                      reason: Annotated[S, Field(description="Optional. Reason for visit, e.g. knee pain.")] = "",
                      date_of_birth: OptDob = "", procedure: Proc = "",
-                     idempotency_key: Annotated[S, Field(description="Optional. Any unique text; repeating it returns the same booking.")] = "") -> dict:
+                     idempotency_key: Annotated[S, Field(description="Optional. Any unique text; repeating it returns the same booking.")] = "",
+                     email: Annotated[S, Field(description="Optional. Patient's email for the confirmation, when they have none on file. It never replaces an email already on file.")] = "") -> dict:
     """Book a doctor appointment or a test/scan slot after the patient has chosen a free time and confirmed.
     Needs phone, date, time and a doctor, department or procedure. Returns the booking ID (read it out), doctor,
     room, fee and preparation advice. Booking the same slot twice returns the existing booking."""
-    return ap.book(phone, date, time, doctor_name, department, patient_name, date_of_birth, reason, procedure, idempotency_key)
+    return ap.book(phone, date, time, doctor_name, department, patient_name, date_of_birth, reason, procedure, idempotency_key, email=email)
 
 
 @tool
-def join_waitlist(phone: Phone, date_of_birth: Dob, department: Dept = "", doctor_name: Doc = "",
+def join_waitlist(phone: Phone, date_of_birth: SDob = "", department: Dept = "", doctor_name: Doc = "",
                   date_from: Annotated[S, Field(description="Optional. Earliest date wanted (default today).")] = "",
                   date_to: Annotated[S, Field(description="Optional. Latest date wanted (default a week later).")] = "",
                   time_preference: Pref = "") -> dict:
@@ -160,32 +166,32 @@ def accept_waitlist_offer(offer_code: Annotated[S, Field(description="The 10-cha
 
 # ======================================================================== Records
 @tool
-def get_lab_report_status(phone: Phone, date_of_birth: Dob) -> dict:
+def get_lab_report_status(phone: Phone, date_of_birth: SDob = "") -> dict:
     """Status of the patient's recent lab and scan reports: pending (with expected time), ready or collected.
-    Requires mobile number and date of birth."""
+    Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.lab_status(phone, date_of_birth)
 
 
 @tool
-def email_lab_report(phone: Phone, date_of_birth: Dob,
+def email_lab_report(phone: Phone, date_of_birth: SDob = "",
                      report_id: Annotated[S, Field(description="Optional. Report ID like LR-20931; default is the latest ready report.")] = "") -> dict:
     """Email a ready lab report to the patient's registered email (summary plus secure portal link, no full values).
-    Pending reports cannot be emailed. Requires mobile number and date of birth."""
+    Pending reports cannot be emailed. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.email_report(phone, date_of_birth, report_id)
 
 
 @tool
-def get_visit_history(phone: Phone, date_of_birth: Dob) -> dict:
-    """The patient's last 5 completed visits (date, doctor, department). Requires mobile number and date of birth."""
+def get_visit_history(phone: Phone, date_of_birth: SDob = "") -> dict:
+    """The patient's last 5 completed visits (date, doctor, department). Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.visit_history(phone, date_of_birth)
 
 
 @tool
-def request_prescription_refill(phone: Phone, date_of_birth: Dob,
+def request_prescription_refill(phone: Phone,
                                 medicine_name: Annotated[S, Field(description="Medicine to refill, e.g. Amlodipine 5 mg.")],
-                                doctor_name: Doc = "") -> dict:
+                                date_of_birth: SDob = "", doctor_name: Doc = "") -> dict:
     """Send a prescription refill request to the doctor for approval. It is never approved automatically.
-    Requires mobile number and date of birth."""
+    Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.prescription_refill(phone, date_of_birth, medicine_name, doctor_name)
 
 
@@ -207,17 +213,98 @@ def check_coverage(insurance_provider: Ins = "", procedure: Proc = "", departmen
 
 
 @tool
-def get_bill_status(phone: Phone, date_of_birth: Dob) -> dict:
-    """Outstanding bills with amount and due date. Requires mobile number and date of birth."""
+def get_bill_status(phone: Phone, date_of_birth: SDob = "") -> dict:
+    """Outstanding bills with amount and due date. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.bill_status(phone, date_of_birth)
 
 
 @tool
-def send_payment_link(phone: Phone, date_of_birth: Dob,
+def send_payment_link(phone: Phone, date_of_birth: SDob = "",
                       bill_id: Annotated[S, Field(description="Optional. Bill ID like BL-55012; default is the oldest due bill.")] = "") -> dict:
     """Email a secure payment link for an outstanding bill (simulated in this demo). Never take card details by
-    chat or phone. Requires mobile number and date of birth."""
+    chat or phone. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.send_payment_link(phone, date_of_birth, bill_id)
+
+
+# ======================================================================== Pharmacy & HealthCredits
+Medicine = Annotated[S, Field(description="Medicine(s) as the patient said them, with amounts if given, e.g. 'Dolo 650', '2 strips of Metformin 500 and a strip of Dolo 650', 'Telma 40'.")]
+
+
+@tool
+def check_medicine_stock(medicine_name: Medicine) -> dict:
+    """Check the 24-hour hospital pharmacy: in stock or not, price per pack, whether a prescription is needed
+    (OTC, Schedule H/H1, or Schedule X which can't be ordered by chat), cold-chain handling, and for out-of-stock
+    brands the restock time and an in-stock generic with the same medicine. No verification needed."""
+    return ph.check_stock(medicine_name)
+
+
+@tool
+def order_medicine(phone: Phone, medicine_name: Medicine, date_of_birth: SDob = "",
+                   quantity: Annotated[S, Field(description="Optional. Number of packs/strips when one medicine is ordered.")] = "",
+                   delivery_address: Annotated[S, Field(description="Optional. Delivery address; default is the address on file.")] = "",
+                   payment_method: Annotated[S, Field(description="Optional. health_credits (default; any shortfall goes on a payment link) or payment_link.")] = "health_credits",
+                   confirm: Annotated[S, Field(description="Leave empty first to get the price quote; set to yes only after the patient agreed to the total and payment.")] = "",
+                   wait_for_restock: Annotated[S, Field(description="Optional. yes to reserve an out-of-stock brand and send it when the stock arrives.")] = "") -> dict:
+    """Order medicines for home delivery. First call without confirm returns the quote (items, delivery fee, total,
+    HealthCredits to use, any amount by payment link); after the patient agrees call again with confirm=yes to place
+    it. The server enforces prescription law: Schedule H/H1 need a prescription on file from the last 6 months (if
+    not, it refuses and offers a General Medicine consultation), Schedule X is never sold by chat. Returns the order
+    ID (PHARM-xxxxx), delivery time and new balance. Repeating the same order within a minute never charges twice."""
+    return ph.order(phone, date_of_birth, medicine_name, quantity, delivery_address, payment_method, confirm, wait_for_restock)
+
+
+@tool
+def track_medicine_order(phone: Phone, date_of_birth: SDob = "",
+                         order_id: Annotated[S, Field(description="Optional. Order ID like PHARM-30219; default is the latest order.")] = "",
+                         action: Annotated[S, Field(description="Optional. 'cancel' to cancel an order that hasn't left the pharmacy.")] = "") -> dict:
+    """Where a medicine order is (paid, packed, on the way with ETA, delivered) with the tracking link, or cancel it
+    before dispatch (HealthCredits are returned). Dispatched medicines can't be recalled (drug safety policy)."""
+    return ph.track(phone, date_of_birth, order_id, action)
+
+
+@tool
+def get_health_credits_balance(phone: Phone, date_of_birth: SDob = "") -> dict:
+    """The patient's WellNest HealthCredits wallet balance (1 credit = 1 rupee) and last transactions. Credits pay for
+    medicines, consultations, tests and bills at WellNest."""
+    return wl.get_balance(phone, date_of_birth)
+
+
+@tool
+def recharge_health_credits(phone: Phone,
+                            amount_inr: Annotated[S, Field(description="Amount in rupees to add, e.g. 2000.")],
+                            date_of_birth: SDob = "") -> dict:
+    """Send a secure payment link to add HealthCredits. Bonus: 5% from 2,000 rupees, 7% from 5,000 rupees.
+    Never take card or UPI details in the conversation."""
+    return wl.recharge(phone, amount_inr, date_of_birth)
+
+
+@tool
+def pay_with_health_credits(phone: Phone,
+                            reference: Annotated[S, Field(description="Booking ID (WN-48213) to pay its consultation or test fee, or a bill ID (BL-55012).")],
+                            date_of_birth: SDob = "") -> dict:
+    """Pay a booking's fee or an outstanding bill from HealthCredits in one step, after the patient agreed. If the
+    booking is later cancelled more than 2 hours ahead the credits come back in full (150 rupee fee within 2 hours)."""
+    return wl.pay(phone, reference, date_of_birth)
+
+
+@tool
+def request_credits_refund(phone: Phone, date_of_birth: SDob = "",
+                           amount: Annotated[S, Field(description="Optional. Credits to refund; empty means the whole balance.")] = "") -> dict:
+    """Refund unused HealthCredits to the original bank account or card (3 to 5 banking days). Credits are never paid
+    out as cash (RBI closed-loop wallet rules)."""
+    return wl.request_refund(phone, amount, date_of_birth)
+
+
+@tool
+def set_shared_wallet(phone: Phone,
+                      family_phone: Annotated[S, Field(description="Mobile number of the registered family member who may use these credits.")],
+                      date_of_birth: SDob = "",
+                      per_transaction_limit: Annotated[S, Field(description="Optional. Most they can spend per order, in rupees, e.g. 1500.")] = "",
+                      daily_limit: Annotated[S, Field(description="Optional. Most they can spend per day, in rupees.")] = "",
+                      action: Annotated[S, Field(description="Optional. 'stop' to remove their access; empty to allow or change limits.")] = "") -> dict:
+    """Let a registered family member pay from this patient's HealthCredits, with optional limits. phone and date of birth are
+    those of the wallet owner. The owner gets an SMS for every use."""
+    return wl.set_share(phone, date_of_birth, family_phone, per_transaction_limit, daily_limit, action)
 
 
 # ======================================================================== Info
@@ -252,14 +339,14 @@ def get_visit_instructions(department: Dept = "", procedure: Proc = "") -> dict:
 
 # ======================================================================== Care assist
 @tool
-def get_patient_preferences(phone: Phone, date_of_birth: Dob) -> dict:
+def get_patient_preferences(phone: Phone, date_of_birth: SDob = "") -> dict:
     """The patient's preferred language and time, caregiver on file and consent, and mobility needs.
-    Requires mobile number and date of birth."""
+    Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return pt.get_preferences(phone, date_of_birth)
 
 
 @tool
-def set_patient_preferences(phone: Phone, date_of_birth: Dob,
+def set_patient_preferences(phone: Phone, date_of_birth: SDob = "",
                             preferred_language: Annotated[S, Field(description="Optional. e.g. Kannada, Hindi, English.")] = "",
                             preferred_time: Pref = "",
                             caregiver_name: Annotated[S, Field(description="Optional. Caregiver's name.")] = "",
@@ -268,7 +355,7 @@ def set_patient_preferences(phone: Phone, date_of_birth: Dob,
                             caregiver_consent: Annotated[S, Field(description="Optional. yes or no: send booking updates to the caregiver.")] = "",
                             mobility_needs: Annotated[S, Field(description="Optional. e.g. needs a wheelchair, uses a walker.")] = "") -> dict:
     """Update the patient's preferences, caregiver details and consent, or mobility needs. Only the fields given
-    are changed. Requires mobile number and date of birth."""
+    are changed. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return pt.set_preferences(phone, date_of_birth, preferred_language, preferred_time, caregiver_name, caregiver_phone,
                               caregiver_email, caregiver_consent, mobility_needs)
 
@@ -276,13 +363,16 @@ def set_patient_preferences(phone: Phone, date_of_birth: Dob,
 @tool
 def request_assistance(booking_id: BookingId, phone: Phone,
                        assistance_type: Annotated[S, Field(description="wheelchair, escort, interpreter or transport_desk.")],
-                       notes: Annotated[S, Field(description="Optional. Any detail for the help desk.")] = "") -> dict:
-    """Arrange wheelchair, escort, interpreter or transport-desk help for the patient's own booking."""
-    return ap.request_assistance(booking_id, phone, assistance_type, notes)
+                       notes: Annotated[S, Field(description="Optional. Arrival gate and time, e.g. 'Gate 2, 9:40 AM'.")] = "",
+                       off_campus: Annotated[S, Field(description="Optional. yes only if the wheelchair will leave the hospital grounds: holds a 1,000 credit refundable deposit.")] = "",
+                       date_of_birth: OptDob = "") -> dict:
+    """Arrange free wheelchair, escort, interpreter or transport-desk help for the patient's own booking. Wheelchair and
+    escort are two-way: the porter meets them at the gate and takes them back to their vehicle. Returns the token (AS-xxxxx)."""
+    return ap.request_assistance(booking_id, phone, assistance_type, notes, date_of_birth=date_of_birth, off_campus=off_campus)
 
 
 @tool
-def send_caregiver_update(phone: Phone, date_of_birth: Dob,
+def send_caregiver_update(phone: Phone, date_of_birth: SDob = "",
                           booking_id: Annotated[S, Field(description="Optional. Booking to share; default is the next one.")] = "") -> dict:
     """Send the patient's next booking details to their caregiver, only if the patient consented. Requires mobile
     number and date of birth."""
@@ -323,22 +413,23 @@ def save_interaction_note(phone: Phone, summary: Annotated[S, Field(description=
 
 
 @tool
-def search_past_interactions(phone: Phone, date_of_birth: Dob,
-                             query: Annotated[S, Field(description="What to look for, e.g. MRI report, insurance.")]) -> dict:
+def search_past_interactions(phone: Phone,
+                             query: Annotated[S, Field(description="What to look for, e.g. MRI report, insurance.")],
+                             date_of_birth: SDob = "") -> dict:
     """Search this patient's earlier conversations and actions (e.g. 'did I ask about my MRI report last week?').
-    Requires mobile number and date of birth."""
+    Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return sp.search_interactions(phone, date_of_birth, query)
 
 
 # ======================================================================== Aftercare
 @tool
-def record_checkin(phone: Phone, date_of_birth: Dob, booking_id: Annotated[S, Field(description="Optional. Visit booking ID.")] = "",
+def record_checkin(phone: Phone, date_of_birth: SDob = "", booking_id: Annotated[S, Field(description="Optional. Visit booking ID.")] = "",
                    pain_score: Annotated[S, Field(description="Optional. Pain from 0 to 10.")] = "",
                    fever: Annotated[S, Field(description="Optional. yes or no.")] = "",
                    symptoms_worse: Annotated[S, Field(description="Optional. yes or no.")] = "",
                    notes: Annotated[S, Field(description="Optional. Anything else the patient said.")] = "") -> dict:
     """Record a post-visit check-in. Warning answers (pain 7 or more, fever, feeling worse) alert a nurse
-    automatically. Requires mobile number and date of birth."""
+    automatically. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return sp.record_checkin(phone, date_of_birth, booking_id, pain_score, fever, symptoms_worse, notes)
 
 
@@ -358,10 +449,10 @@ def submit_feedback(phone: Phone, rating: Annotated[S, Field(description="Rating
 
 
 @tool
-def schedule_followup(phone: Phone, date_of_birth: Dob, doctor_name: Doc = "",
+def schedule_followup(phone: Phone, date_of_birth: SDob = "", doctor_name: Doc = "",
                       within_days: Annotated[S, Field(description="Optional. Number of days, default 7.")] = "") -> dict:
     """Find follow-up slots with the patient's last doctor (or a named doctor) within N days. Then book with
-    book_appointment. Requires mobile number and date of birth."""
+    book_appointment. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return sp.schedule_followup(phone, date_of_birth, doctor_name, within_days)
 
 
