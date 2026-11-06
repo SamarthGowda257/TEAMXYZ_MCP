@@ -11,7 +11,7 @@
   summary it wrote at the end of each conversation. The patient timeline makes that distinction
   explicit rather than faking a transcript.
 */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import {
   BookOpen, Building2, CalendarDays, ExternalLink, FlaskConical, Gauge, LayoutDashboard, LifeBuoy,
@@ -37,7 +37,7 @@ import { SystemView } from "./admin/SystemView";
    the control surface and the record beside it. */
 const TALKDESK_CONVERSATIONS = "https://pesit-hackathon.mytalkdesk.com/atlas/apps/conversations";
 
-export function AdminLogin({ onDone }: { onDone: () => void }) {
+export function AdminLogin({ onDone, lostCookie }: { onDone: () => void; lostCookie?: boolean }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
@@ -68,6 +68,13 @@ export function AdminLogin({ onDone }: { onDone: () => void }) {
                  onChange={(e) => setPassword(e.target.value)} required />
         </div>
         {err && <p className="error-text" role="alert">{err}</p>}
+        {lostCookie && !err && (
+          <p className="ad-login-warn" role="alert">
+            Your ID and password were accepted, but this browser did not keep the session cookie,
+            so the console signed you straight back out. Allow cookies for this site — in Brave,
+            lower the Shields for teamxyz-mcp.onrender.com — then sign in again.
+          </p>
+        )}
         <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
         <p className="ad-login-note">Patients sign in on the main site. This console is for hospital staff.</p>
       </form>
@@ -103,12 +110,22 @@ export function Admin() {
   const nav = useNavigate();
 
   const [slow, setSlow] = useState(false);
+  /* A sign-in that is accepted and then immediately fails the session check means the cookie
+     never stuck — a blocked-cookie setting, not a wrong password. Say which it was. */
+  const [lostCookie, setLostCookie] = useState(false);
+  const signedIn = useRef(false);
 
   const check = useCallback(async () => {
-    try { const r = await api<{ user: string }>("/api/admin/me"); setWho(r.user); }
-    catch { setWho(null); }
-    finally { setChecked(true); }
+    try {
+      const r = await api<{ user: string }>("/api/admin/me");
+      setWho(r.user); setLostCookie(false);
+    } catch {
+      setWho(null);
+      if (signedIn.current) setLostCookie(true);
+    } finally { setChecked(true); }
   }, []);
+
+  const afterLogin = useCallback(() => { signedIn.current = true; check(); }, [check]);
   useEffect(() => { check(); document.title = "Staff console — WellNest Hospitals"; }, [check]);
 
   /* Render puts a free instance to sleep after about fifteen minutes, and waking it takes the
@@ -139,7 +156,7 @@ export function Admin() {
       </div>
     );
   }
-  if (!who) return <AdminLogin onDone={check} />;
+  if (!who) return <AdminLogin onDone={afterLogin} lostCookie={lostCookie} />;
 
   return (
     <div className="ad-shell">

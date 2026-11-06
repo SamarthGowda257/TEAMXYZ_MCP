@@ -236,3 +236,10 @@ body:has(.ad-shell) #tdWebchat, body:has(.ad-login) #tdWebchat { display: none !
   flex-wrap: wrap; justify-content: flex-end;
 }
 .ad-row-actions > * { flex: 0 0 auto; white-space: nowrap; }
+
+/* a sign-in that succeeded but whose cookie was dropped by the browser */
+.ad-login-warn {
+  font-size: var(--step-small); line-height: 1.6; color: var(--warn-ink);
+  background: var(--warn-tint); border: 1px solid var(--warn-ink);
+  border-radius: var(--radius); padding: 12px 14px;
+}
