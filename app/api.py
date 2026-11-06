@@ -1143,7 +1143,11 @@ def spa():
     index = DIST / "index.html"
     if not index.exists():
         return PlainTextResponse("Website not built. Run: cd frontend && npm ci && npm run build", status_code=503)
-    return FileResponse(index, headers={"Cache-Control": "no-cache"})
+    # no-store, not no-cache. Vite fingerprints every bundle, so a deploy leaves the previous
+    # /assets/index-<hash>.js 404ing. A browser holding yesterday's HTML then loads a script that
+    # no longer exists and renders a blank page. "no-cache" still permits a 304 revalidation path;
+    # "no-store" guarantees the HTML — and therefore the asset hashes — is always fetched fresh.
+    return FileResponse(index, headers={"Cache-Control": "no-store, must-revalidate"})
 
 
 for _path in PAGES:
