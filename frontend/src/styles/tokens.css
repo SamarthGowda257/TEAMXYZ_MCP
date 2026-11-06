@@ -263,3 +263,20 @@ input, select, textarea { font: inherit; color: var(--ink); }
     transition-duration: .01ms !important;
   }
 }
+
+/* ---- render-failure screen (components/Boundary.tsx) ---- */
+.boom { min-height: 100vh; display: grid; place-items: center; padding: var(--s5); background: var(--bg-sunk); }
+.boom-card {
+  width: min(520px, 100%); display: grid; gap: var(--s4); padding: var(--s7);
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-2);
+}
+.boom-card h1 { font-family: var(--font-serif); font-size: 1.9rem; letter-spacing: -0.03em; }
+.boom-card p { font-size: var(--step-small); color: var(--ink-soft); line-height: 1.7; }
+.boom-why {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--step-micro) !important;
+  color: var(--alert) !important; background: var(--alert-tint);
+  border: 1px solid var(--alert); border-radius: var(--radius); padding: var(--s3) var(--s4);
+  overflow-wrap: anywhere;
+}
+.boom-acts { display: flex; gap: var(--s3); flex-wrap: wrap; }

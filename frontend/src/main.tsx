@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
+import { Boundary } from "./components/Boundary";
 // Self-hosted: the CSP allows styles and fonts from 'self' only, so a fonts.googleapis.com
 // link would silently fail. Petrona carries the display voice, Lexend every UI and body text.
 import "@fontsource-variable/petrona";
@@ -38,8 +39,10 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <Boundary>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </Boundary>
   </React.StrictMode>,
 );
