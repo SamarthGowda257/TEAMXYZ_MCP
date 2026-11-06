@@ -20,6 +20,70 @@ export const STATS = [
   { value: "17", label: "Years caring for East Bengaluru" },
 ];
 
+/* ------------------------------------------------------------------ the mechanism
+   One brain, every channel. The three ways in, the one place they all write to.
+   Used by the opening of the home page; the labels are the literal product. */
+export const CHANNELS = [
+  { key: "chat", label: "Website chat", detail: "Bottom-right of every page, 24 hours", action: "chat" as const },
+  { key: "phone", label: "The phone line", detail: "WellNest AI answers and books on the call", action: "phone" as const },
+  { key: "web", label: "This website", detail: "Pick the doctor and the time yourself", action: "web" as const },
+];
+
+/* The case sheet: what a patient actually says, and what the system actually does with it.
+   This is the mapping the nine Talkdesk agents implement — no invented capability. */
+export const CASE_SHEET = [
+  {
+    said: "“Skin doctor tomorrow evening.”",
+    does: "Reads the dermatologists' own OPD schedule, offers the slots that are genuinely free, books one and returns a booking ID — read out on the call, emailed within the minute.",
+    tag: "Booking",
+  },
+  {
+    said: "“Move my MRI to Saturday.”",
+    does: "Checks your mobile number and date of birth on the server before it touches a record, then rewrites the same row the counter staff see. Nothing is verified in the browser.",
+    tag: "Identity",
+  },
+  {
+    said: "“Is my thyroid report ready?”",
+    does: "Looks up the lab record, says whether it is out, and emails it to the address already on your file. It never reads a result out as advice.",
+    tag: "Reports",
+  },
+  {
+    said: "“Will my insurance cover this scan?”",
+    does: "Checks the procedure against your insurer's empanelment and returns an estimate of your share, with the documents the TPA desk will ask for.",
+    tag: "Insurance",
+  },
+  {
+    said: "“I want to talk to a person.”",
+    does: "Hands the conversation straight to a member of staff, with everything said so far already on their screen. You never repeat yourself.",
+    tag: "Handover",
+  },
+  {
+    said: "“I have chest pain right now.”",
+    does: "Stops trying to book anything, tells you to call 108, and gives the emergency department at entrance B. This path is hard-coded, not a judgement call.",
+    tag: "Emergency",
+  },
+];
+
+/* Cashless insurers and government schemes, for the moving rail.
+   `glyph` names an abstract mark drawn in code — these are authored neutral wordmarks for a
+   fictional hospital, never a copy of anyone's real logo artwork. */
+export type InsurerMark = { name: string; glyph: "shield" | "bloom" | "cross" | "sunrise" | "hex" | "diamond" | "star" | "chevron" | "interlock" };
+export const INSURER_MARKS: InsurerMark[] = [
+  { name: "ICICI Lombard", glyph: "shield" },
+  { name: "Niva Bupa", glyph: "bloom" },
+  { name: "Care Health", glyph: "cross" },
+  { name: "Aditya Birla Health", glyph: "sunrise" },
+  { name: "Tata AIG", glyph: "hex" },
+  { name: "Bajaj Allianz", glyph: "diamond" },
+  { name: "Star Health", glyph: "star" },
+  { name: "CGHS", glyph: "chevron" },
+  { name: "ECHS", glyph: "interlock" },
+];
+
+/* Departments the home page's live availability ledger offers. Each one is a real
+   department name from /api/departments, so /api/slots answers for every tab. */
+export const LEDGER_DEPTS = ["Cardiology", "Orthopaedics", "Dermatology", "General Medicine", "Paediatrics", "Neurology"];
+
 export type Centre = { key: string; name: string; dept: string; icon: string; summary: string; treats: string[] };
 export const CENTRES: Centre[] = [
   { key: "heart", name: "Heart Institute", dept: "Cardiology", icon: "HeartPulse",
@@ -84,24 +148,43 @@ export const MILESTONES = [
   { year: "2026", text: "AI front desk on chat and phone, powered by Talkdesk" },
 ];
 
-// Stock photographs (Unsplash licence), used as atmosphere for this fictional hospital.
-// Swap any URL for the team's own photos (put files in frontend/public/img/ and use "/img/name.jpg").
+/*
+  Photography. Unsplash licence, hot-linked over HTTPS (the CSP allows `img-src https:`).
+  Every URL below was checked to return 200.
+
+  Two deliberate constraints:
+  1. No identifiable faces. WellNest is fictional, and free stock of Indian clinicians is almost
+     all Unsplash+ (paid), so Western faces would be the only free alternative — which fights a
+     Bengaluru hospital harder than no faces at all.
+  2. No identifiable real hospital. Shots carrying another institution's signage are not used as
+     WellNest's own building.
+
+  To use the team's own photographs instead: drop files into frontend/public/img/ and replace a
+  value with "/img/name.jpg". Nothing else needs to change.
+*/
 const U = (id: string, w = 1400) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=75`;
 export const IMAGES = {
-  hero: U("1519494026892-80bbd2d6fd0d", 1600),          // doctor in a bright hospital corridor
-  team: U("1582750433449-648ed127bb54"),               // clinicians talking
-  consult: U("1576091160550-2173dba999ef"),            // doctor with stethoscope and tablet
+  hero: U("1519494026892-80bbd2d6fd0d", 1600),          // daylit hospital reception corridor
+  // The home page's full-width plate. Bright daylit ward, no people, no signage — the tiling,
+  // bedside cabinets and curtains read South Asian rather than Western stock.
+  team: U("1538108149393-fbbd81895907", 1800),
+  consult: U("1512678080530-7760d81faba6"),            // consulting room, no people
   building: U("1586773860418-d37222d8fce3"),           // hospital exterior
   ward: U("1516549655169-df83a0774514"),               // hospital room
   lab: U("1579154204601-01588f351e67"),                // laboratory
   scan: U("1559757175-5700dde675bc"),                  // MRI / imaging
-  care: U("1631815588090-d4bfec5b1ccb"),               // nurse with patient
+  care: U("1710074213374-e68503a1b795"),               // quiet two-bed room with a desk
 };
+/*
+  One visual family for the six centres: anatomical teaching models and the rooms they are taught
+  in. Each of these has been opened and looked at, not merely checked for a 200 — the previous
+  "Heart Institute" picture was a man in a suit with a calculator and a spreadsheet.
+*/
 export const CENTRE_IMAGES: Record<string, string> = {
-  heart: U("1628348068343-c6a848d2b6dd", 900),
-  neuro: U("1559757175-5700dde675bc", 900),
-  ortho: U("1530026405186-ed1f139313f8", 900),
-  mother: U("1555252333-9f8e92e65df9", 900),
-  gastro: U("1579154204601-01588f351e67", 900),
-  kidney: U("1631217868264-e5b90bb7e133", 900),
+  heart: U("1530026405186-ed1f139313f8", 900),         // anatomical heart model
+  neuro: U("1559757175-5700dde675bc", 900),            // brain model with a neuron
+  ortho: U("1772122028898-1640a4dd2d7f", 900),         // lumbar spine model, prolapsed disc in red
+  mother: U("1555252333-9f8e92e65df9", 900),           // newborn's feet
+  gastro: U("1579154204601-01588f351e67", 900),        // automated laboratory bench
+  kidney: U("1778151270902-cb0ca572f2ee", 900),        // dialysis-style room, no people
 };

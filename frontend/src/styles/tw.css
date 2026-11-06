@@ -1,0 +1,4 @@
+/* Tailwind utilities for the component libraries. Preflight is disabled in tailwind.config.js,
+   so this adds utilities without resetting the hand-written stylesheets. */
+@tailwind components;
+@tailwind utilities;

@@ -1,241 +1,440 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+/*
+  WellNest home page.
+
+  The structure follows the product rather than the hospital-website genre. WellNest's one
+  real mechanism is that a single brain answers every channel: the same nine Talkdesk agents
+  and the same tools serve the chat on this page, the phone line and this website, reading one
+  schedule and writing one record. So the page is built as a set of *documents* rather than a
+  deck of cards — a switchboard, a case sheet, a register of tomorrow's open list, an index of
+  centres, a statement of scale, a price list, and a close.
+
+  Pacing is deliberate: dark opening, a moving rail, a dense sheet, a quiet photograph, a dense
+  live register, an index with imagery, a quiet dark statement, a price list, voices, a close.
+*/
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, ArrowUpRight, BellRing, CalendarCheck, CheckCircle2, FileText, Languages, MessageCircle, PhoneCall,
-  ShieldCheck, Siren, Sparkles, Stethoscope, UserRoundCheck } from "lucide-react";
-import { api, rupees, type DoctorCard } from "../lib/api";
-import { useApi, useReveal } from "../lib/hooks";
+import { ArrowRight, ArrowUpRight, MessageCircle, PhoneCall, Siren, SquarePen } from "lucide-react";
+import { api, rupees } from "../lib/api";
+import { useApi } from "../lib/hooks";
 import { openChat, voiceNumber } from "../lib/chat";
-import { Icon } from "../components/Icon";
-import { Photo } from "../components/Photo";
-import { ReachButtons } from "../components/Reach";
-import { CENTRES, CENTRE_IMAGES, FACILITIES, HOSPITAL, IMAGES, PACKAGES, STATS, STORIES, TIPS } from "../content";
+import { InsurerRail } from "../components/site/Insurers";
+import {
+  CASE_SHEET, CENTRES, CENTRE_IMAGES, HOSPITAL, IMAGES, LEDGER_DEPTS, PACKAGES, STORIES, TIPS,
+} from "../content";
 
-// ------------------------------------------------------------------ hero: the conversation is the booking
-const SCRIPT: { who: "me" | "bot"; text: string }[] = [
-  { who: "me", text: "Hi, I need a heart doctor this Wednesday morning." },
-  { who: "bot", text: "Dr. Rajesh Iyer, Cardiology, is free on Wednesday 4 November at 10:00 AM and 11:15 AM. The fee is ₹1,200. Which suits you?" },
-  { who: "me", text: "10 AM please. 98450 00001, born 4 March 1959." },
-  { who: "bot", text: "Thank you, Shanthamma, you're verified. Booked for 10:00 AM, room OPD-310. Your booking ID is WN-48213. I've also arranged wheelchair help at entrance B." },
-];
+type SlotsResponse = {
+  ok: boolean; date: string; date_iso: string;
+  doctors: {
+    name: string; department: string; room: string; fee_inr: number; hours: string;
+    days: string; unavailable: string | null; slots: { time: string; label: string }[];
+  }[];
+};
 
-function LiveChat() {
-  const [n, setN] = useState(1);
-  const [typing, setTyping] = useState(false);
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(SCRIPT.length); return; }
-    let i = 1;
-    const tick = () => {
-      if (i >= SCRIPT.length) { window.setTimeout(() => { i = 1; setN(1); tick(); }, 6000); return; }
-      setTyping(SCRIPT[i].who === "bot");
-      window.setTimeout(() => { i += 1; setTyping(false); setN(i); tick(); }, SCRIPT[i].who === "bot" ? 1700 : 1300);
-    };
-    const t = window.setTimeout(tick, 900);
-    return () => window.clearTimeout(t);
-  }, []);
-  return (
-    <div className="live-chat" aria-label="Example: booking with the WellNest Assistant">
-      <div className="lc-head">
-        <span className="lc-avatar"><Sparkles size={18} aria-hidden="true" /></span>
-        <div><strong>WellNest Assistant</strong><span><i className="lc-dot" /> Online now · on Talkdesk</span></div>
-      </div>
-      <div className="lc-body" aria-live="off">
-        {SCRIPT.slice(0, n).map((m, i) => <p key={i} className={`bubble ${m.who}`}>{m.text}</p>)}
-        {typing && <p className="bubble bot typing" aria-hidden="true"><i /><i /><i /></p>}
-      </div>
-      <button type="button" className="lc-input" onClick={openChat}>Type your message… <span>Send</span></button>
-    </div>
-  );
-}
+/* ----------------------------------------------------------------- 1. the switchboard
+   The opening. No photograph and nothing floating over one: the first viewport is type,
+   three ruled channels, and the drawing of them converging on a single record. */
+/*
+  The switchboard's right-hand side, and the page's one authored motion.
 
-function Hero() {
-  return (
-    <section className="hero">
-      <div className="hero-grid">
-        <div className="hero-copy">
-          <p className="eyebrow-pill"><ShieldCheck size={16} aria-hidden="true" /> Multi-speciality hospital · Marathahalli, Bengaluru</p>
-          <h1 className="serif">Exceptional care,<br /><em>one conversation away.</em></h1>
-          <p className="hero-lead">Tell our 24-hour assistant what you need, in your own words, on chat or on the phone. It finds the right specialist, books a real slot and sends your booking ID in under a minute.</p>
-          <ReachButtons />
-          <div className="hero-trust">
-            <div><strong>45</strong><span>senior specialists</span></div>
-            <div><strong>24×7</strong><span>emergency &amp; assistant</span></div>
-            <div><strong>8</strong><span>languages spoken</span></div>
-          </div>
-        </div>
-        <div className="hero-media">
-          <Photo src={IMAGES.hero} alt="A doctor walking through a bright hospital corridor" className="hero-photo" eager />
-          <LiveChat />
-        </div>
-      </div>
-    </section>
-  );
-}
+  The three channels take it in turns to be the live one. Each time, the record below is
+  re-written — the field values sweep in, left to right, exactly as the assistant fills them.
+  The point of the loop is what does NOT change: whichever channel is lit, the booking, the
+  doctor, the time, the room and the fee are identical. That is the product in one movement,
+  so the motion carries the argument rather than decorating it.
 
-// ------------------------------------------------------------------ insurers marquee
-const INSURERS = ["Star Health", "HDFC ERGO", "ICICI Lombard", "Niva Bupa", "Care Health", "Aditya Birla Health", "Tata AIG", "Bajaj Allianz", "CGHS", "ECHS"];
-function Marquee() {
-  return (
-    <section className="marquee" aria-label="Insurers we accept">
-      <p>Cashless with</p>
-      <div className="mq-track"><div className="mq-row">{[...INSURERS, ...INSURERS].map((n, i) => <span key={i} aria-hidden={i >= INSURERS.length}>{n}</span>)}</div></div>
-    </section>
-  );
-}
+  Under prefers-reduced-motion the cycle stops on the chat channel and the row is simply shown.
+*/
+const CHANNELS = [
+  { key: "chat", name: "Website chat", hint: "Bottom-right of every page", cta: "Open", wrote: "written from the chat on this page" },
+  { key: "voice", name: "The phone line", hint: "It books on the call itself", cta: "Call", wrote: "written while you were still on the call" },
+  { key: "web", name: "This website", hint: "Choose the doctor and the time", cta: "Book", wrote: "written when you picked the time yourself" },
+] as const;
 
-// ------------------------------------------------------------------ how booking works (Talkdesk-first)
-function HowItWorks() {
-  const ref = useReveal<HTMLElement>();
+const RECORD = [
+  ["Booking", "WN-48213", "code"],
+  ["Visit", "Dr. Rajesh Iyer · Cardiology", ""],
+  ["When", "Friday 6 November, 10:30 AM", "num"],
+  ["Room", "OPD-310", "num"],
+  ["Fee", "₹1,200", "num"],
+] as const;
+
+function Switchboard3() {
   const v = voiceNumber();
-  const steps = [
-    { icon: MessageCircle, title: "Say what you need", text: "\"Skin doctor tomorrow evening\", \"move my MRI\", \"is my thyroid report ready?\" In English, Hindi, Kannada and more." },
-    { icon: UserRoundCheck, title: "We confirm it's you", text: "For anything about your records, the assistant checks your mobile number and date of birth with the hospital system." },
-    { icon: CalendarCheck, title: "It's done, in real time", text: "Real slots from our doctors' schedules. Your booking ID is read out and sent by email and SMS." },
-    { icon: BellRing, title: "We keep you posted", text: "Reminders a day and two hours before, and a waitlist that offers you the next cancelled slot." },
-  ];
+  const [live, setLive] = useState(0);
+  const [still, setStill] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (mq.matches) { setStill(true); return; }
+    const t = window.setInterval(() => setLive((n) => (n + 1) % CHANNELS.length), 3200);
+    return () => window.clearInterval(t);
+  }, []);
+
+  const current = CHANNELS[live];
+
   return (
-    <section className="section how" ref={ref} aria-labelledby="how-h">
-      <div className="wrap">
-        <div className="split-head">
-          <h2 id="how-h" className="serif rise">Booking at WellNest is a conversation, not a queue</h2>
-          <p className="rise" style={{ ["--d" as string]: "80ms" }}>Our AI front desk runs on <strong>Talkdesk</strong>, the same platform large contact centres use. It answers the website chat and our phone line {v.label}, day and night, and hands you to a person whenever you ask.</p>
+    <>
+      <ul className="sw-rail">
+        {CHANNELS.map((c, i) => (
+          <li key={c.key} data-live={!still && i === live ? "" : undefined}>
+            <span className="sw-ch"><i className="sw-dot" aria-hidden="true" />{c.name}</span>
+            <span className="sw-de">{c.hint}</span>
+            {c.key === "chat" ? (
+              <button type="button" className="sw-go" onClick={openChat}>
+                {c.cta} <ArrowRight size={15} aria-hidden="true" />
+              </button>
+            ) : c.key === "voice" ? (
+              <a className="sw-go" href={v.href}>{c.cta} <ArrowRight size={15} aria-hidden="true" /></a>
+            ) : (
+              <Link className="sw-go" to="/portal/book">{c.cta} <ArrowRight size={15} aria-hidden="true" /></Link>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <figure className="sw-rec" aria-live="off">
+        <figcaption>
+          <span className="sw-rec-k">One record</span>
+          <span className="sw-rec-w" key={still ? "s" : live}>
+            {still ? "the same row, whichever way you ask" : current.wrote}
+          </span>
+        </figcaption>
+        <dl>
+          {RECORD.map(([k, val, cls], i) => (
+            <div key={k} className="sw-rec-f" style={{ "--i": i } as CSSProperties}>
+              <dt>{k}</dt>
+              <dd key={still ? k : `${live}-${k}`} className={cls}>{val}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="sw-rec-note">
+          Nothing is re-typed between the phone, the chat and this site — so nothing disagrees,
+          and the counter sees what you were told.
+        </p>
+      </figure>
+    </>
+  );
+}
+
+function Switchboard() {
+  const v = voiceNumber();
+  return (
+    <section className="sw">
+      <div className="wrap sw-in">
+        <div className="sw-copy" data-reveal>
+          <h1>Ask once.<br /><em>We take it from there.</em></h1>
+          <p className="sw-lead">
+            Say what you need in your own words — in English, Hindi, Kannada and five more. One
+            assistant answers the chat on this page and the phone line, reads the doctors' real
+            schedules, and writes to the same record the counter staff see. A person is always one
+            sentence away.
+          </p>
+          <div className="sw-acts">
+            <button type="button" className="btn btn-primary btn-lg" onClick={openChat}>
+              <MessageCircle size={18} aria-hidden="true" /> Chat to book
+            </button>
+            <a className="btn btn-lg sw-call" href={v.href}>
+              <PhoneCall size={18} aria-hidden="true" /> Call {v.label}
+            </a>
+          </div>
+          <p className="sw-fine">
+            Twenty-four hours, every day. The number above reaches WellNest AI, not a switchboard —
+            it answers, books and reads your booking ID back to you.
+          </p>
         </div>
-        <ol className="how-steps">
-          {steps.map((s, i) => (
-            <li key={s.title} className="rise" style={{ ["--d" as string]: `${120 + i * 90}ms` }}>
-              <span className="how-num">{i + 1}</span>
-              <span className="how-icon"><s.icon size={26} aria-hidden="true" /></span>
-              <h3>{s.title}</h3><p>{s.text}</p>
+
+        <div className="sw-rig">
+          <Switchboard3 />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------------- 2. the case sheet
+   Replaces the old four-step strip. Not four columns of icon and caption but a two-column
+   ruled sheet: the words a patient actually uses on the left, what the system actually does
+   with them on the right. The mapping is the information. */
+function CaseSheet() {
+  return (
+    <section className="cs">
+      <div className="wrap">
+        <div className="sec-rule" data-reveal>
+          <h2>What you say, and what happens next.</h2>
+          <p>
+            No menus, no “press 1 for appointments”. Six things the assistant is actually built to
+            do — and the limits it works inside, which matter just as much.
+          </p>
+        </div>
+        <dl className="cs-sheet">
+          {CASE_SHEET.map((r) => (
+            <div className="cs-row" key={r.tag}>
+              <dt>
+                <span className="cs-tag">{r.tag}</span>
+                <span className="cs-said">{r.said}</span>
+              </dt>
+              <dd>{r.does}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------------- 3. the quiet plate
+   A breath after the sheet: one wide photograph, nothing laid over it, caption in the margin
+   underneath. The curtain unmask is the page's one signature scroll moment. */
+function Plate() {
+  return (
+    <section className="plate">
+      <figure className="plate-frame" data-curtain>
+        <img
+          src={IMAGES.team}
+          alt="A daylit four-bed ward at WellNest Hospitals, made up and empty between admissions"
+          loading="lazy" decoding="async" data-parallax="1"
+        />
+      </figure>
+      <div className="wrap plate-cap">
+        <p>
+          A ward made up between admissions. <strong>350</strong> beds, sixty of them critical care —
+          and every admission, like every outpatient visit, is one row in the same register the
+          assistant reads when you ask it a question on the phone.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------------- 4. tomorrow's open list
+   The proof, and it is live: /api/slots is the identical endpoint the booking agent calls.
+   A register, not a card — doctor, consulting hours, the free times themselves, the fee. */
+function OpenList() {
+  const [dept, setDept] = useState(LEDGER_DEPTS[0]);
+  const path = `/api/slots?date=tomorrow&department=${encodeURIComponent(dept)}`;
+  const { data, loading, error } = useApi<SlotsResponse>(path, [dept]);
+  const rows = data?.doctors || [];
+  const free = rows.reduce((n, d) => n + (d.slots?.length || 0), 0);
+
+  return (
+    <section className="ol">
+      <div className="wrap">
+        <div className="sec-rule ol-head" data-reveal>
+          <h2>Tomorrow's open list.</h2>
+          <p>
+            Read straight from the consultants' own schedules — the same endpoint the assistant
+            calls when you ask it on the phone. If a time is on this page, it is genuinely free.
+          </p>
+        </div>
+
+        <div className="ol-bar">
+          <div className="ol-tabs" role="tablist" aria-label="Department">
+            {LEDGER_DEPTS.map((d) => (
+              <button
+                key={d} type="button" role="tab" aria-selected={d === dept}
+                className={d === dept ? "ol-tab is-on" : "ol-tab"}
+                onClick={() => setDept(d)}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+          <p className="ol-count" aria-live="polite">
+            {error ? "Schedule unavailable just now" :
+              loading && !data ? "Reading the schedule…" :
+                `${free} free ${free === 1 ? "slot" : "slots"} · ${data?.date || ""}`}
+          </p>
+        </div>
+
+        <table className="ol-table">
+          <caption className="sr-only">Free appointment times tomorrow in {dept}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Consultant</th>
+              <th scope="col">Consults</th>
+              <th scope="col">Free tomorrow</th>
+              <th scope="col" className="ol-r">Fee</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((d) => (
+              <tr key={d.name}>
+                <th scope="row" data-label="Consultant">
+                  {d.name}
+                  <small>Room {d.room}</small>
+                </th>
+                <td data-label="Consults">{d.hours}<small>{d.days}</small></td>
+                <td data-label="Free tomorrow">
+                  {d.slots?.length ? (
+                    <span className="ol-times">
+                      {d.slots.slice(0, 5).map((s) => (
+                        <Link key={s.time} className="ol-time num" to="/portal/book">{s.label}</Link>
+                      ))}
+                      {d.slots.length > 5 && <span className="ol-more num">+{d.slots.length - 5}</span>}
+                    </span>
+                  ) : (
+                    <span className="ol-shut">{d.unavailable ? "Not consulting tomorrow" : "Fully booked"}</span>
+                  )}
+                </td>
+                <td data-label="Fee" className="ol-r num">{rupees(d.fee_inr)}</td>
+              </tr>
+            ))}
+            {!rows.length && (
+              <tr><td colSpan={4} className="ol-empty">{error ? error : "Reading the schedule…"}</td></tr>
+            )}
+          </tbody>
+        </table>
+
+        <p className="ol-foot">
+          Not the department you need? <button type="button" className="lnk" onClick={openChat}>Ask the assistant</button> —
+          it reads all fourteen, or <Link to="/doctors">browse all 45 consultants</Link>.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------------- 5. the index
+   Six centres as an index with a facing plate, the way a reference book sets them, rather
+   than six equal image cards. Pointing at a line changes the plate; clicking opens it. */
+function Index() {
+  const [key, setKey] = useState(CENTRES[0].key);
+  const active = CENTRES.find((c) => c.key === key) || CENTRES[0];
+  return (
+    <section className="ix">
+      <div className="wrap ix-in">
+        <div className="ix-list">
+          <div className="sec-rule" data-reveal>
+            <h2>Six centres where<br />the hard cases go.</h2>
+          </div>
+          <ul>
+            {CENTRES.map((c) => (
+              <li key={c.key}>
+                <Link
+                  to={`/specialities#${c.key}`}
+                  aria-current={c.key === key ? "true" : undefined}
+                  onMouseEnter={() => setKey(c.key)}
+                  onFocus={() => setKey(c.key)}
+                >
+                  <img className="ix-thumb" src={CENTRE_IMAGES[c.key]} alt="" aria-hidden="true" loading="lazy" decoding="async" />
+                  <span className="ix-name">{c.name}</span>
+                  <span className="ix-dept">{c.dept}</span>
+                  <ArrowUpRight className="ix-arr" size={18} aria-hidden="true" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Link className="lnk-strong" to="/specialities">
+            All fourteen departments <ArrowRight size={16} aria-hidden="true" />
+          </Link>
+        </div>
+
+        <figure className="ix-plate">
+          <img key={active.key} src={CENTRE_IMAGES[active.key]} alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <figcaption>
+            <h3>{active.name}</h3>
+            <p>{active.summary}</p>
+            <ul>{active.treats.map((t) => <li key={t}>{t}</li>)}</ul>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------------- 6. the statement
+   The hospital's scale as one sentence rather than a row of big numbers. The facts are set
+   in the display face so the eye still catches them while reading. */
+function Statement() {
+  return (
+    <section className="ms">
+      <img src={IMAGES.building} alt="" aria-hidden="true" data-parallax="2" />
+      <div className="wrap ms-in">
+        <p className="ms-say" data-reveal data-reveal-self>
+          Since <b>2009</b> WellNest has grown from a hundred and twenty beds to <b>350</b>, sixty of
+          them critical care, with two <b>3 Tesla</b> MRI scanners, two <b>128-slice</b> CT scanners,
+          a cath lab that never closes and a level III neonatal ICU — so families in Marathahalli,
+          Whitefield and Bellandur no longer cross the city for serious care.
+        </p>
+        <p className="ms-foot">
+          Seventeen years · Fourteen departments · 45 senior consultants
+          <Link to="/about">The whole story <ArrowRight size={16} aria-hidden="true" /></Link>
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------------- 7. the price list */
+function Checks() {
+  return (
+    <section className="pkl">
+      <div className="wrap">
+        <div className="sec-rule" data-reveal>
+          <h2>Three health checks, priced in the open.</h2>
+          <p>Most reports the same day, each one reviewed with a physician before you leave.</p>
+        </div>
+        <ul className="pkl-rows">
+          {PACKAGES.map((p) => (
+            <li key={p.code}>
+              <div className="pkl-id">
+                <h3>{p.name}</h3>
+                <span className="pkl-code code">{p.code}</span>
+              </div>
+              <p className="pkl-what">
+                <span className="pkl-n num">{p.tests}</span>
+                {p.items.join(" · ")}
+              </p>
+              <div className="pkl-act">
+                <span className="pkl-rate num">{rupees(p.price)}</span>
+                <button type="button" className="btn btn-quiet btn-sm" onClick={openChat}>Book this</button>
+              </div>
             </li>
           ))}
-        </ol>
-        <div className="how-cta rise">
-          <div className="channel">
-            <MessageCircle size={28} aria-hidden="true" />
-            <div><strong>Website chat</strong><span>Bottom-right of every page</span></div>
-            <button type="button" className="btn btn-primary btn-sm" onClick={openChat}>Start chat</button>
-          </div>
-          <div className="channel">
-            <PhoneCall size={28} aria-hidden="true" />
-            <div><strong>Phone, 24 hours</strong><span>The same assistant answers {v.label}</span></div>
-            <a className="btn btn-quiet btn-sm" href={v.href}>Call now</a>
-          </div>
-          <div className="channel channel-alt">
-            <CalendarCheck size={28} aria-hidden="true" />
-            <div><strong>Prefer a form?</strong><span>Pick a doctor and a time yourself</span></div>
-            <Link className="btn btn-quiet btn-sm" to="/portal/book">Book online</Link>
-          </div>
-        </div>
+        </ul>
+        <p className="pkl-note">
+          <SquarePen size={17} aria-hidden="true" />
+          <span>
+            Pay from <strong>HealthCredits</strong> — one family wallet for consultations, scans and
+            medicines, spendable on chat, on the phone or at the counter, with a limit you set for
+            each member. <Link to="/portal">Open the wallet</Link>
+          </span>
+        </p>
       </div>
     </section>
   );
 }
 
-// ------------------------------------------------------------------ numbers
-function Numbers() {
-  const ref = useRef<HTMLElement>(null);
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    const el = ref.current; if (!el) return;
-    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setOn(true); io.disconnect(); } }, { threshold: 0.3 });
-    io.observe(el); return () => io.disconnect();
-  }, []);
+/* ----------------------------------------------------------------- 8. voices
+   Real content from the hospital's own notes: three patients, then three things the doctors
+   here keep repeating. Quiet after the price list. */
+function Voices() {
+  const [i, setI] = useState(0);
+  const s = STORIES[i];
   return (
-    <section className="numbers" ref={ref} aria-label="WellNest in numbers">
-      <Photo src={IMAGES.building} alt="Hospital building exterior" icon="Hospital" className="numbers-bg" />
-      <div className="wrap numbers-grid">
-        {STATS.map((s) => <div key={s.label} className={on ? "num-item on" : "num-item"}><strong className="serif">{s.value}</strong><span>{s.label}</span></div>)}
-      </div>
-    </section>
-  );
-}
-
-// ------------------------------------------------------------------ centres with photos
-function Centres() {
-  const ref = useReveal<HTMLElement>();
-  return (
-    <section className="section" ref={ref} aria-labelledby="centres-h">
-      <div className="wrap">
-        <div className="split-head">
-          <h2 id="centres-h" className="serif rise">Centres of excellence</h2>
-          <p className="rise">Six specialist centres where surgeons, physicians, nurses and therapists work as one team around you. <Link to="/specialities">See all 14 specialities <ArrowRight size={16} aria-hidden="true" /></Link></p>
-        </div>
-        <div className="centre-mosaic">
-          {CENTRES.map((c, i) => (
-            <Link key={c.key} to={`/specialities#${c.key}`} className={`tile rise tile-${i}`} style={{ ["--d" as string]: `${i * 70}ms` }}>
-              <Photo src={CENTRE_IMAGES[c.key]} alt="" icon={c.icon} className="tile-photo" />
-              <div className="tile-shade" aria-hidden="true" />
-              <div className="tile-text">
-                <span className="tile-icon"><Icon name={c.icon} size={22} /></span>
-                <h3>{c.name}</h3>
-                <p>{c.summary}</p>
-                <span className="tile-more">Explore <ArrowUpRight size={16} aria-hidden="true" /></span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ------------------------------------------------------------------ why WellNest (photo + facilities)
-function WhyUs() {
-  const ref = useReveal<HTMLElement>();
-  return (
-    <section className="section why" ref={ref} aria-labelledby="why-h">
-      <div className="wrap why-grid">
-        <div className="why-media rise">
-          <Photo src={IMAGES.care} alt="A nurse caring for a patient" icon="Accessibility" className="why-photo" />
-          <div className="why-badge"><Siren size={22} aria-hidden="true" /><div><strong>Emergency in 5 minutes</strong><span>Triage time at entrance B, round the clock</span></div></div>
-        </div>
-        <div>
-          <h2 id="why-h" className="serif rise">Everything a family needs, under one roof</h2>
-          <p className="lead rise">Since {HOSPITAL.founded}, WellNest has grown from a 120-bed neighbourhood hospital into a 350-bed medical centre, so patients in Marathahalli, Whitefield and Bellandur no longer cross the city for serious care.</p>
-          <ul className="fac-list">
-            {FACILITIES.map((f, i) => (
-              <li key={f.title} className="rise" style={{ ["--d" as string]: `${i * 60}ms` }}>
-                <span className="fac-ic"><Icon name={f.icon} size={22} /></span>
-                <div><strong>{f.title}</strong><span>{f.text}</span></div>
+    <section className="vo">
+      <div className="wrap vo-in">
+        <blockquote className="vo-quote" key={s.name}>
+          <p>“{s.text}”</p>
+          <footer><strong>{s.name}</strong><span>{s.place} · {s.dept}</span></footer>
+        </blockquote>
+        <div className="vo-pick">
+          <h2>In our patients' words</h2>
+          <ul>
+            {STORIES.map((st, n) => (
+              <li key={st.name}>
+                <button type="button" aria-current={n === i} onClick={() => setI(n)}>{st.name}</button>
               </li>
             ))}
           </ul>
         </div>
       </div>
-    </section>
-  );
-}
-
-// ------------------------------------------------------------------ doctors (horizontal, drag/scroll)
-const FEATURED = ["Dr. Rajesh Iyer", "Dr. Kavya Reddy", "Dr. Kiran Shetty", "Dr. Lakshmi Nair", "Dr. Harish Gowda", "Dr. Nandini Rao", "Dr. Priya Mehta", "Dr. Divya Bhat"];
-const TINTS = ["#e8f2fd", "#e7f6f1", "#fff4dc", "#eef1fb", "#fdecef", "#e9f7fb"];
-
-function Doctors() {
-  const { data } = useApi<DoctorCard[]>("/api/doctors");
-  const ref = useReveal<HTMLElement>();
-  const docs = FEATURED.map((n) => (data || []).find((d) => d.name === n)).filter(Boolean) as DoctorCard[];
-  const initials = (n: string) => n.replace("Dr. ", "").split(" ").map((w) => w[0]).slice(0, 2).join("");
-  return (
-    <section className="section tinted" ref={ref} aria-labelledby="doc-h">
-      <div className="wrap">
-        <div className="split-head">
-          <h2 id="doc-h" className="serif rise">Meet our specialists</h2>
-          <p className="rise">Senior consultants with 5 to 30 years of experience, who speak your language. <Link to="/doctors">Find a doctor <ArrowRight size={16} aria-hidden="true" /></Link></p>
-        </div>
-      </div>
-      <div className="doc-rail" tabIndex={0} aria-label="Featured doctors, scroll sideways">
-        {docs.map((d, i) => (
-          <article key={d.name} className="doc-card">
-            <div className="doc-portrait" style={{ background: TINTS[i % TINTS.length] }} aria-hidden="true">
-              <span className="serif">{initials(d.name)}</span><Stethoscope size={22} />
-            </div>
-            <div className="doc-info">
-              <p className="doc-dept">{d.department}</p>
-              <h3>{d.name}</h3>
-              <p className="doc-qual">{d.qualification}</p>
-              <p className="doc-time">{d.days} · {d.hours}</p>
-              <p className="doc-lang"><Languages size={15} aria-hidden="true" /> {d.languages}</p>
-              <button type="button" className="btn btn-quiet btn-sm" onClick={openChat}>Ask to book with {d.name.split(" ").slice(-1)[0]}</button>
-            </div>
+      <div className="wrap vo-notes">
+        {TIPS.map((t) => (
+          <article key={t.title}>
+            <h3>{t.title}</h3>
+            <p>{t.text}</p>
+            <span className="vo-tag">{t.tag}</span>
           </article>
         ))}
       </div>
@@ -243,154 +442,97 @@ function Doctors() {
   );
 }
 
-// ------------------------------------------------------------------ stories
-function Stories() {
-  const ref = useReveal<HTMLElement>();
-  const [i, setI] = useState(0);
-  const s = STORIES[i];
-  return (
-    <section className="section stories" ref={ref} aria-labelledby="st-h">
-      <div className="wrap stories-grid">
-        <div className="rise">
-          <h2 id="st-h" className="serif">In our patients' words</h2>
-          <div className="st-tabs" role="tablist" aria-label="Patient stories">
-            {STORIES.map((x, k) => <button key={x.name} role="tab" type="button" aria-selected={k === i} onClick={() => setI(k)}>{x.name}</button>)}
-          </div>
-        </div>
-        <figure className="st-quote rise" key={i} style={{ ["--d" as string]: "80ms" }}>
-          <blockquote className="serif">“{s.text}”</blockquote>
-          <figcaption><strong>{s.name}</strong> · {s.place} · {s.dept}</figcaption>
-        </figure>
-      </div>
-    </section>
-  );
-}
-
-// ------------------------------------------------------------------ packages
-function Packages() {
-  const ref = useReveal<HTMLElement>();
-  return (
-    <section className="section" ref={ref} aria-labelledby="pk-h" id="packages">
-      <div className="wrap">
-        <div className="split-head">
-          <h2 id="pk-h" className="serif rise">Preventive health check-ups</h2>
-          <p className="rise">Most reports the same day, reviewed with a physician. Ask the assistant to book one, or call us.</p>
-        </div>
-        <div className="pk-grid">
-          {PACKAGES.map((p, i) => (
-            <div key={p.code} className={i === 1 ? "pk pk-main rise" : "pk rise"} style={{ ["--d" as string]: `${i * 90}ms` }}>
-              {i === 1 && <span className="pk-flag">Most chosen</span>}
-              <h3>{p.name}</h3>
-              <p className="pk-price serif">{rupees(p.price)}</p>
-              <p className="pk-tests">{p.tests}</p>
-              <ul>{p.items.map((it) => <li key={it}><CheckCircle2 size={18} aria-hidden="true" />{it}</li>)}</ul>
-              <button type="button" className={i === 1 ? "btn btn-primary" : "btn btn-quiet"} onClick={openChat}>Book with the assistant</button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ------------------------------------------------------------------ health library + portal
-function Library() {
-  const ref = useReveal<HTMLElement>();
-  return (
-    <section className="section tinted" ref={ref} aria-labelledby="tp-h">
-      <div className="wrap lib-grid">
-        <div>
-          <h2 id="tp-h" className="serif rise">From our doctors</h2>
-          <div className="tips">
-            {TIPS.map((t, i) => (
-              <article key={t.title} className="tip rise" style={{ ["--d" as string]: `${i * 80}ms` }}>
-                <span className="tip-tag">{t.tag}</span><h3>{t.title}</h3><p>{t.text}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-        <aside className="portal-promo rise" style={{ ["--d" as string]: "120ms" }}>
-          <Photo src={IMAGES.lab} alt="Laboratory technician at work" icon="FlaskConical" className="promo-photo" />
-          <div className="promo-text">
-            <FileText size={26} aria-hidden="true" />
-            <h3>Your reports, the moment they're ready</h3>
-            <p>See lab results with normal ranges, your visits and your waitlist in My WellNest. Or just ask the assistant, "is my report ready?"</p>
-            <Link className="btn btn-primary btn-sm" to="/login">Open My WellNest</Link>
-          </div>
-        </aside>
-      </div>
-    </section>
-  );
-}
-
-// ------------------------------------------------------------------ emergency + callback
-function Emergency() {
-  return (
-    <section className="emergency-band" aria-labelledby="em-h">
-      <div className="wrap em-in">
-        <Siren size={40} aria-hidden="true" />
-        <div><h2 id="em-h">Chest pain, breathlessness, stroke signs or heavy bleeding?</h2>
-          <p>Don't wait for an appointment. Call 108 now or come to emergency entrance B, open 24 hours. If you tell our assistant, it says the same and connects a staff member at once.</p></div>
-        <a className="btn btn-white" href="tel:108">Call 108</a>
-      </div>
-    </section>
-  );
-}
-
-function Callback() {
-  const [state, setState] = useState<{ ok?: string; err?: string; busy?: boolean }>({});
+/* ----------------------------------------------------------------- 9. the close
+   A real ending: the one thing left to ask for, and the one thing that must never be
+   mistaken for it. */
+function Close() {
+  const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
+  const [msg, setMsg] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = e.currentTarget;
-    setState({ busy: true });
+    const f = new FormData(e.currentTarget);
+    setState("sending");
     try {
-      const r = await api<any>("/api/callback", { method: "POST", body: Object.fromEntries(new FormData(form).entries()) });
-      setState({ ok: r.message }); form.reset();
-    } catch (err: any) { setState({ err: err.message }); }
+      const r = await api<{ ok?: boolean; message?: string }>("/api/callback", {
+        method: "POST",
+        body: {
+          phone: String(f.get("phone") || ""),
+          preferred_time: String(f.get("when") || ""),
+          reason: String(f.get("reason") || ""),
+        },
+      });
+      setMsg(r.message || "We'll call you back.");
+      setState(r.ok === false ? "error" : "done");
+    } catch {
+      setMsg("We couldn't reach the hospital system just now. Please call us instead.");
+      setState("error");
+    }
   }
   return (
-    <section className="section" aria-labelledby="cb-h">
-      <div className="wrap cb-grid">
-        <div>
-          <h2 id="cb-h" className="serif">Rather we call you?</h2>
-          <p className="lead">Leave your number for surgery estimates, admissions or a second opinion. Our patient care team calls back Monday to Saturday, 8 AM to 8 PM.</p>
-          <ReachButtons form={false} size="sm" />
+    <section className="cl">
+      <div className="wrap cl-in">
+        <div className="cl-say" data-reveal>
+          <h2>Would you rather we called you?</h2>
+          <p>
+            Leave a number and a time that suits you. WellNest AI makes the call, and hands you to
+            a member of staff the moment you ask for one.
+          </p>
         </div>
-        <form className="cb-form" onSubmit={submit} noValidate>
-          <div className="two">
-            <div className="field"><label htmlFor="cb-name">Your name</label><input id="cb-name" name="name" className="input" autoComplete="name" /></div>
-            <div className="field"><label htmlFor="cb-phone">Mobile number</label><input id="cb-phone" name="phone" className="input" inputMode="tel" autoComplete="tel" required /></div>
-          </div>
-          <div className="two">
-            <div className="field"><label htmlFor="cb-time">Best time</label>
-              <select id="cb-time" name="preferred_time" className="input" defaultValue="Today, as soon as possible">
-                <option>Today, as soon as possible</option><option>Tomorrow morning</option><option>Tomorrow afternoon</option><option>After 6 PM</option></select></div>
-            <div className="field"><label htmlFor="cb-reason">About</label><input id="cb-reason" name="reason" className="input" placeholder="e.g. knee replacement cost" /></div>
-          </div>
-          <button className="btn btn-primary" disabled={state.busy}>{state.busy ? "Sending…" : "Request a call back"}</button>
-          <p className={state.err ? "error-text" : "ok-text"} aria-live="polite">{state.ok || state.err}</p>
-        </form>
+        {state === "done" ? (
+          <p className="cl-done" role="status">{msg}</p>
+        ) : (
+          <form className="cl-form" onSubmit={submit}>
+            <div className="field">
+              <label htmlFor="cb-phone">Mobile number</label>
+              <input id="cb-phone" name="phone" className="input" inputMode="tel" required placeholder="98450 00001" />
+            </div>
+            <div className="field">
+              <label htmlFor="cb-when">When should we call?</label>
+              <input id="cb-when" name="when" className="input" required placeholder="Tomorrow morning" />
+            </div>
+            <div className="field">
+              <label htmlFor="cb-reason">What is it about?</label>
+              <input id="cb-reason" name="reason" className="input" placeholder="Booking a cardiology visit" />
+            </div>
+            {state === "error" && <p className="error-text" role="alert">{msg}</p>}
+            <button className="btn btn-primary" disabled={state === "sending"}>
+              {state === "sending" ? "Requesting…" : "Request a call back"}
+            </button>
+          </form>
+        )}
+      </div>
+
+      <div className="wrap cl-sos">
+        <Siren size={28} aria-hidden="true" />
+        <div>
+          <h2>Chest pain, breathlessness or a stroke? Do not book.</h2>
+          <p>
+            Call <a href="tel:108">108</a> now. Our emergency department at entrance B is open 24
+            hours, and the assistant will not try to make you an appointment if you say this.
+          </p>
+        </div>
+        <a className="btn btn-emergency" href={`tel:${HOSPITAL.ambulance.replace(/\s/g, "")}`}>
+          Ambulance {HOSPITAL.ambulance}
+        </a>
       </div>
     </section>
   );
 }
 
 export default function Home() {
-  useEffect(() => { document.title = "WellNest Hospitals, Bengaluru · Book by chat or phone, 24 hours"; }, []);
+  useEffect(() => { document.title = "WellNest Hospitals, Bengaluru · Book by chat, phone or web"; }, []);
   return (
     <>
-      <Hero />
-      <Marquee />
-      <HowItWorks />
-      <Numbers />
-      <Centres />
-      <WhyUs />
-      <Doctors />
-      <Stories />
-      <Packages />
-      <Library />
-      <Emergency />
-      <Callback />
+      <Switchboard />
+      <InsurerRail />
+      <CaseSheet />
+      <Plate />
+      <OpenList />
+      <Index />
+      <Statement />
+      <Checks />
+      <Voices />
+      <Close />
     </>
   );
 }

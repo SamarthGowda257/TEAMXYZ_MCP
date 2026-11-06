@@ -48,8 +48,13 @@
 
 /* ---------- panels ---------- */
 .ad-panel { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px 20px; min-width: 0; }
-.ad-panel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+/* wrap instead of letting the toolbar stack on top of the title */
+.ad-panel-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 14px; min-height: 42px;
+}
 .ad-panel-head h2 { font-family: var(--font-display); font-size: 1.0625rem; margin-right: auto; }
+.ad-panel-head > :not(h2) { flex: 0 0 auto; }
 .ad-count { display: inline-block; margin-left: 6px; background: var(--surface-2); color: var(--muted); border-radius: 999px; padding: 1px 9px; font-size: .8125rem; }
 .ad-icon { border: 1px solid var(--border); background: #fff; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: var(--muted); }
 .ad-icon:hover { border-color: var(--accent); color: var(--accent); }
@@ -214,3 +219,12 @@
 
 /* If the widget already loaded on a patient page, keep it out of the staff console. */
 body:has(.ad-shell) #tdWebchat, body:has(.ad-login) #tdWebchat { display: none !important; }
+
+/* ---- row action clusters -------------------------------------------------
+   The per-row Restock / Edit / Remove controls sit on one line. Stacked, they
+   tripled every table row's height and made the inventory unreadable. */
+.ad-row-actions {
+  display: inline-flex; align-items: center; gap: 6px;
+  flex-wrap: wrap; justify-content: flex-end;
+}
+.ad-row-actions > * { flex: 0 0 auto; white-space: nowrap; }

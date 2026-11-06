@@ -503,8 +503,10 @@ def ops_summary():
 def ops_feed():
     R, WO, WL, H, N, P = db.resolutions, db.waitlist_offers, db.waitlist, db.handoffs, db.notifications, db.patients
     with db.engine.connect() as c:
+        # by time, not insertion order: seeded rows are backdated, so id order shows them shuffled
         acts = c.execute(select(R, P.c.full_name).outerjoin(P, P.c.id == R.c.patient_id)
-                         .where(R.c.actor.in_(["agent", "web", "system"])).order_by(R.c.id.desc()).limit(25)).mappings().all()
+                         .where(R.c.actor.in_(["agent", "web", "system"]))
+                         .order_by(R.c.created_at.desc(), R.c.id.desc()).limit(25)).mappings().all()
         offers = c.execute(select(WO, P.c.full_name).join(WL, WL.c.id == WO.c.waitlist_id).join(P, P.c.id == WL.c.patient_id)
                            .order_by(WO.c.id.desc()).limit(8)).mappings().all()
         hos = c.execute(select(H).order_by(H.c.id.desc()).limit(8)).mappings().all()
@@ -1129,7 +1131,12 @@ PAGES = ["/", "/about", "/architecture", "/checkin", "/specialities", "/visitors
          "/assistant", "/policies", "/departments",
          "/admin", "/admin/login", "/admin/appointments", "/admin/conversations", "/admin/escalations",
          "/admin/reminders", "/admin/patients", "/admin/doctors", "/admin/departments", "/admin/tests",
-         "/admin/insurance", "/admin/knowledge"]
+         "/admin/insurance", "/admin/knowledge",
+         # pharmacy + HealthCredits wallet on the patient portal
+         "/portal/pharmacy", "/portal/wallet",
+         # the staff console absorbed the old dashboard; these keep deep links working
+         "/admin/today", "/admin/pharmacy", "/admin/orders", "/admin/wallets", "/admin/outbound",
+         "/admin/system", "/admin/calls"]
 
 
 def spa():
@@ -1180,7 +1187,11 @@ def create_app() -> FastAPI:
         return JSONResponse({"ok": False, **body}, status_code=exc.status_code)
 
     from .commerce_api import router as commerce_router
+    from .admin_api import router as admin_router
+    from .patient_api import router as patient_router
     app.include_router(commerce_router)
+    app.include_router(admin_router)      # /api/admin/* — staff writes, admin cookie only
+    app.include_router(patient_router)    # /api/me/pharmacy, /api/me/wallet — patient token only
     app.include_router(router)
     (DIST / "assets").mkdir(parents=True, exist_ok=True)
     app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")

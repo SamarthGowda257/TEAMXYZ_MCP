@@ -6,7 +6,9 @@ import { About, Contact, Doctors, Insurance, Specialities, Visitors } from "./pa
 import { Accept, Login, Signup } from "./pages/Auth";
 import { Appointments, Overview, Profile, Reports, Waitlist } from "./pages/Portal";
 import { Book } from "./pages/Book";
-import { Dashboard, Pay } from "./pages/Dashboard";
+import { Pharmacy } from "./pages/Pharmacy";
+import { Wallet } from "./pages/Wallet";
+import { Pay } from "./pages/Dashboard";   // the Dashboard view itself is retired; /dashboard redirects to /admin
 import { Architecture } from "./pages/Architecture";
 import { Checkin } from "./pages/Checkin";
 import { Assistant } from "./pages/Assistant";
@@ -32,7 +34,9 @@ export default function App() {
     <>
       <ScrollTop />
       <Routes>
-        <Route path="/dashboard" element={<Dashboard />} />
+        {/* The dashboard is gone: the staff console absorbed it as its Today view.
+            Old links and bookmarks still land somewhere useful. */}
+        <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/*" element={<Admin />} />
         <Route path="*" element={
           <SiteLayout>
@@ -54,6 +58,8 @@ export default function App() {
               <Route path="/portal/appointments" element={<Appointments />} />
               <Route path="/portal/reports" element={<Reports />} />
               <Route path="/portal/waitlist" element={<Waitlist />} />
+              <Route path="/portal/pharmacy" element={<Pharmacy />} />
+              <Route path="/portal/wallet" element={<Wallet />} />
               <Route path="/portal/profile" element={<Profile />} />
               <Route path="/waitlist/accept" element={<Accept />} />
               <Route path="/pay" element={<Pay />} />

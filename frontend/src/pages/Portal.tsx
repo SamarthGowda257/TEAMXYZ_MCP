@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Accessibility, CalendarPlus, Mail, MessageCircle } from "lucide-react";
 import { PortalShell } from "../components/PortalShell";
-import { Empty, ErrorNote, Loading, Pill, TokenSlip } from "../components/Bits";
+import { Empty, ErrorNote, Loading, Pill } from "../components/Bits";
 import { api, istDay, longDate, rupees, shortDate, type Appointment, type Me, type Slot } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { openChat } from "../lib/chat";
@@ -16,56 +16,136 @@ export function Overview() {
   );
 }
 
+/*
+  The overview is the patient's own record, set as a document rather than a board of cards:
+  the next visit as a full-width ruled row (the same shape the assistant reads back on the
+  phone), then the rest of the record in ruled columns beneath it.
+*/
 function OverviewBody({ me }: { me: Me }) {
   const appts = useApi<Appointment[]>("/api/me/appointments?scope=upcoming", [], { live: true });
   const reports = useApi<any[]>("/api/me/reports", [], { live: true });
+  const wallet = useApi<{ balance_credits: number; spendable_credits: number }>("/api/me/wallet");
   const next = appts.data?.find((a) => a.status === "booked");
   const offer = me.snapshot.open_offer;
   const later = (appts.data || []).filter((a) => a.status === "booked" && a !== next).slice(0, 3);
   const recentReports = (reports.data || []).slice(0, 4);
+  const pending = me.snapshot.pending_reports || 0;
+
   return (
-    <div className="ov">
+    <div className="rec">
       {offer && (
-        <div className="offer-banner token-shape" role="status">
-          <div><p className="offer-title">A waitlist slot is held for you</p>
-            <p>{offer.doctor}, {offer.date} at {offer.time}. Held until {offer.held_until}.</p></div>
-          <Link className="btn btn-primary btn-sm token-shape" to={`/waitlist/accept?code=${offer.offer_code}`}>Review and accept</Link>
+        <div className="rec-offer" role="status">
+          <div>
+            <strong>A waitlist slot is being held for you</strong>
+            <span>{offer.doctor}, {offer.date} at {offer.time}. Held until {offer.held_until}.</span>
+          </div>
+          <Link className="btn btn-primary btn-sm" to={`/waitlist/accept?code=${offer.offer_code}`}>Review and accept</Link>
         </div>
       )}
-      <section className="panel ov-next" aria-labelledby="next-h">
-        <h2 id="next-h" className="panel-h">Next visit</h2>
-        {appts.loading ? <Loading /> : next ? (
+
+      {/* the next visit, as the row it actually is in the hospital register */}
+      <section className="rec-next" aria-labelledby="next-h">
+        <h2 id="next-h" className="rec-h">Your next visit</h2>
+        {appts.loading && !appts.data ? <Loading /> : next ? (
           <>
-            <TokenSlip id={next.booking_id} spoken={next.booking_id_spoken} tone="accent"
-              lines={[<strong key="w">{next.with}</strong>, `${longDate(next.date_iso)} · ${next.time}`, `Room ${next.room} · ${next.department}`, `Fee ${rupees(next.fee_inr)}`]} />
-            <div className="row next-actions">
-              {next.assistance?.length ? <Pill status="booked">{next.assistance.map((a) => a.replace("_", " ")).join(", ")} arranged</Pill> : null}
-              <Link className="btn btn-quiet btn-sm token-shape" to="/portal/appointments">Change or cancel</Link>
+            <dl className="rec-row">
+              <div><dt>Booking</dt><dd className="code rec-id">{next.booking_id}</dd></div>
+              <div><dt>With</dt><dd>{next.with}<small>{next.department}</small></dd></div>
+              <div><dt>When</dt><dd className="num">{longDate(next.date_iso)}<small className="num">{next.time}</small></dd></div>
+              <div><dt>Room</dt><dd className="num">{next.room}</dd></div>
+              <div><dt>Fee</dt><dd className="num">{rupees(next.fee_inr)}</dd></div>
+            </dl>
+            <div className="rec-next-act">
+              {next.assistance?.length
+                ? <span className="chip chip-ok">{next.assistance.map((a) => a.replace("_", " ")).join(", ")} arranged</span>
+                : null}
+              <Link className="btn btn-quiet btn-sm" to="/portal/appointments">Change or cancel</Link>
+              <span className="rec-spoken">Read out on the phone as “{next.booking_id_spoken}”</span>
             </div>
           </>
-        ) : <Empty title="No upcoming visits"><Link className="btn btn-primary btn-sm token-shape" to="/portal/book">Book a visit</Link></Empty>}
+        ) : (
+          <div className="rec-empty">
+            <strong>Nothing booked yet</strong>
+            <p>Book here, ask on chat, or call — all three write the same row.</p>
+            <Link className="btn btn-primary btn-sm" to="/portal/book">Book a visit</Link>
+          </div>
+        )}
       </section>
-      <section className="panel" aria-labelledby="rep-h">
-        <div className="panel-top"><h2 id="rep-h" className="panel-h">Lab reports</h2><Link to="/portal/reports">All reports</Link></div>
-        {reports.loading ? <Loading /> : recentReports.length ? (
-          <ul className="rows">{recentReports.map((r) => (
-            <li key={r.report_id}><Link to={`/portal/reports?open=${r.report_id}`} className="row-link"><span>{r.test}</span><span className="row-sub">{r.ordered}</span></Link><Pill status={r.status} /></li>
-          ))}</ul>
-        ) : <Empty title="No reports yet" />}
+
+      <div className="rec-cols">
+        <section aria-labelledby="rep-h">
+          <div className="rec-head">
+            <h2 id="rep-h" className="rec-h">Lab reports</h2>
+            <Link className="lnk-strong" to="/portal/reports">All reports</Link>
+          </div>
+          {reports.loading && !reports.data ? <Loading /> : recentReports.length ? (
+            <ul className="rec-list">
+              {recentReports.map((r) => (
+                <li key={r.report_id}>
+                  <Link to={`/portal/reports?open=${r.report_id}`}>
+                    <span>{r.test}<small>{r.ordered}</small></span>
+                    <Pill status={r.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="rec-quiet">No reports on file yet.</p>}
+          {pending > 0 && <p className="rec-quiet">{pending} still being processed.</p>}
+        </section>
+
+        <section aria-labelledby="later-h">
+          <div className="rec-head">
+            <h2 id="later-h" className="rec-h">Also booked</h2>
+            <Link className="lnk-strong" to="/portal/appointments">All appointments</Link>
+          </div>
+          {later.length ? (
+            <ul className="rec-list">
+              {later.map((a) => (
+                <li key={a.booking_id}>
+                  <Link to="/portal/appointments">
+                    <span>{a.with}<small className="num">{shortDate(a.date_iso)} · {a.time}</small></span>
+                    <span className="code">{a.booking_id}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="rec-quiet">Nothing else booked.</p>}
+        </section>
+      </div>
+
+      <section className="rec-strip" aria-label="Wallet and pharmacy">
+        <Link to="/portal/wallet">
+          <span className="rec-strip-k">HealthCredits</span>
+          <strong className="num">{wallet.data ? wallet.data.balance_credits.toLocaleString("en-IN") : "—"}</strong>
+          <span className="rec-strip-s">Pay for visits, scans and medicines</span>
+        </Link>
+        <Link to="/portal/pharmacy">
+          <span className="rec-strip-k">Pharmacy</span>
+          <strong>Order medicines</strong>
+          <span className="rec-strip-s">Delivered in about 90 minutes</span>
+        </Link>
+        <Link to="/portal/waitlist">
+          <span className="rec-strip-k">Waitlist</span>
+          <strong>{offer ? "A slot is held" : "Join a list"}</strong>
+          <span className="rec-strip-s">We offer you the next cancelled slot</span>
+        </Link>
       </section>
-      <section className="panel" aria-labelledby="later-h">
-        <div className="panel-top"><h2 id="later-h" className="panel-h">Also booked</h2><Link to="/portal/appointments">All appointments</Link></div>
-        {later.length ? (
-          <ul className="rows">{later.map((a) => (
-            <li key={a.booking_id}><div><span>{a.with}</span><span className="row-sub">{shortDate(a.date_iso)} · {a.time}</span></div><span className="id">{a.booking_id}</span></li>
-          ))}</ul>
-        ) : <p className="quiet">Nothing else booked.</p>}
-      </section>
-      <section className="panel" aria-labelledby="mem-h">
-        <h2 id="mem-h" className="panel-h">What WellNest remembers</h2>
-        {me.snapshot.recent_notes?.length ? <ul className="notes">{me.snapshot.recent_notes.map((n) => <li key={n}>{n}</li>)}</ul>
-          : <p className="quiet">Your conversations with the assistant will be summarised here.</p>}
-        <button type="button" className="btn btn-quiet btn-sm token-shape" onClick={openChat}><MessageCircle size={18} aria-hidden="true" />Ask WellNest</button>
+
+      <section className="rec-mem" aria-labelledby="mem-h">
+        <h2 id="mem-h" className="rec-h">What WellNest remembers</h2>
+        {me.snapshot.recent_notes?.length ? (
+          <ol className="rec-notes">
+            {me.snapshot.recent_notes.map((n) => <li key={n}>{n}</li>)}
+          </ol>
+        ) : (
+          <p className="rec-quiet">
+            Your conversations with the assistant are summarised here, so you never have to
+            explain the same thing twice.
+          </p>
+        )}
+        <button type="button" className="btn btn-quiet btn-sm" onClick={openChat}>
+          <MessageCircle size={17} aria-hidden="true" /> Ask WellNest
+        </button>
       </section>
     </div>
   );

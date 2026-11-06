@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { initMotion } from "../lib/motion";
 import { Ambulance, Clock, Mail, MapPin, Menu, MessageCircle, Phone, X } from "lucide-react";
 import { session } from "../lib/api";
 import { chatConfigured, onChatFallback, openChat, resetChat, voiceNumber } from "../lib/chat";
@@ -7,12 +8,26 @@ import { useLoggedIn, useTextSize } from "../lib/hooks";
 import { AILauncher } from "./WellNestAI";
 import { CENTRES, HOSPITAL } from "../content";
 
-/** WellNest logo: a medical cross inside a rounded shield. */
+/**
+ * WellNest mark: a nest — two cradling arcs — holding a heartbeat line.
+ * The pulse is the one motif; it reappears as the loading indicator and the section rule.
+ */
 export function Mark({ size = 40 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true" className="mark">
-      <path d="M20 2l15 5.5v11.2c0 9.3-6.3 16.6-15 19.3C11.3 35.3 5 28 5 18.7V7.5z" fill="var(--accent)" />
-      <path d="M17 11h6v6h6v6h-6v6h-6v-6h-6v-6h6z" fill="#fff" />
+      <path
+        d="M4 19a16 16 0 0 1 32 0"
+        fill="none" stroke="var(--accent)" strokeWidth="2.6" strokeLinecap="round"
+      />
+      <path
+        d="M8.5 26.5a11.5 11.5 0 0 0 23 0"
+        fill="none" stroke="var(--gold-leaf)" strokeWidth="2.6" strokeLinecap="round"
+      />
+      <path
+        d="M10 21.4h5.1l2.4-5.2 3.3 9.1 2.4-3.9H30"
+        fill="none" stroke="var(--accent)" strokeWidth="2.6"
+        strokeLinecap="round" strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -22,8 +37,12 @@ function TopBar() {
     <div className="topbar">
       <div className="wrap topbar-in">
         <span className="tb-item tb-hide"><Clock size={15} aria-hidden="true" /> OPD Mon–Sat, 8 AM – 8 PM</span>
-        <a className="tb-item" href={voiceNumber().href}><Phone size={15} aria-hidden="true" /> Helpline {voiceNumber().label}</a>
-        <a className="tb-item tb-hide" href={`mailto:${HOSPITAL.email}`}><Mail size={15} aria-hidden="true" /> {HOSPITAL.email}</a>
+        <span className="tb-item tb-hide"><MapPin size={15} aria-hidden="true" /> Marathahalli, Bengaluru</span>
+        {/* The AI line is a Talkdesk number, so it is named for what it is rather than
+            dressed up as a Bengaluru switchboard. */}
+        <a className="tb-item" href={voiceNumber().href}>
+          <Phone size={15} aria-hidden="true" /> Talk to WellNest AI {voiceNumber().label}
+        </a>
         <a className="tb-emergency" href="tel:108"><Ambulance size={16} aria-hidden="true" /> Emergency: call 108</a>
       </div>
     </div>
@@ -118,7 +137,13 @@ export function SiteFooter() {
         <div className="footer-contact">
           <h2 className="footer-h">Reach us</h2>
           <p><MapPin size={16} aria-hidden="true" /> {HOSPITAL.address}</p>
-          <p><Phone size={16} aria-hidden="true" /> <a href={voiceNumber().href}>{voiceNumber().label}</a></p>
+          <p>
+            <Phone size={16} aria-hidden="true" />
+            <span>
+              <a href={voiceNumber().href}>{voiceNumber().label}</a>
+              <small className="fc-note">WellNest AI, 24 hours — answers and books on the call</small>
+            </span>
+          </p>
           <p><Mail size={16} aria-hidden="true" /> <a href={`mailto:${HOSPITAL.email}`}>{HOSPITAL.email}</a></p>
           <p><Clock size={16} aria-hidden="true" /> OPD Mon–Sat 8 AM – 8 PM · Emergency 24×7</p>
         </div>
@@ -159,6 +184,14 @@ export function ChatFallback() {
 }
 
 export function SiteLayout({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  // Reveals are re-scanned per route: each page mounts its own [data-reveal] sections.
+  // initMotion() returns a GSAP context revert, so nothing leaks between routes.
+  useEffect(() => {
+    let dispose = () => {};
+    const id = window.setTimeout(() => { dispose = initMotion(); }, 0);
+    return () => { window.clearTimeout(id); dispose(); };
+  }, [pathname]);
   return (
     <>
       <SiteHeader />

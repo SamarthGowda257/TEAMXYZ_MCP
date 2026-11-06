@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { Link, NavLink, Navigate, useLocation } from "react-router-dom";
-import { CalendarPlus, CalendarDays, FileText, Hourglass, Home, MessageCircle, UserRound } from "lucide-react";
+import { CalendarPlus, CalendarDays, FileText, Hourglass, Home, MessageCircle, UserRound , Pill, Wallet } from "lucide-react";
 import { session, type Me } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { openChat, setChatPatient } from "../lib/chat";
@@ -12,6 +12,8 @@ const NAV = [
   { to: "/portal/appointments", label: "Appointments", icon: CalendarDays },
   { to: "/portal/reports", label: "Lab reports", icon: FileText },
   { to: "/portal/waitlist", label: "Waitlist", icon: Hourglass },
+  { to: "/portal/pharmacy", label: "Pharmacy", icon: Pill },
+  { to: "/portal/wallet", label: "HealthCredits", icon: Wallet },
   { to: "/portal/profile", label: "Profile", icon: UserRound },
 ];
 
