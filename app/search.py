@@ -296,7 +296,15 @@ def _search_pg(q, patient_id, ref_prefixes, k, conn, ignore=frozenset(), gate=Tr
                "trgm": round(float(r["trgm"]), 3) if r["trgm"] is not None else None,
                "vec": round(float(r["vec"]), 3) if r["vec"] is not None else None, "code": bool(r["code"]),
                "words": f"{r['n'] or 0}/{len(tw)}"}
-        kw_ok = (r["n"] or 0) >= need if "t" in dict(legs) else bool(sig["fts"])
+        # Passages from data/hospital are long prose, so one incidental common word is not an answer:
+        # "what is the cricket score today" reduces to two terms, matches "score" in the aftercare
+        # passage (which means *pain* score) and would otherwise clear a need of 1. Those passages
+        # need two shared words, or the whole query matched, or a real code or meaning hit. The short
+        # curated entries in app/kb.py (kb:faq, kb:dept, kb:policy) are tightly scoped and keep need.
+        n_words = r["n"] or 0
+        long_doc = str(r["ref"]).startswith("kb:doc:")
+        want = max(need, 2) if long_doc else need
+        kw_ok = (n_words >= want or (n_words and n_words == len(tw))) if "t" in dict(legs) else bool(sig["fts"])
         confident = bool(sig["code"] or kw_ok or (sig["vec"] is not None and sig["vec"] >= config.SEARCH_MIN_SIM))
         if confident or not gate:
             hits.append({"ref": r["ref"], "kind": r["kind"], "title": r["title"], "body": r["body"], "created_at": r["created_at"],

@@ -376,6 +376,12 @@ def _shared_words(h: dict) -> tuple[int, int]:
     return int(sig.get("overlap") or 0), 0
 
 
+# A full-text score this low is one incidental common word, not a topic match. "what is the cricket
+# score today" scores 0.1 against the aftercare passage purely because that passage says "pain score".
+# Every genuine document hit in scripts/eval_search.py clears this and also shares two or more words.
+DOC_FTS_MIN = 0.25
+
+
 def _enough_evidence(h: dict) -> bool:
     """A passage from data/hospital is long prose, so a single shared keyword is not evidence that it answers
     the question: "what is the cricket score today" must not reach the aftercare passage just because that
@@ -384,7 +390,11 @@ def _enough_evidence(h: dict) -> bool:
     if not h["ref"].startswith("kb:doc:"):
         return True
     sig = h["signals"]
-    if sig.get("vec") is not None or sig.get("code") or sig.get("fts"):
+    try:
+        strong_fts = float(sig.get("fts") or 0) >= DOC_FTS_MIN
+    except (TypeError, ValueError):
+        strong_fts = False
+    if sig.get("vec") is not None or sig.get("code") or strong_fts:
         return True                       # a real meaning, code or full-text match is evidence on its own
     n, total = _shared_words(h)
     return n >= 2 or (total and n == total)    # one word is enough only when it is the whole question
