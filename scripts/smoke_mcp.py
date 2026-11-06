@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import time
+from datetime import date, timedelta
 
 import httpx2
 from mcp import ClientSession
@@ -184,8 +185,20 @@ async def main():
             # V1 reschedule with identity
             mine, _, _ = await call(s, "find_appointments", RAHUL)
             bid = mine["data"]["appointments"][0]["booking_id"]
-            sl, _, _ = await call(s, "find_available_slots", {"date": "day after tomorrow", "department": "General Medicine"})
-            d1 = next(d for d in sl["data"]["doctors"] if d["free_slots"])
+            # Not "day after tomorrow": the hospital is shut on Sundays, so on a Friday run that
+            # date has no clinic at all and the check failed on the calendar rather than on the
+            # product. Walk forward to the first day that genuinely has a free General Medicine slot.
+            sl, d1 = None, None
+            for off in range(1, 9):
+                day = (date.today() + timedelta(days=off)).isoformat()
+                sl, _, _ = await call(s, "find_available_slots", {"date": day, "department": "General Medicine"})
+                d1 = next((d for d in sl["data"]["doctors"] if d["free_slots"]), None)
+                if d1:
+                    break
+            if not d1:
+                check("Reschedule own booking", False,
+                      {"message": "No free General Medicine slot in the next 8 days to reschedule into."})
+                raise SystemExit(1)
             b, ms, _ = await call(s, "reschedule_appointment", dict(booking_id=bid, new_date=sl["data"]["date_iso"],
                                                                      new_time=d1["free_slots"][0], doctor_name=d1["name"], **RAHUL))
             check("Reschedule own booking", b["ok"], b, ms)
