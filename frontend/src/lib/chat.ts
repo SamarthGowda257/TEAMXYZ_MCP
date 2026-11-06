@@ -50,9 +50,32 @@ export function onChatFallback(fn: () => void) {
   return () => listeners.delete(fn);
 }
 
+/** Is the Talkdesk panel on screen? Its wrapper stays in the DOM and is toggled by visibility. */
+function panelOpen(): boolean {
+  const el = document.querySelector("#tdWebchat .tdw-widget");
+  return !!el && getComputedStyle(el).visibility !== "hidden";
+}
+
+/**
+ * Open the chat.
+ *
+ * `webchat.open()` exists on this SDK build but does nothing — verified against the live
+ * touchpoint: the method is present, calling it leaves `.tdw-widget` at 0x0 and
+ * `visibility: hidden`, while clicking the widget's own trigger opens it at 360x680. So the
+ * trigger is the real control, and every "Chat to book" on the site routes through it.
+ * `open()` is still tried first, in case a later SDK build fixes it.
+ */
 export function openChat() {
   if (window.webchat) {
-    try { window.webchat.open(); return; } catch { /* fall through */ }
+    try { window.webchat.open(); } catch { /* keep going */ }
+    if (panelOpen()) return;
+    const trigger = document.querySelector<HTMLElement>("#tdWebchat .tdw-widget-trigger");
+    if (trigger) {
+      trigger.click();
+      // the panel animates in; only report failure if it never appears
+      window.setTimeout(() => { if (!panelOpen()) listeners.forEach((fn) => fn()); }, 1200);
+      return;
+    }
   }
   listeners.forEach((fn) => fn());
 }
@@ -91,7 +114,8 @@ export function loadChat() {
     window.webchat = window.TalkdeskChatSDK(node, { touchpointId: cfg.touchpointId, accountId: "", region: cfg.region });
     window.webchat.init({
       enableEmoji: false, enableAttachments: false, enableResponsiveLayout: true,
-      styles: { chatTitle: "WellNest Assistant", chatSubtitle: "Bookings, reports, insurance", chatThemeColor: "#0B5CAD" },
+      // chatThemeColor is the one colour Talkdesk lets us set inside the panel: match the site's teal.
+      styles: { chatTitle: "WellNest Assistant", chatSubtitle: "Bookings, reports, insurance", chatThemeColor: "#0D6E63" },
     });
     try {
       window.webchat.onOpenWebchat = () => { pushContext(); warm(); };
