@@ -3,7 +3,14 @@
   No reveal animations here — staff read this under time pressure and content must be there on load.
 */
 
-.ad-boot { min-height: 60vh; display: grid; place-items: center; padding: 40px; }
+/* align-items centres vertically; justify-items must stay stretch, or the skeleton grid inside
+   shrinks to its content width — and its bars have no intrinsic width, so the whole boot screen
+   measured 0px across and the console looked blank while the sign-in check was still running. */
+.ad-boot {
+  min-height: 60vh; display: grid; align-items: center; justify-items: stretch;
+  padding: 40px; max-width: 460px; margin-inline: auto; gap: 16px; text-align: center;
+}
+.ad-boot p { color: var(--muted); font-size: var(--step-small); }
 
 /* ---------- sign in ---------- */
 .ad-login { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; background: var(--surface); }
@@ -157,7 +164,8 @@
 .ad-empty strong { display: block; font-family: var(--font-display); font-size: 1.0625rem; color: var(--ink); margin-bottom: 4px; }
 .ad-empty p { font-size: .9375rem; max-width: 44ch; margin: 0 auto; }
 
-.ad-skel { display: grid; gap: 8px; }
+/* width:100% so a skeleton never collapses inside a centring parent and renders invisibly */
+.ad-skel { display: grid; gap: 8px; width: 100%; min-width: 180px; }
 .ad-skel i { display: block; height: 34px; border-radius: 8px; background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 37%, var(--surface) 63%); background-size: 400% 100%; animation: ad-sheen 1.3s ease-in-out infinite; }
 @keyframes ad-sheen { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
 

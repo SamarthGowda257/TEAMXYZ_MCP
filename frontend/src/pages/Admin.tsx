@@ -102,12 +102,23 @@ export function Admin() {
   const [openPatient, setOpenPatient] = useState<number | null>(null);
   const nav = useNavigate();
 
+  const [slow, setSlow] = useState(false);
+
   const check = useCallback(async () => {
     try { const r = await api<{ user: string }>("/api/admin/me"); setWho(r.user); }
     catch { setWho(null); }
     finally { setChecked(true); }
   }, []);
   useEffect(() => { check(); document.title = "Staff console — WellNest Hospitals"; }, [check]);
+
+  /* Render puts a free instance to sleep after about fifteen minutes, and waking it takes the
+     best part of a minute. Say so, rather than leaving someone looking at a blank screen and
+     guessing whether the console is broken. */
+  useEffect(() => {
+    if (checked) return;
+    const t = window.setTimeout(() => setSlow(true), 2500);
+    return () => window.clearTimeout(t);
+  }, [checked]);
 
   const out = async () => {
     try { await api("/api/admin/logout", { method: "POST" }); } catch { /* cookie may already be gone */ }
@@ -116,7 +127,18 @@ export function Admin() {
 
   const toPatient = (id: number) => { setOpenPatient(id); nav("/admin/patients"); };
 
-  if (!checked) return <div className="ad-boot"><Loading rows={3} /></div>;
+  if (!checked) {
+    return (
+      <div className="ad-boot" role="status" aria-live="polite">
+        <Loading rows={3} />
+        <p>
+          {slow
+            ? "Waking the hospital server — this takes up to a minute when nobody has used it for a while."
+            : "Checking your sign-in…"}
+        </p>
+      </div>
+    );
+  }
   if (!who) return <AdminLogin onDone={check} />;
 
   return (
