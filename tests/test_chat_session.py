@@ -178,3 +178,27 @@ def test_other_medicines_still_restock():
 def test_refusal_no_longer_promises_video():
     r = ph.order(RAHUL, RAHUL_DOB, "Azithromycin 500", confirm="yes")
     assert not r.ok and "video" not in r.message.lower() and "Dr. Anil Kumar" in r.message
+
+
+def test_caller_id_names_the_patient_but_does_not_verify():
+    r = mcp_tools.recognise_caller(caller_id="+91 98450 00004")
+    assert r["ok"] and r["data"]["patient_phone"] == pt.norm_phone(RAHUL) and r["data"]["verified"] is False
+    assert "Am I speaking with Rahul" in r["message"] and "date of birth" in r["message"]
+    assert not pt.recently_verified(pt.norm_phone(RAHUL))
+
+
+def test_caller_id_after_verification_skips_the_questions():
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    r = mcp_tools.recognise_caller(caller_id="919845000004")
+    assert r["data"]["verified"] is True and "don't ask" in r["message"]
+
+
+@pytest.mark.parametrize("cid,code", [("", "no_caller_id"), ("anonymous", "no_caller_id")])
+def test_no_caller_id_falls_back_to_asking(cid, code):
+    r = mcp_tools.recognise_caller(caller_id=cid)
+    assert not r["ok"] and r["error_code"] == code
+
+
+def test_unregistered_caller_is_offered_registration():
+    r = mcp_tools.recognise_caller(caller_id="9000011111")
+    assert r["ok"] and r["data"]["registered"] is False and "register" in r["message"]

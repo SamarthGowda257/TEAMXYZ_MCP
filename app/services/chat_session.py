@@ -93,6 +93,33 @@ def open_session(session_code, interaction_id="") -> Result:
     return Result(True, msg, data, related=res.related)
 
 
+NO_CALLER = ("There's no caller number on this conversation. Ask for the registered mobile number and date of birth.")
+
+
+def recognise_caller(caller_id) -> Result:
+    """On a phone call Talkdesk knows the number the patient is calling from (or the number we dialled), so the agent
+    should never ask for it again. A caller ID can be spoofed, so this names the patient but does not verify them: the
+    agent still confirms who it is speaking to and asks for the date of birth before anything personal."""
+    phone = pt.norm_phone(caller_id)
+    if not phone:
+        return fail("no_caller_id", NO_CALLER)
+    with db.engine.connect() as c:
+        p = pt.get_by_phone(c, phone)
+    last4 = phone[-4:]
+    if not p or p["is_guest"]:
+        return ok(f"This call is from a number ending {last4} that isn't registered with us. Ask whether they'd like to "
+                  f"use this number, give their registered number, or register as a new patient.",
+                  caller_phone=phone, registered=False)
+    first = p["full_name"].split()[0]
+    if pt.recently_verified(phone):
+        return ok(f"This call is from {first}'s registered number ending {last4}, already verified in this conversation. "
+                  f"Use this number; don't ask for it or the date of birth again.",
+                  caller_phone=phone, patient_phone=phone, first_name=first, registered=True, verified=True)
+    return ok(f"This call is from the number ending {last4}, registered to {first}. Ask: 'Am I speaking with {first}? "
+              f"For your security, please tell me your date of birth.' Use this number as the mobile number; don't ask for it.",
+              caller_phone=phone, patient_phone=phone, first_name=first, registered=True, verified=False)
+
+
 def ingest_transcript(body: dict) -> dict:
     """File a closed conversation in the patient's memory, split so each passage can be found and embedded."""
     text = clean(next((body.get(k) for k in ("transcript", "transcription", "text", "body") if body.get(k)), ""))

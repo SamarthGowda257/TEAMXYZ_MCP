@@ -428,6 +428,15 @@ def open_signed_in_session(session_code: Annotated[S, Field(description="The ses
 
 
 @tool
+def recognise_caller(caller_id: Annotated[S, Field(description="The number this phone call is from, supplied by the Caller ID system variable. Never ask the patient for it.")] = "") -> dict:
+    """On a phone call, find out whose registered number the patient is calling from, so you never ask for their mobile
+    number. Call it at the start of a voice call before asking for a mobile number. If it names a patient, ask 'Am I
+    speaking with <name>?' and for the date of birth only, and use the returned patient_phone as the mobile number. If
+    the person says it's someone else's phone, ask for their own registered number. Empty on chat: ask as usual."""
+    return cs.recognise_caller(caller_id)
+
+
+@tool
 def search_past_interactions(phone: Phone,
                              query: Annotated[S, Field(description="What to look for, e.g. MRI report, insurance.")],
                              date_of_birth: SDob = "") -> dict:
