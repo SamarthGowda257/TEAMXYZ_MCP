@@ -211,8 +211,8 @@ first, "what did I ask last chat" found nothing, and "When is my next appointmen
    ```
 5. **Save → Publish.**
 6. **Find the "cannot handle" error:** Agent Observability → open the 7 Nov 16:04 chat (it starts "Can I get 200 of my
-   HealthCredits refunded") → click the failed turn and screenshot the error. It's a Talkdesk-side failure: our server
-   was never called, so the trace is the only place it shows.
+   HealthCredits refunded") → click the failed turn and screenshot the error. The message is Talkdesk's own fallback,
+   so the trace shows which agent or skill failed.
 
 **Test on a phone call:** call the WellNest number from your registered mobile and say "When is my next appointment?".
 It should ask "Am I speaking with <your name>?" and for your date of birth, not your number.
