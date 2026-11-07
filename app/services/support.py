@@ -124,6 +124,13 @@ def save_note(phone, summary, topics="", outcome="", channel="chat", last_messag
     return ok("Noted for next time.", note_id=f"NT-{10000 + nid}")
 
 
+# Words that ask "when" rather than "what": a query made only of these means "show me the latest".
+_RECENCY_WORDS = {"last", "time", "chat", "chats", "conversation", "conversations", "before", "previous", "earlier",
+                  "ask", "asked", "talk", "talked", "spoke", "discuss", "discussed", "said", "told", "did", "what", "about",
+                  "recent", "recently", "history", "past", "you", "me", "my", "i", "we", "us", "the", "a", "in", "with",
+                  "do", "remember", "anything", "something", "call", "message", "messages", "ago", "yesterday", "week"}
+
+
 def search_interactions(phone, dob, query) -> Result:
     """Hybrid search (keyword + fuzzy + meaning) over this patient's own notes and actions; never across patients."""
     from .. import search
@@ -136,20 +143,24 @@ def search_interactions(phone, dob, query) -> Result:
             return err
         search.sync(c, p["id"])                     # a note saved seconds ago is findable at once
         q = clean(query)
-        if search.words(q) or search.codes(q):
+        topical = [w for w in search.words(q) if w not in _RECENCY_WORDS]
+        top, mode, missed = [], "recent", False
+        if topical or search.codes(q):
             res = search.search(q, patient_id=p["id"], k=3, conn=c)
             top, mode = res["hits"], res["mode"]
-        else:                                       # "what did we talk about last time?": most recent first
+            missed = not top
+        if not top:                                 # "what did I ask last time?", or nothing on that topic: newest first
             D = db.search_docs
             rows = c.execute(select(D.c.ref, D.c.kind, D.c.title, D.c.body, D.c.created_at).where(
                 D.c.patient_id == p["id"], D.c.kind.in_(("note", "action"))).order_by(D.c.created_at.desc()).limit(3)).mappings().all()
             top, mode = [dict(r) for r in rows], "recent"
     if not top:
-        return ok("I don't see an earlier conversation about that on your record.", matches=[], search_mode=mode)
+        return ok("I don't see any earlier conversation on your record yet.", matches=[], search_mode=mode)
     m = top[0]
     days = (config.today() - m["created_at"].date()).days
     when = "today" if days == 0 else "yesterday" if days == 1 else f"{days} days ago, on {human_date(m['created_at'].date())}"
-    return ok(f"Yes. {when[0].upper() + when[1:]}: {m['body']}", search_mode=mode,
+    lead = "I don't see one on that exact topic. The most recent was" if missed else "Yes. Most recently,"
+    return ok(f"{lead} {when}: {m['body']}", search_mode=mode, matched_topic=not missed,
               matches=[{"date": x["created_at"].date().isoformat(), "summary": x["body"][:200]} for x in top])
 
 

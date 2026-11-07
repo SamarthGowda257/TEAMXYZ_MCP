@@ -14,7 +14,7 @@ hours and parking that differ from the knowledge base. Also, "verify first" and 
 broken by the Instruction Adherence judge (see `TALKDESK_SETUP.md` §10). Use the additions below instead.
 
 ## 1. Refresh the MCP server
-**AI Agent Platform → MCP Servers → the WellNest server → Test connection / Refresh.** Expect **46 tools** (45 plus `open_signed_in_session`, section 10). New since the
+**AI Agent Platform → MCP Servers → the WellNest server → Test connection / Refresh.** Expect **47 tools** (45 plus `open_signed_in_session`, section 10, and `recognise_caller`, section 11). New since the
 outbound work: `check_medicine_stock`, `order_medicine`, `track_medicine_order`, `get_health_credits_balance`,
 `recharge_health_credits`, `pay_with_health_credits`, `request_credits_refund`, `set_shared_wallet`.
 `request_assistance` gains two optional inputs: `off_campus` and `date_of_birth`.
@@ -188,3 +188,31 @@ conversation transcription is available**" with an HTTP or webhook action, if th
 
 A transcript is filed only under the patient its session code or linked interaction names, never under a phone number
 alone. If the account offers only the Email Notifier, skip this: tool answers and notes are already remembered.
+
+## 11. Voice callers, refund confirmation and names (7 Nov, after live chat tests)
+
+Found in the live chat: the agent refused to say a verified patient's own name, a refund went through without asking
+first, "what did I ask last chat" found nothing, and "When is my next appointment?" after a refund returned Talkdesk's
+"Sorry, I cannot handle your request right now". Server fixes are in; these are the Talkdesk steps.
+
+1. **MCP Servers → Refresh**: 47 tools (new: `recognise_caller`; `request_credits_refund` gains `confirm`).
+2. **Receptionist** (the orchestrator's own instructions), add:
+   ```
+   PHONE CALLS: On a voice call, first call recognise_caller. If it names a patient, ask "Am I speaking with <name>?" and for the date of birth only; never ask for the mobile number, use the patient_phone it returns. If they say it's someone else's phone, ask for their own registered number. Pass that mobile number to every specialist.
+   NAMES: Once a patient is verified or signed in, use their first name and tell them their own details (name, bookings, balance) when asked. Privacy rules are about other people, not the verified patient.
+   ```
+3. **Receptionist skills:** add `recognise_caller` (MCP) and map **caller_id → system variable Caller ID**.
+   If the Receptionist can't hold skills, add it to the **Support Agent** instead and route rule 1 of Conditions
+   ("asks who they are") there; it already is.
+4. **Billing and Insurance Agent:** delete and re-add `request_credits_refund` so the new `confirm` input appears. Leave
+   `confirm` **unmapped** (the AI fills it). Add to its instructions:
+   ```
+   REFUNDS: Call request_credits_refund without confirm first and read back the amount. Only after the patient says yes, call it again with confirm=yes, then read out the refund reference (RF-).
+   ```
+5. **Save → Publish.**
+6. **Find the "cannot handle" error:** Agent Observability → open the 7 Nov 16:04 chat (it starts "Can I get 200 of my
+   HealthCredits refunded") → click the failed turn and screenshot the error. It's a Talkdesk-side failure: our server
+   was never called, so the trace is the only place it shows.
+
+**Test on a phone call:** call the WellNest number from your registered mobile and say "When is my next appointment?".
+It should ask "Am I speaking with <your name>?" and for your date of birth, not your number.

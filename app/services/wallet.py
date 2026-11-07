@@ -399,7 +399,7 @@ def refund_for_cancelled_booking(conn, p: dict, a: dict, starts_at) -> int:
     return amount
 
 
-def request_refund(phone, amount="", dob="") -> Result:
+def request_refund(phone, amount="", dob="", confirm="yes") -> Result:
     """Unused credits back to the original bank account (never cash at a counter): 3 to 5 banking days."""
     with db.engine.begin() as c:
         p, err = pt.check_identity(c, phone, dob)
@@ -413,6 +413,10 @@ def request_refund(phone, amount="", dob="") -> Result:
         if bal <= 0:
             return fail("not_allowed", "There are no HealthCredits to refund on this account.")
         amt = min(max(amt, 1), bal)
+        if clean(confirm).lower() not in ("yes", "y", "true", "confirm", "confirmed"):
+            return ok(f"You have {bal:,} HealthCredits. Shall I refund {rupees(amt)} to the bank account or card you originally "
+                      "paid from? It usually arrives in 3 to 5 banking days.", needs_confirmation=True, amount_inr=amt,
+                      balance_credits=bal)
         code = pt.random_code("RF", 5)
         good, _txn = debit(c, p["id"], amt, "refund_out", code, f"refund_out:{code}")
         if not good:

@@ -202,3 +202,37 @@ def test_no_caller_id_falls_back_to_asking(cid, code):
 def test_unregistered_caller_is_offered_registration():
     r = mcp_tools.recognise_caller(caller_id="9000011111")
     assert r["ok"] and r["data"]["registered"] is False and "register" in r["message"]
+
+
+def test_visit_history_also_mentions_recent_requests():
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    assert mcp_tools.save_interaction_note(phone=RAHUL, summary="Ordered Telma 40 for home delivery.")["ok"]
+    r = mcp_tools.get_visit_history(phone=RAHUL)
+    assert r["ok"] and "Telma 40" in r["message"] and r["data"]["recent_activity"]
+    assert len(json.dumps(r)) < 1400
+
+
+def test_refund_asks_before_moving_money():
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    q = mcp_tools.request_credits_refund(phone=RAHUL, amount="200")
+    assert q["ok"] and q["data"]["needs_confirmation"] and "Shall I refund" in q["message"]
+    assert "1,800" in mcp_tools.get_health_credits_balance(phone=RAHUL)["message"]
+    done = mcp_tools.request_credits_refund(phone=RAHUL, amount="200", confirm="yes")
+    assert done["ok"] and done["data"]["refund_id"].startswith("RF-") and done["data"]["balance_credits"] == 1600
+
+
+@pytest.mark.parametrize("q", ["What did I ask you in my last chat?", "what did we talk about before", "anything earlier?"])
+def test_last_chat_questions_return_the_latest_conversation(q):
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    assert mcp_tools.save_interaction_note(phone=RAHUL, summary="Asked for a refund of 200 HealthCredits.")["ok"]
+    search.sync()
+    r = sp.search_interactions(RAHUL, "", q)
+    assert r.ok and "refund of 200" in r.message and r.data["matched_topic"]
+
+
+def test_unmatched_topic_still_shows_recent_history():
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    assert mcp_tools.save_interaction_note(phone=RAHUL, summary="Asked about parking near the main gate.")["ok"]
+    search.sync()
+    r = sp.search_interactions(RAHUL, "", "zebra crossing helicopter")
+    assert r.ok and r.message.startswith("I don't see one on that exact topic") and r.data["matched_topic"] is False

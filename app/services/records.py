@@ -109,10 +109,16 @@ def visit_history(phone, dob) -> Result:
         who = REF.doctors[a["doctor_id"]]["name"] if a["doctor_id"] else REF.procedures[a["procedure_id"]]["name"]
         dept = REF.doctors[a["doctor_id"]]["dept"] if a["doctor_id"] else "Diagnostics"
         visits.append({"date": human_date(a["appt_date"]), "date_iso": a["appt_date"].isoformat(), "with": who, "department": dept})
+    # "What did I do last time?" often lands here, so the newest conversations and actions (orders, refunds, notes)
+    # come along: visits alone made the agent deny a medicine order the patient had placed.
+    from . import support as sp
+    recent = (sp.search_interactions(p["phone"], "", "").data or {}).get("matches", [])
+    recent = [{"date": m["date"], "summary": m["summary"][:120]} for m in recent]
+    tail = (" Most recent conversation or request: " + recent[0]["summary"].rstrip(".") + ".") if recent else ""
     if not visits:
-        return ok("I don't see any completed visits on your record yet.", visits=[])
+        return ok("I don't see any completed visits on your record yet." + tail, visits=[], recent_activity=recent)
     parts = [f"{v['date']} with {v['with']}" for v in visits[:3]]
-    return ok("Your recent visits: " + "; ".join(parts) + ".", visits=visits)
+    return ok("Your recent visits: " + "; ".join(parts) + "." + tail, visits=visits, recent_activity=recent)
 
 
 def prescription_refill(phone, dob, medicine_name, doctor_name="") -> Result:
