@@ -138,6 +138,13 @@ def _index_patient(pid) -> None:
     search.embed_pending(100, patient_id=pid)
 
 
+@on("memory.touched")
+def _touched(e):
+    if e.get("patient_id"):
+        _index_patient(e["patient_id"])
+    _count("memory.touched")
+
+
 @on("handoff.created")
 def _handoff(e):
     _count("handoff." + str(e.get("priority", "normal")))

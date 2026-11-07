@@ -64,6 +64,8 @@ def tool(fn):
             out = res.as_dict() if isinstance(res, Result) else res
             if out.get("ok") and fn.__name__ in sp.REMEMBERED_READS and kwargs.get("phone"):
                 sp.remember_read(fn.__name__, kwargs["phone"], out.get("message", ""))
+            if out.get("ok") and kwargs.get("phone"):
+                sp.memory_touched(kwargs["phone"])     # background: index and embed what this call added to memory
         except Exception:
             log.exception("tool %s failed", fn.__name__)
             out = {"ok": False, "error_code": "service_unavailable",

@@ -98,6 +98,24 @@ def remember_read(tool_name, phone, message) -> None:
         log.exception("remember_read failed")
 
 
+def memory_touched(phone) -> None:
+    """After a successful tool call, ask the workers to index and embed this patient's new memory (notes, actions,
+    remembered answers), at most once every 15 seconds per patient. Never raises."""
+    try:
+        from .. import events
+        from ..store import store
+        p_norm = norm_phone(phone)
+        if not p_norm:
+            return
+        with db.engine.connect() as c:
+            p = pt.get_by_phone(c, p_norm)
+        if p and not store.get_json(f"memidx:{p['id']}", count=False):
+            store.set_json(f"memidx:{p['id']}", 1, ttl=15)
+            events.publish("memory.touched", patient_id=p["id"])
+    except Exception:
+        log.exception("memory_touched failed")
+
+
 def save_note(phone, summary, topics="", outcome="", channel="chat", last_message="", interaction_id="") -> Result:
     p_norm = norm_phone(phone)
     s = clean(summary)

@@ -37,11 +37,11 @@ RRF_K = 60
 WEIGHTS = {"f": 1.0, "t": 1.0, "v": 1.0, "c": 3.0}
 TRGM_MIN = 0.45          # strict_word_similarity (whole words) a query word needs: typos ~0.5-0.6, "car" in "cardiology" 0.25
 LEG_LIMIT = 20           # meaning leg depth
-# Only natural-language text gets a meaning vector. Action logs ("book appointment: ... (WN-48213)") are short,
-# machine-written records of codes, names and dates: keyword, fuzzy and code matching are the right tools for them.
+# Knowledge passages, notes, transcripts and the patient's actions all get a meaning vector, so "did I ever buy
+# something for fever?" finds "order medicine: 2 x Dolo 650". Codes, names and dates are still matched by keyword.
 # Knowledge passages (~95) are embedded eagerly; a patient's notes only when that patient shows up (verified, session
 # warm-up, new note), because the free tier allows roughly 1,000 embeddings a day and most patients never call.
-EMBED_KINDS = "('kb', 'note')"
+EMBED_KINDS = "('kb', 'note', 'action')"
 BACKFILL_BATCH = 25
 BACKFILL_PAUSE_S = 20
 KW_LIMIT = 100           # keyword legs go deeper: common words tie across many passages
@@ -140,7 +140,7 @@ def embed_pending(limit: int = 200, patient_id: int | None = None) -> int:
         return 0
     try:
         model = emb.model_id()
-        pf = "AND patient_id = :pid AND kind = 'note'" if patient_id else "AND kind = 'kb'"
+        pf = "AND patient_id = :pid AND kind IN ('note', 'action')" if patient_id else "AND kind = 'kb'"
         if not patient_id:
             limit = min(limit, emb.budget_left()) if emb.provider() == "gemini" else limit
         args = {"m": model, "pid": patient_id, "n": limit}
@@ -148,7 +148,7 @@ def embed_pending(limit: int = 200, patient_id: int | None = None) -> int:
             _pg_path(c)
             filled = c.execute(text(f"""UPDATE search_docs d SET embedding = e.embedding FROM embedding_cache e
                 WHERE d.embedding IS NULL AND d.kind IN {EMBED_KINDS} AND e.model = :m AND e.chash = d.chash
-                {pf.replace('patient_id', 'd.patient_id').replace('kind =', 'd.kind =')}"""), args).rowcount or 0
+                {pf.replace('patient_id', 'd.patient_id').replace('kind =', 'd.kind =').replace('kind IN', 'd.kind IN')}"""), args).rowcount or 0
             todo = c.execute(text(f"""SELECT chash, min(title) AS title, min(body) AS body,
                     max(CASE kind WHEN 'kb' THEN 3 WHEN 'note' THEN 2 ELSE 1 END) AS pri, max(created_at) AS at
                 FROM search_docs WHERE embedding IS NULL AND kind IN {EMBED_KINDS} {pf}
