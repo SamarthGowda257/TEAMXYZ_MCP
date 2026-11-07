@@ -136,7 +136,7 @@ async def main():
             short_len = len(b["message"])
 
             # A3 idempotency + A2 double booking
-            sl, _, _ = await call(s, "find_available_slots", {"date": "tomorrow", "department": "General Medicine"})
+            sl, _, _ = await call(s, "find_available_slots", {"date": "Monday", "department": "General Medicine"})   # tomorrow may be a closed Sunday
             d0 = next(d for d in sl["data"]["doctors"] if d["free_slots"])
             args = dict(phone=RAHUL["phone"], date=sl["data"]["date_iso"], time=d0["free_slots"][0], doctor_name=d0["name"],
                         idempotency_key="smoke-1", patient_name="Rahul Verma")
@@ -147,7 +147,7 @@ async def main():
             check("V1 booking ID appears in message", b1["data"]["booking_id"] in b1["message"], b1)
             nonsenior_len = len(b1["message"])
             check("A11 senior message shorter than non-senior", short_len < nonsenior_len, {"message": f"{short_len} vs {nonsenior_len}"})
-            sl, _, _ = await call(s, "find_available_slots", {"date": "tomorrow", "doctor_name": d0["name"]})
+            sl, _, _ = await call(s, "find_available_slots", {"date": "Monday", "doctor_name": d0["name"]})
             t2 = sl["data"]["doctors"][0]["free_slots"][0]
             race = [dict(phone=p, date=sl["data"]["date_iso"], time=t2, doctor_name=d0["name"], patient_name="Race Test")
                     for p in ("9845000004", "9845000003")]

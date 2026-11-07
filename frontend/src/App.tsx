@@ -14,7 +14,7 @@ import { Checkin } from "./pages/Checkin";
 import { Assistant } from "./pages/Assistant";
 import { Policies } from "./pages/Policies";
 import { Admin } from "./pages/Admin";
-import { loadChat } from "./lib/chat";
+import { linkChatToLogin, loadChat } from "./lib/chat";
 
 function ScrollTop() {
   const { pathname } = useLocation();
@@ -29,7 +29,7 @@ export default function App() {
   const { pathname } = useLocation();
   // The patient chat belongs on the patient-facing site, not on the staff console. loadChat() is idempotent,
   // so calling it again after navigating back out of /admin is safe.
-  useEffect(() => { if (!pathname.startsWith("/admin")) loadChat(); }, [pathname]);
+  useEffect(() => { if (!pathname.startsWith("/admin")) { loadChat(); linkChatToLogin(); } }, [pathname]);
   return (
     <>
       <ScrollTop />

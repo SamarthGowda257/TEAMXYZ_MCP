@@ -437,6 +437,20 @@ def warm(cp: CurrentPatient = Depends(current_patient)):
     return {"ok": True}
 
 
+@router.post("/api/chat/session")
+def chat_session_open(cp: CurrentPatient = Depends(current_patient)):
+    """A code that ties this signed-in patient to their Talkdesk chat. The page passes the code, never the identity."""
+    from .services import chat_session as cs
+    return {"ok": True, "session_code": cs.mint(cp.id), "name": cp.name, "phone": cp.phone}
+
+
+@router.delete("/api/chat/session")
+def chat_session_close(cp: CurrentPatient = Depends(current_patient)):
+    from .services import chat_session as cs
+    cs.revoke(cp.id)
+    return {"ok": True}
+
+
 # ------------------------------------------------------------------ waitlist accept page
 @router.get("/api/waitlist/offer/{code}")
 def offer(code: str):
@@ -535,6 +549,21 @@ def ops_feed():
 def _job_auth(token: str = Query(default=""), x_jobs_token: str = Header(default="")):
     if not token_matches(token or x_jobs_token, config.JOBS_TOKEN):
         raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Jobs token required."})
+
+
+@router.post("/api/webhooks/talkdesk/transcript", dependencies=[Depends(_job_auth)])
+async def talkdesk_transcript(request: Request):
+    """Talkdesk automation: a closed conversation goes into the patient's memory. Accepts JSON or plain text."""
+    from .services import chat_session as cs
+    raw = (await request.body())[:200_000].decode("utf-8", "ignore")
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        body = {"transcript": raw, "session": request.query_params.get("session", ""),
+                "interaction_id": request.query_params.get("interaction_id", "")}
+    return cs.ingest_transcript(body)
 
 
 def close_past_visits() -> int:

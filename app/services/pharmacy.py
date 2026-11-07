@@ -208,7 +208,7 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
             return fail("prescription_required",
                         f"{_label(r)} is {kind} under Schedule {r['schedule_class']}, and I can't find a prescription for it "
                         "from the last 6 months on your record, so by law our pharmacy can't send it. I can book a quick "
-                        f"consultation, in person or by video, with {GP} in General Medicine, 600 rupees, so a doctor can review "
+                        f"consultation with {GP} in General Medicine, 600 rupees, so a doctor can review "
                         f"it and prescribe the right treatment. Shall I check his slots?"
                         + (f" The other items ({', '.join(x['brand_name'] for x in otc)}) don't need a prescription; I can "
                            "order those on their own." if otc else ""),
@@ -451,6 +451,11 @@ def advance() -> dict:
     """Restock arrived batches, send packed orders out, mark delivered, release unpaid orders after 24 hours."""
     now, n = config.now(), {"dispatched": 0, "delivered": 0, "restocked": 0, "expired": 0}
     with db.engine.begin() as c:
+        keep = config.DEMO_OUT_OF_STOCK
+        if keep:                                  # the demo's out-of-stock story must not expire 24 hours after seeding
+            c.execute(update(INV).where(INV.c.medicine_code.in_(keep), or_(INV.c.restock_eta.is_(None), INV.c.restock_eta <= now))
+                      .values(stock_qty=0, restock_eta=(now + timedelta(days=1)).replace(hour=11, minute=0, second=0, microsecond=0),
+                              updated_at=now))
         res = c.execute(update(INV).where(INV.c.stock_qty == 0, INV.c.restock_eta.is_not(None), INV.c.restock_eta <= now)
                         .values(stock_qty=100, restock_eta=None, updated_at=now))
         n["restocked"] = res.rowcount or 0

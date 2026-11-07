@@ -17,6 +17,7 @@ from .services import appointments as ap
 from .services import patients as pt
 from .services import records as rc
 from .services import outbound as ob
+from .services import chat_session as cs
 from .services import support as sp
 from .services import pharmacy as ph
 from .services import wallet as wl
@@ -61,6 +62,8 @@ def tool(fn):
         try:
             res = fn(*args, **kwargs)
             out = res.as_dict() if isinstance(res, Result) else res
+            if out.get("ok") and fn.__name__ in sp.REMEMBERED_READS and kwargs.get("phone"):
+                sp.remember_read(fn.__name__, kwargs["phone"], out.get("message", ""))
         except Exception:
             log.exception("tool %s failed", fn.__name__)
             out = {"ok": False, "error_code": "service_unavailable",
@@ -407,9 +410,21 @@ def get_handoff_status(handoff_id: Annotated[S, Field(description="Handoff refer
 @tool
 def save_interaction_note(phone: Phone, summary: Annotated[S, Field(description="1-2 sentence summary of the conversation (max 500 chars).")],
                           topics: Annotated[S, Field(description="Optional. Comma-separated topics, e.g. mri,insurance.")] = "",
-                          outcome: Annotated[S, Field(description="Optional. e.g. booked, informed, handed off.")] = "") -> dict:
+                          outcome: Annotated[S, Field(description="Optional. e.g. booked, informed, handed off.")] = "",
+                          last_message: Annotated[S, Field(description="Optional. The patient's last message, word for word.")] = "",
+                          interaction_id: Annotated[S, Field(description="Optional. Talkdesk's ID for this conversation.")] = "") -> dict:
     """Save a short note at the end of a meaningful conversation so WellNest remembers it next time."""
-    return sp.save_note(phone, summary, topics, outcome)
+    return sp.save_note(phone, summary, topics, outcome, last_message=last_message, interaction_id=interaction_id)
+
+
+@tool
+def open_signed_in_session(session_code: Annotated[S, Field(description="The session code from the website, supplied by the Application Input system variable. Never ask the patient for it.")],
+                           interaction_id: Annotated[S, Field(description="Optional. Talkdesk's ID for this conversation.")] = "") -> dict:
+    """Find out who this chat belongs to when the patient is signed in on the website: their name, mobile number,
+    upcoming bookings, reports, insurer and earlier conversations. Use it when the patient asks who they are or whether
+    we know them, or asks about their own record and has not given a mobile number. If it says the chat isn't linked,
+    ask for the registered mobile number and date of birth."""
+    return cs.open_session(session_code, interaction_id)
 
 
 @tool

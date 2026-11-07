@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { initMotion } from "../lib/motion";
 import { Ambulance, Clock, Mail, MapPin, Menu, MessageCircle, Phone, X } from "lucide-react";
 import { session } from "../lib/api";
-import { chatConfigured, onChatFallback, openChat, resetChat, voiceNumber } from "../lib/chat";
+import { chatConfigured, onChatFallback, openChat, resetChat, unlinkChat, voiceNumber } from "../lib/chat";
 import { useLoggedIn, useTextSize } from "../lib/hooks";
 import { AILauncher } from "./WellNestAI";
 import { CENTRES, HOSPITAL } from "../content";
@@ -60,7 +60,7 @@ export function SiteHeader() {
   }, []);
   const [lg, setLg] = useTextSize();
   const nav = useNavigate();
-  const logout = () => { session.set(null); resetChat(); nav("/"); };
+  const logout = () => { unlinkChat(); session.set(null); resetChat(); nav("/"); };
   return (
     <>
     <a className="skip" href="#main">Skip to content</a>

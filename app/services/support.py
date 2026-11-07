@@ -1,5 +1,7 @@
 """Human handoff, callbacks, conversation memory, caregiver updates and aftercare."""
 
+import logging
+import re
 from datetime import timedelta
 
 from sqlalchemy import insert, or_, select
@@ -11,6 +13,8 @@ from .. import events
 from . import blackboard as bb
 from . import patients as pt
 from .ref import REF
+
+log = logging.getLogger("wellnest.support")
 
 EMERGENCY_SAY = ("Please call 108 now if this is an emergency, or go to the nearest emergency department. "
                  "Our emergency entrance B is open 24 hours. I'm connecting you to a team member right away; please stay on the line.")
@@ -69,9 +73,37 @@ def request_callback(phone, preferred_time, reason, channel="chat") -> Result:
     return ok(f"Done. Our team will call you back {pref}. Your reference is {code}.", callback_id=code, preferred_time=pref)
 
 
-def save_note(phone, summary, topics="", outcome="", channel="chat") -> Result:
+# Answers that change nothing, so no service logs them. Recording them is what lets a patient ask "did I check that?".
+REMEMBERED_READS = {"get_lab_report_status", "get_visit_history", "get_bill_status", "get_health_credits_balance",
+                    "track_medicine_order", "recharge_health_credits", "get_patient_preferences", "check_coverage"}
+
+
+def remember_read(tool_name, phone, message) -> None:
+    """Add a successful read to the patient's memory, once per 10 minutes for the same answer. Never raises."""
+    try:
+        p_norm, text = norm_phone(phone), clean(message)[:300]
+        if not p_norm or not text:
+            return
+        R = db.resolutions
+        with db.engine.begin() as c:
+            p = pt.get_by_phone(c, p_norm)
+            if not p:
+                return
+            since = config.now() - timedelta(minutes=10)
+            if c.execute(select(R.c.id).where(R.c.patient_id == p["id"], R.c.action == tool_name, R.c.summary == text,
+                                              R.c.created_at >= since)).first():
+                return
+            pt.log(c, p["id"], tool_name, None, True, text)
+    except Exception:
+        log.exception("remember_read failed")
+
+
+def save_note(phone, summary, topics="", outcome="", channel="chat", last_message="", interaction_id="") -> Result:
     p_norm = norm_phone(phone)
     s = clean(summary)
+    said = clean(last_message)
+    if s and said:
+        s = f'{s} Patient said: "{said[:200]}"'
     if not p_norm or not s:
         return fail("invalid_input", "I need the patient's mobile number and a short summary to save a note.")
     with db.engine.begin() as c:
@@ -85,6 +117,9 @@ def save_note(phone, summary, topics="", outcome="", channel="chat") -> Result:
             from .. import search
             search.sync(c, p["id"])                 # keyword-searchable at once; the meaning vector follows in the background
     bb.invalidate(p_norm, "p1", "p3")
+    if p and clean(interaction_id) and pt.recently_verified(p_norm):      # later transcript of this chat finds its patient
+        from . import chat_session
+        chat_session.link_interaction(interaction_id, p["id"])
     events.publish("interaction.noted", patient_id=p["id"] if p else None)
     return ok("Noted for next time.", note_id=f"NT-{10000 + nid}")
 
@@ -92,6 +127,9 @@ def save_note(phone, summary, topics="", outcome="", channel="chat") -> Result:
 def search_interactions(phone, dob, query) -> Result:
     """Hybrid search (keyword + fuzzy + meaning) over this patient's own notes and actions; never across patients."""
     from .. import search
+    handoff = re.search(r"\bHO[\s-]?\d{3,6}\b", clean(query), re.I)
+    if handoff:
+        return handoff_status(handoff.group(0))
     with db.engine.begin() as c:
         p, err = pt.check_identity(c, phone, dob)
         if err:

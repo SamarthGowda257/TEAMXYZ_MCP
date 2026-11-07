@@ -14,7 +14,7 @@ hours and parking that differ from the knowledge base. Also, "verify first" and 
 broken by the Instruction Adherence judge (see `TALKDESK_SETUP.md` §10). Use the additions below instead.
 
 ## 1. Refresh the MCP server
-**AI Agent Platform → MCP Servers → the WellNest server → Test connection / Refresh.** Expect **45 tools**. New since the
+**AI Agent Platform → MCP Servers → the WellNest server → Test connection / Refresh.** Expect **46 tools** (45 plus `open_signed_in_session`, section 10). New since the
 outbound work: `check_medicine_stock`, `order_medicine`, `track_medicine_order`, `get_health_credits_balance`,
 `recharge_health_credits`, `pay_with_health_credits`, `request_credits_refund`, `set_shared_wallet`.
 `request_assistance` gains two optional inputs: `off_campus` and `date_of_birth`.
@@ -98,16 +98,16 @@ On Care Assist also open `request_assistance` and map: off_campus → `off_campu
 - **Support:** `For a complaint call create_handoff with reason_code complaint and read back the GRV reference from the reply.`
 
 ## 6. Conditions: replace the whole box
-The box holds 2,000 characters, so this is the shortened text that fits (1,697).
+The box holds 2,000 characters, so this is the shortened text that fits (1,797).
 ```
-1. Support Agent: FIRST CHECK. Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning, suicidal thoughts (urgent handoff). Also: wants a person, call back or to complain; asks about past chats or a handoff; asks us to remember something.
+1. Support Agent: FIRST CHECK. Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning, suicidal thoughts (urgent handoff). Also: wants a person, call back or to complain; asks about past chats or a handoff; asks us to remember something; asks who they are or if we know them; asks about their own record without giving a mobile number.
 2. Outreach Agent: says WellNest just called, was transferred from a WellNest call, or answers a question from that call.
 3. Booking Agent: NEW appointment, test or scan; if or when a doctor or department is free; new patient registration; checking details on file; joining a waitlist.
 4. Changes Agent: see, cancel or reschedule an EXISTING booking; waitlist status; waitlist OFFER CODE.
 5. Pharmacy and HealthCredits Agent: buy or order medicine; medicine stock or price; HealthCredits balance, adding credits, paying a booking or bill with credits.
 6. Care Assist Agent: wheelchair, escort, interpreter or transport; sending booking details to family or caregiver; adding a caregiver; letting family use credits; language or time preferences.
 7. Records Agent: lab or scan reports, emailing a report, past visits, prescription refill requests, where a medicine order is or cancelling one.
-8. Billing & Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, payment links; HealthCredits refund, back in cash or to a bank.
+8. Billing and Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, payment links; HealthCredits refund, back in cash or to a bank.
 9. Aftercare Agent: after a visit or new medicine reports how they feel, wants a nurse to call, gives feedback or a rating, wants a follow-up.
 10. Info Agent: non-urgent symptoms and which department; doctors' days, fees, languages; address, parking, visiting, food, facilities, room charges, hospital policies, other hospital questions; test or visit preparation.
 ```
@@ -141,3 +141,50 @@ The new `caregiver_update` call uses the same flow. Its only keys are 1 and 3, a
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` | Real Google Calendar invites and Gmail. Run `scripts/google_connect.py` for the token. Without them: `.ics` invites over SMTP, or simulated |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Real payment links. Without them: the labelled demo payment page |
 | `DEMO_PERSONA_EMAILS` | So invites reach a real inbox: demo addresses at example.com are never emailed |
+
+## 10. Signed-in chat, memory and the refund fix (7 Nov)
+**Why:** the AI never knew who was signed in on the website. The page now gets a random session code from the server
+(`POST /api/chat/session`) and passes only that code to the chat widget as `wellnest_session`. A browser can forge a
+phone number but not a live code; logging out revokes it. The code reaches the AI as the **Application Input** system
+variable, and `open_signed_in_session` turns it into the patient's record.
+
+### Studio (the chat flow on the website touchpoint)
+1. **Studio** → open the chat flow → **Incoming Message** node → **Arguments** → add argument `wellnest_session`,
+   mapped to a new flow variable `wellnest_session`.
+2. **Connect to Autopilot Digital** node → **Preferences** → **Agents availability** → choose `wellnest_session`.
+3. **Publish** the flow.
+
+### Orchestration
+1. **MCP Servers → Refresh**: 46 tools.
+2. **Support Agent:** remove `get_handoff_status` (`search_past_interactions` now answers `HO-` IDs) and add
+   `open_signed_in_session`: session_code → System variable **Application Input**; interaction_id → **Interaction ID**.
+3. **Support Agent:** delete and re-add `save_interaction_note` (it has two new inputs). phone\* → `patient_phone`;
+   summary\* → `conversation_summary`; topics → `conversation_topics`; last_message → **Last Received Message**;
+   interaction_id → **Interaction ID**.
+4. **Support Agent instructions**, add:
+   `SIGNED IN: When the patient asks who they are, says they're signed in, or asks about their own record without giving a mobile number, call open_signed_in_session first. If it works, greet them by first name, use the mobile number it returns as patient_phone for every later tool and don't ask for their date of birth. If it says the chat isn't linked, ask for the registered mobile number and date of birth. For a handoff ID (HO-), call search_past_interactions with the ID.`
+5. **Receptionist instructions**, replace the IDENTITY paragraph with:
+   `IDENTITY: If the patient asks who they are, or asks about their own bookings, reports, bills or credits without giving a mobile number, send them to the Support Agent first: it can open their signed-in record. Otherwise the specialist needs the registered mobile number and date of birth; ask for both if not given.`
+6. **Conditions:** paste the section 6 text again (rule 1 gains the signed-in cases; rule 8 now says
+   "Billing and Insurance Agent", the agent's real name).
+7. **Billing and Insurance Agent description:** `Insurance acceptance, coverage and pre-approval estimates, bills, payment links, and HealthCredits refunds to the original account.`
+8. **Save** and **Publish**.
+
+**Test:** sign in on the website as a demo patient, open the chat and ask "Do you know who I am?". Expect "Hello
+<name>, you're signed in" and the next visit. Signed out, the same question asks for mobile and date of birth. In the
+Simulator, **{ } → Application Input** takes a code too, but codes come only from a signed-in page.
+
+### Memory (no Talkdesk step)
+- Every successful patient-specific answer (reports, bills, balance, order tracking, coverage, preferences, visit
+  history) is now written to that patient's memory automatically, once per 10 minutes for the same answer. Bookings,
+  orders and payments were already logged. All of it is searchable by `search_past_interactions`.
+- Notes and transcripts are embedded for meaning search (Gemini); action logs are matched by keyword, typo and code.
+
+### Optional: full chat transcripts
+Talkdesk can send each closed chat to us. In **Builder / Integrations**, add an automated task "When **a messaging
+conversation transcription is available**" with an HTTP or webhook action, if this account has one:
+- URL: `https://teamxyz-mcp.onrender.com/api/webhooks/talkdesk/transcript?token=<JOBS_TOKEN from Render>`
+- Body (JSON): `{"transcript": <Conversation transcription>, "interaction_id": <Interaction ID>, "session": "{{context.wellnest_session}}"}`
+
+A transcript is filed only under the patient its session code or linked interaction names, never under a phone number
+alone. If the account offers only the Email Notifier, skip this: tool answers and notes are already remembered.

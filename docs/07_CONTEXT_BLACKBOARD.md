@@ -100,9 +100,11 @@ async def on_patient_identified(ref):
 - Metric: `prefetch_hits` vs `misses`, shown on the dashboard. This is how we prove prefetch helps.
 
 ## Conversation memory (previous chats)
-Talkdesk sends no transcript to us, so memory is built from two sources:
+Memory comes from four sources (signed-in chats are linked by a session code, `app/services/chat_session.py`):
 1. **`resolutions`**: every action any tool or the website takes (automatic, reliable).
-2. **`interaction_notes`**: the agent calls `save_interaction_note(phone, summary, topics, outcome)` at the end of a meaningful conversation (best effort).
+2. **`interaction_notes`**: the agent calls `save_interaction_note(phone, summary, topics, outcome, last_message, interaction_id)` at the end of a meaningful conversation (best effort).
+3. **Remembered answers**: successful read-only tool answers (reports, bills, balance, tracking, coverage, preferences, history) are logged to `resolutions` by the tool wrapper.
+4. **Transcripts** (optional): `POST /api/webhooks/talkdesk/transcript` files a closed chat as `transcript` notes, matched by session code or linked interaction only.
 
 **Retrieval**
 - `verify_patient` includes the 3 most recent notes in the snapshot. Most "did I ask you…" questions are answered with no extra call.

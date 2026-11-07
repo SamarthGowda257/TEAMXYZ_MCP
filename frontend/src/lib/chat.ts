@@ -1,7 +1,8 @@
 // Talkdesk Chat Widget V2 loader. Config (touchpoint ID, region) comes from /config.js (env on the server).
 // After login we pass flat context params; they show on the human agent's Context card.
-// They come from the browser and can be spoofed, so the AI agents still verify phone + date of birth.
-import { session } from "./api";
+// Anything from the browser can be forged, so only `wellnest_session` proves who this is: a random code the server
+// issued to the signed-in patient, which reaches the AI through Studio and is checked by open_signed_in_session.
+import { api, session } from "./api";
 
 declare global {
   interface Window {
@@ -12,6 +13,8 @@ declare global {
 }
 
 let patient: { name: string; phone: string } | null = null;
+let sessionCode = "";
+let linking = false;
 const listeners = new Set<() => void>();
 
 /** The phone number that reaches the Talkdesk AI receptionist (falls back to the hospital helpline). */
@@ -25,9 +28,12 @@ export function chatConfigured(): boolean {
 }
 
 function pushContext() {
-  if (!patient || !window.webchat) return;
+  if (!window.webchat) return;
   try {
-    window.webchat.setContextParam({ patient_name: patient.name, patient_phone: patient.phone, td_contact_person_identification: patient.phone });
+    window.webchat.setContextParam({
+      patient_name: patient?.name || "", patient_phone: patient?.phone || "",
+      td_contact_person_identification: patient?.phone || "", wellnest_session: sessionCode,
+    });
   } catch { /* widget not ready yet */ }
 }
 
@@ -38,6 +44,31 @@ function warm() {
 
 export function setChatPatient(p: { name: string; phone: string } | null) {
   patient = p;
+  pushContext();
+}
+
+/** Tell the chat who is signed in. Safe to call on every navigation: it asks the server once per sign-in. */
+export async function linkChatToLogin() {
+  if (!session.loggedIn() || sessionCode || linking) return;
+  linking = true;
+  const hadAnonymousChat = !!window.webchat;      // signing in mid-visit: start a fresh chat so it carries the login
+  try {
+    const r = await api<{ session_code: string; name: string; phone: string }>("/api/chat/session", { method: "POST" });
+    if (!session.loggedIn()) return;
+    sessionCode = r.session_code;
+    patient = { name: r.name, phone: r.phone };
+    if (hadAnonymousChat) resetChat();
+    pushContext();
+  } catch { /* the chat still works; it asks for mobile and date of birth */ } finally {
+    linking = false;
+  }
+}
+
+/** Sign-out: the server forgets the code first, so a chat left open can't reopen the record. */
+export function unlinkChat() {
+  if (session.loggedIn()) api("/api/chat/session", { method: "DELETE" }).catch(() => {});
+  sessionCode = "";
+  patient = null;
   pushContext();
 }
 

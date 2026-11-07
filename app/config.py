@@ -43,6 +43,8 @@ DEMO_PASSWORD = env("DEMO_PASSWORD", "WellNest@2026")
 VERIFIED_SESSION_MIN = int(env("VERIFIED_SESSION_MIN", "30"))
 # A patient signed in on the website who opens the chat counts as verified for this long.
 WEB_SESSION_MIN = int(env("WEB_SESSION_MIN", "120"))
+# Medicines kept out of stock for the live demo: when their restock time passes it moves to tomorrow. Empty in real use.
+DEMO_OUT_OF_STOCK = [c.strip().upper() for c in env("DEMO_OUT_OF_STOCK", "TELMA40").split(",") if c.strip()]
 
 # --- autonomous outbound calls (Talkdesk Flows API -> Studio "API request" flow) ---
 TALKDESK_ACCOUNT = env("TALKDESK_ACCOUNT")                  # account name in <account>.mytalkdesk.com

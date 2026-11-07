@@ -4,7 +4,7 @@ import random
 import string
 from datetime import timedelta
 
-from sqlalchemy import and_, func, insert, select, update
+from sqlalchemy import and_, func, insert, select, update, or_
 
 from .. import config, db
 from ..store import store
@@ -137,7 +137,9 @@ def snapshot(conn, p: dict) -> dict:
     ready = conn.execute(select(func.count()).select_from(db.lab_reports).where(
         db.lab_reports.c.patient_id == p["id"], db.lab_reports.c.status == "ready")).scalar() or 0
     notes = conn.execute(select(db.interaction_notes.c.summary, db.interaction_notes.c.created_at)
-                         .where(db.interaction_notes.c.patient_id == p["id"])
+                         .where(db.interaction_notes.c.patient_id == p["id"],
+                                # raw transcript passages are for search; the snapshot shows real notes only
+                                or_(db.interaction_notes.c.topics.is_(None), db.interaction_notes.c.topics != "transcript"))
                          .order_by(db.interaction_notes.c.created_at.desc()).limit(3)).mappings().all()
     upcoming = []
     for a in up:
