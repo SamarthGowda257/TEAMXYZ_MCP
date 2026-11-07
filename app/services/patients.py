@@ -184,6 +184,8 @@ def verify(phone, dob) -> Result:
     if snap["upcoming"]:
         u = snap["upcoming"][0]
         bits.append(f"Your next visit is with {u['with']} on {u['date']} at {u['time']}, booking ID {u['booking_id']}.")
+    else:       # said outright, or the agent fills the gap with a past visit and calls it "next"
+        bits.append("You have no upcoming bookings.")
     # Waitlist entries stay in data only: reading them out unasked was flagged as oversharing by the
     # evaluation's guardrail judge; "am I on the waitlist" is answered by find_appointments.
     if snap["ready_reports"]:

@@ -100,14 +100,14 @@ On Care Assist also open `request_assistance` and map: off_campus → `off_campu
 ## 6. Conditions: replace the whole box
 The box holds 2,000 characters, so this is the shortened text that fits (1,797).
 ```
-1. Support Agent: FIRST CHECK. Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning, suicidal thoughts (urgent handoff). Also: wants a person, call back or to complain; asks about past chats or a handoff; asks us to remember something; asks who they are or if we know them; asks about their own record without giving a mobile number.
+1. Support Agent: FIRST CHECK. Route EVERY new message again; a new topic goes to its own agent, not the current one. Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning, suicidal thoughts (urgent handoff). Also: wants a person, call back or to complain; asks about past chats or a handoff; asks us to remember something; asks who they are or if we know them; asks about their own record without giving a mobile number.
 2. Outreach Agent: says WellNest just called, was transferred from a WellNest call, or answers a question from that call.
 3. Booking Agent: NEW appointment, test or scan; if or when a doctor or department is free; new patient registration; checking details on file; joining a waitlist.
 4. Changes Agent: see, cancel or reschedule an EXISTING booking; waitlist status; waitlist OFFER CODE.
-5. Pharmacy and HealthCredits Agent: buy or order medicine; medicine stock or price; HealthCredits balance, adding credits, paying a booking or bill with credits.
+5. Pharmacy and HealthCredits Agent: buy or order medicine; medicine stock or price; HealthCredits balance, adding credits, paying a booking or bill with credits. NOT refunds (rule 8).
 6. Care Assist Agent: wheelchair, escort, interpreter or transport; sending booking details to family or caregiver; adding a caregiver; letting family use credits; language or time preferences.
 7. Records Agent: lab or scan reports, emailing a report, past visits, prescription refill requests, where a medicine order is or cancelling one.
-8. Billing and Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, payment links; HealthCredits refund, back in cash or to a bank.
+8. Billing and Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, payment links; ANY refund, including HealthCredits back to a bank, card or cash.
 9. Aftercare Agent: after a visit or new medicine reports how they feel, wants a nurse to call, gives feedback or a rating, wants a follow-up.
 10. Info Agent: non-urgent symptoms and which department; doctors' days, fees, languages; address, parking, visiting, food, facilities, room charges, hospital policies, other hospital questions; test or visit preparation.
 ```
@@ -217,3 +217,22 @@ first, "what did I ask last chat" found nothing, and "When is my next appointmen
 
 **Test on a phone call:** call the WellNest number from your registered mobile and say "When is my next appointment?".
 It should ask "Am I speaking with <your name>?" and for your date of birth, not your number.
+
+## 12. Fixes from the 7 Nov evening chat test
+
+Seen live: a refund request went to the Pharmacy and HealthCredits Agent (which can't refund); after one specialist
+answered, the next new topic got "Sorry, I cannot answer this question" / "cannot handle your request"; the agent asked
+for the full name before answering; and it called a past visit the "next appointment" (fixed on the server).
+
+1. **Conditions:** section 6 now has the updated box (rule 1 re-routes every message, rule 5 excludes refunds, rule 8
+   takes any refund). Paste it whole.
+2. **Every specialist agent's instructions** (Booking, Changes, Pharmacy and HealthCredits, Care Assist, Records,
+   Billing and Insurance, Aftercare, Info, Outreach, Support), add at the end:
+   ```
+   OUT OF SCOPE: If the patient asks for something none of your skills can do, never say you can't help or tell them to contact another department. Say "Let me get the right team for that" and pass the conversation back for routing, with the request and the patient's mobile number.
+   IDENTITY: Mobile number and date of birth are enough. Never ask for the full name to verify.
+   ```
+3. **Save → Publish**, then send me a screenshot of **Agent Observability** for a chat where a second topic still fails
+   (click the failed turn). The trace shows whether Talkdesk re-routes after a specialist answers. If it doesn't, the
+   orchestration may have a setting for it that I couldn't confirm from the docs (support.talkdesk.com blocks
+   automated reading).
