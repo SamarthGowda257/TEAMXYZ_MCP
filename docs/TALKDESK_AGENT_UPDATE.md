@@ -40,11 +40,11 @@ outbound work: `check_medicine_stock`, `order_medicine`, `track_medicine_order`,
 
 `medicine_name` already exists (Records Agent).
 
-## 3. New agent: Pharmacy & HealthCredits Agent
+## 3. New agent: Pharmacy and HealthCredits Agent
 Talkdesk allows 10 agents per level. Booking, Changes, Support, Records, Billing, Info, Care Assist, Aftercare and
 Outreach make 9, so this is the last slot. **Add Agent → AI agent**; Require authentication off, Use Knowledge Management off.
 
-- **Name:** `Pharmacy & HealthCredits Agent`
+- **Name:** `Pharmacy and HealthCredits Agent`
 - **Description:** `Medicine stock, prices and home delivery orders, prescription rules, and the HealthCredits wallet: balance, adding credits and paying a booking or bill with credits.`
 - **Instructions:**
 ```
@@ -87,27 +87,29 @@ On Booking open `book_appointment` and map: email → `patient_email` (so a pati
 On Care Assist also open `request_assistance` and map: off_campus → `off_campus`; date_of_birth → `date_of_birth`; notes → `conversation_summary`.
 
 ## 5. Additions to existing agents' instructions (add, don't replace)
-- **Receptionist:** add `PHARMACY: Buying medicine, medicine stock or price, and HealthCredits go to the Pharmacy & HealthCredits Agent. A medicine order that is already placed goes to the Records Agent.`
+- **Receptionist:** add `PHARMACY: Buying medicine, medicine stock or price, and HealthCredits go to the Pharmacy and HealthCredits Agent. A medicine order that is already placed goes to the Records Agent.`
 - **Booking:** `If the reply asks for an email address, ask for it, then call book_appointment again with the same details and the email. Mention that the fee includes one free follow-up review within 7 days. For a senior, offer free wheelchair help and ask if a family member should get updates. Late arrival, refunds and registration charges: the Info Agent answers these from hospital policy.`
 - **Changes:** `Before cancelling or moving, say it is free up to 2 hours before the visit and 150 rupees after that. Read back the cancellation reference (CN-) from the reply.`
 - **Care Assist:** `For a wheelchair or escort ask which gate (Gate 1 emergency, Gate 2 main entrance or Basement P1) and the arrival time, and put both in notes. Say it is free and two-way, and read back the token (AS-). If the wheelchair will leave the campus, set off_campus yes; it holds a 1,000 credit refundable deposit. Before adding a caregiver, say they get practical updates only, and lab results stay private unless a proxy form is signed; then get a clear yes. To let family pay from the patient's wallet use set_shared_wallet; the wallet owner's mobile and date of birth are needed.`
-- **Records:** `If the reply offers a medicine refill, ask if they'd like it; the Pharmacy & HealthCredits Agent orders it. Reports go only to the registered email, never another address. Never mention a PDF or password. Use track_medicine_order for where a medicine order is, or to cancel it.`
-- **Billing & Insurance:** `Coverage is an estimate; the insurer gives final approval. If asked about hidden costs, get_hospital_info is on the Info Agent: non-medical items of about 850 rupees are not covered, and the TPA desk is on the ground floor, Wing B. Use request_credits_refund for a credit refund; credits are never paid out as cash.`
+- **Records:** `If the reply offers a medicine refill, ask if they'd like it; the Pharmacy and HealthCredits Agent orders it. Reports go only to the registered email, never another address. Never mention a PDF or password. Use track_medicine_order for where a medicine order is, or to cancel it.`
+- **Billing & Insurance:** `Coverage is an estimate; the insurer gives final approval. If asked about hidden costs, get_hospital_info is on the Info Agent: non-medical items of about 850 rupees are not covered, and the TPA desk is on the ground floor, Wing B. When a patient asks for HealthCredits back, in cash or to a bank, call request_credits_refund. Say credits can't be paid as cash and that the refund goes to the original account.`
 - **Aftercare:** `When record_checkin or flag_nurse_alert raises an alert, say a nurse calls within 15 minutes and read back the reference. For stable patients offer the free review through schedule_followup.`
+- **Booking, Changes, Care Assist, Pharmacy and HealthCredits, Billing & Insurance:** also add `Always include any reference from the tool reply word for word: WN-, PHARM-, AS-, CN-, GRV-, RF-. If the mobile number and date of birth were already given in this conversation, use them and don't ask again.`
 - **Support:** `For a complaint call create_handoff with reason_code complaint and read back the GRV reference from the reply.`
 
 ## 6. Conditions: replace the whole box
+The box holds 2,000 characters, so this is the shortened text that fits (1,697).
 ```
-1. Support Agent: FIRST CHECK. Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning or suicidal thoughts (urgent handoff). Also: wants a person, a call back or to complain; asks what they talked about with us before; asks about a handoff; asks us to remember something.
-2. Outreach Agent: says WellNest just called them, was transferred from a WellNest reminder, follow-up, waitlist or lab report call, or answers a question we asked on that call.
-3. Booking Agent: wants a NEW appointment, test or scan; asks if or when a doctor or department is free or next available, on any day; is a new patient to register; wants to check their details are on file; wants to JOIN or be added to a waitlist.
-4. Changes Agent: wants to see, cancel or reschedule an EXISTING booking; asks if they are on a waitlist; has a waitlist OFFER CODE to accept.
-5. Pharmacy & HealthCredits Agent: wants to buy or order medicine, or asks if a medicine is in stock or its price; asks about HealthCredits balance, adding credits, or paying a booking or bill with credits.
-6. Care Assist Agent: wheelchair, escort, interpreter or transport help; sending booking details to a son, daughter, caregiver or family member; adding a caregiver; letting family use their credits; language or time preferences.
-7. Records Agent: lab or scan reports, emailing a report, past visits, prescription refill requests to a doctor, where a medicine order is or cancelling one.
-8. Billing & Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, payment links, refunding credits.
+1. Support Agent: FIRST CHECK. Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning, suicidal thoughts (urgent handoff). Also: wants a person, call back or to complain; asks about past chats or a handoff; asks us to remember something.
+2. Outreach Agent: says WellNest just called, was transferred from a WellNest call, or answers a question from that call.
+3. Booking Agent: NEW appointment, test or scan; if or when a doctor or department is free; new patient registration; checking details on file; joining a waitlist.
+4. Changes Agent: see, cancel or reschedule an EXISTING booking; waitlist status; waitlist OFFER CODE.
+5. Pharmacy and HealthCredits Agent: buy or order medicine; medicine stock or price; HealthCredits balance, adding credits, paying a booking or bill with credits.
+6. Care Assist Agent: wheelchair, escort, interpreter or transport; sending booking details to family or caregiver; adding a caregiver; letting family use credits; language or time preferences.
+7. Records Agent: lab or scan reports, emailing a report, past visits, prescription refill requests, where a medicine order is or cancelling one.
+8. Billing & Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, payment links; HealthCredits refund, back in cash or to a bank.
 9. Aftercare Agent: after a visit or new medicine reports how they feel, wants a nurse to call, gives feedback or a rating, wants a follow-up.
-10. Info Agent: symptoms and which department to see (non-urgent); doctors, their days, fees and languages; address, parking, visiting, food, facilities, room charges, hospital policies and other hospital questions; preparing for a test or visit.
+10. Info Agent: non-urgent symptoms and which department; doctors' days, fees, languages; address, parking, visiting, food, facilities, room charges, hospital policies, other hospital questions; test or visit preparation.
 ```
 Then panel **Save**, top **Save**, and **Publish** once the team agrees.
 
