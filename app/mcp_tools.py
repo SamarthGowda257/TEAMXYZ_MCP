@@ -421,12 +421,14 @@ def save_interaction_note(phone: Phone, summary: Annotated[S, Field(description=
 
 @tool
 def open_signed_in_session(session_code: Annotated[S, Field(description="The session code from the website, supplied by the Application Input system variable. Never ask the patient for it.")],
-                           interaction_id: Annotated[S, Field(description="Optional. Talkdesk's ID for this conversation.")] = "") -> dict:
-    """Find out who this chat belongs to when the patient is signed in on the website: their name, mobile number,
-    upcoming bookings, reports, insurer and earlier conversations. Use it when the patient asks who they are or whether
-    we know them, or asks about their own record and has not given a mobile number. If it says the chat isn't linked,
-    ask for the registered mobile number and date of birth."""
-    return cs.open_session(session_code, interaction_id)
+                           interaction_id: Annotated[S, Field(description="Optional. Talkdesk's ID for this conversation.")] = "",
+                           caller_id: Annotated[S, Field(description="Optional. The number a phone call is from, supplied by the Caller ID system variable. Never ask the patient for it.")] = "") -> dict:
+    """Find out who this patient is without asking for their mobile number. On the website chat a signed-in patient is
+    opened at once (name, mobile number, bookings, reports, earlier conversations). On a phone call it names whose
+    registered number is calling: then ask 'Am I speaking with <name>?' and for the date of birth only, and use the
+    returned patient_phone. Use it first when the patient asks who they are, or about their own record without giving a
+    mobile number. If it says the chat isn't linked, ask for the registered mobile number and date of birth."""
+    return cs.open_session(session_code, interaction_id, caller_id)
 
 
 @tool

@@ -70,9 +70,13 @@ def link_interaction(interaction_id, patient_id: int) -> None:
         store.set_json(f"chatlink:{i}", patient_id, ttl=LINK_TTL)
 
 
-def open_session(session_code, interaction_id="") -> Result:
+def open_session(session_code, interaction_id="", caller_id="") -> Result:
+    """A live website session code opens the record; failing that, on a phone call, the caller's number names the
+    patient (without verifying them) so the agent asks only for the date of birth."""
     pid = _patient_for_code(session_code)
     if not pid:
+        if pt.norm_phone(caller_id):
+            return recognise_caller(caller_id)
         return fail("not_signed_in", NOT_SIGNED_IN)
     with db.engine.connect() as c:
         p = pt.get_by_id(c, pid)

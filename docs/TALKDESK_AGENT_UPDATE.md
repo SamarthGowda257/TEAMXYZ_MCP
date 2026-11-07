@@ -198,12 +198,13 @@ first, "what did I ask last chat" found nothing, and "When is my next appointmen
 1. **MCP Servers → Refresh**: 47 tools (new: `recognise_caller`; `request_credits_refund` gains `confirm`).
 2. **Receptionist** (the orchestrator's own instructions), add:
    ```
-   PHONE CALLS: On a voice call, first call recognise_caller. If it names a patient, ask "Am I speaking with <name>?" and for the date of birth only; never ask for the mobile number, use the patient_phone it returns. If they say it's someone else's phone, ask for their own registered number. Pass that mobile number to every specialist.
+   PHONE CALLS: On a voice call, when the patient asks about their own record, send them to the Support Agent first; it recognises the calling number. If it names a patient, ask "Am I speaking with <name>?" and for the date of birth only; never ask for the mobile number, use the patient_phone it returns. If they say it's someone else's phone, ask for their own registered number. Pass that mobile number to every specialist.
    NAMES: Once a patient is verified or signed in, use their first name and tell them their own details (name, bookings, balance) when asked. Privacy rules are about other people, not the verified patient.
    ```
-3. **Receptionist skills:** add `recognise_caller` (MCP) and map **caller_id → system variable Caller ID**.
-   If the Receptionist can't hold skills, add it to the **Support Agent** instead and route rule 1 of Conditions
-   ("asks who they are") there; it already is.
+3. **Support Agent** (no new skill: the Receptionist can't hold skills and Support is at 5): delete and re-add
+   `open_signed_in_session`, then map session_code → **Application Input**, interaction_id → **Interaction ID**, and
+   the new **caller_id → Caller ID**. On a call it names the caller from their number; on chat it opens the signed-in
+   record. (`recognise_caller` exists on its own too but isn't needed.)
 4. **Billing and Insurance Agent:** delete and re-add `request_credits_refund` so the new `confirm` input appears. Leave
    `confirm` **unmapped** (the AI fills it). Add to its instructions:
    ```

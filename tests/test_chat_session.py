@@ -236,3 +236,15 @@ def test_unmatched_topic_still_shows_recent_history():
     search.sync()
     r = sp.search_interactions(RAHUL, "", "zebra crossing helicopter")
     assert r.ok and r.message.startswith("I don't see one on that exact topic") and r.data["matched_topic"] is False
+
+
+def test_support_tool_recognises_a_phone_caller_without_a_session():
+    r = mcp_tools.open_signed_in_session(session_code="", caller_id="+919845000004")
+    assert r["ok"] and r["data"]["patient_phone"] == pt.norm_phone(RAHUL) and r["data"]["verified"] is False
+    assert not pt.recently_verified(pt.norm_phone(RAHUL))
+
+
+def test_session_code_wins_over_caller_id_and_chat_without_either_fails():
+    code = cs.mint(_rahul()["id"])
+    assert mcp_tools.open_signed_in_session(session_code=code, caller_id="9845000001")["data"]["signed_in"] is True
+    assert mcp_tools.open_signed_in_session(session_code="", caller_id="chat-contact-abc")["error_code"] == "not_signed_in"
