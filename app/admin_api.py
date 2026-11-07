@@ -33,6 +33,8 @@ def _admin(request: Request) -> dict:
     s = admin_session(request)
     if not s:
         raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Please sign in to the admin console."})
+    if s["role"] != "admin":
+        raise HTTPException(403, detail={"error_code": "not_allowed", "message": "Your staff role can't open this section."})
     return s
 
 
@@ -356,7 +358,8 @@ def appointment_status(code: str, body: dict):
 def patient_update(pk: int, body: dict):
     allowed = {"full_name", "email", "address", "preferred_language", "preferred_time",
                "caregiver_name", "caregiver_relation", "caregiver_phone", "caregiver_email",
-               "caregiver_consent", "mobility_needs", "policy_number", "insurer_id"}
+               "caregiver_consent", "mobility_needs", "policy_number", "insurer_id",
+               "allergies", "weight_kg"}
     vals = {k: v for k, v in body.items() if k in allowed}
     if "caregiver_phone" in vals and vals["caregiver_phone"]:
         vals["caregiver_phone"] = norm_phone(vals["caregiver_phone"]) or vals["caregiver_phone"]

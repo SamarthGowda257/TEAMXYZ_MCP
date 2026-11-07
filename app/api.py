@@ -64,22 +64,41 @@ ADMIN_COOKIE = "wn_admin"
 
 
 def admin_session(request: Request) -> dict | None:
-    """The signed admin cookie, or None. Separate from the patient token: different audience, different cookie."""
+    """The signed staff cookie, or None. Separate from the patient token: different audience, different cookie.
+    Carries the role (admin, doctor, pharmacist); cookies from before roles existed belong to the console admin."""
     body = read_token(request.cookies.get(ADMIN_COOKIE, "")) if request.cookies.get(ADMIN_COOKIE) else None
-    return body if body and body.get("adm") else None
+    if not body or not body.get("adm"):
+        return None
+    body.setdefault("role", "admin")
+    if body.get("sid"):                              # a deactivated staff account loses access at once
+        with db.engine.connect() as c:
+            row = c.execute(select(db.staff_users.c.active).where(db.staff_users.c.id == body["sid"])).first()
+        if not row or not row[0]:
+            return None
+    return body
+
+
+def _forbidden():
+    raise HTTPException(403, detail={"error_code": "not_allowed", "message": "Your staff role can't open this section."})
 
 
 def ops_auth(request: Request, token: str = Query(default=""), x_dashboard_token: str = Header(default="")):
     """Dashboard token (unchanged, still used by the old /dashboard) or a signed-in admin session."""
-    if admin_session(request):
+    s = admin_session(request)
+    if s:
+        if s["role"] != "admin":
+            _forbidden()
         return
     if not token_matches(token or x_dashboard_token, config.DASHBOARD_TOKEN):
         raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Please sign in to the admin console."})
 
 
 def admin_only(request: Request):
-    if not admin_session(request):
+    s = admin_session(request)
+    if not s:
         raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Please sign in to the admin console."})
+    if s["role"] != "admin":
+        _forbidden()
 
 
 class Signup(BaseModel):
@@ -975,14 +994,23 @@ class AdminLogin(BaseModel):
 @router.post("/api/admin/login", dependencies=[limited("login")])
 def admin_login(body: AdminLogin, response: Response):
     user = clean(body.username)
-    ok = (token_matches(user.lower(), config.ADMIN_USER.lower())
-          and token_matches(body.password, config.ADMIN_PASSWORD))
-    if not ok:
-        raise HTTPException(401, detail={"error_code": "not_allowed", "message": "That admin ID and password don't match."})
-    response.set_cookie(ADMIN_COOKIE, sign_token({"adm": user}, ttl_seconds=12 * 3600),
+    claims = None
+    if token_matches(user.lower(), config.ADMIN_USER.lower()) and token_matches(body.password, config.ADMIN_PASSWORD):
+        claims = {"adm": user, "role": "admin", "name": "Administrator"}
+    else:                                            # doctor and pharmacist accounts made in the console
+        S = db.staff_users
+        with db.engine.begin() as c:
+            row = c.execute(select(S).where(S.c.username == user.lower(), S.c.active.is_(True))).mappings().first()
+            if row and verify_password(body.password, row["password_hash"]):
+                c.execute(update(S).where(S.c.id == row["id"]).values(last_login_at=config.now()))
+                claims = {"adm": row["username"], "role": row["role"], "sid": row["id"], "doc": row["doctor_id"],
+                          "name": row["full_name"]}
+    if not claims:
+        raise HTTPException(401, detail={"error_code": "not_allowed", "message": "That staff ID and password don't match."})
+    response.set_cookie(ADMIN_COOKIE, sign_token(claims, ttl_seconds=12 * 3600),
                         httponly=True, samesite="lax", secure=config.PUBLIC_BASE_URL.startswith("https"),
                         max_age=12 * 3600, path="/")
-    return {"ok": True, "user": user}
+    return {"ok": True, "user": user, "role": claims["role"], "name": claims["name"]}
 
 
 @router.post("/api/admin/logout")
@@ -996,7 +1024,8 @@ def admin_me(request: Request):
     s = admin_session(request)
     if not s:
         raise HTTPException(401, detail={"error_code": "not_allowed", "message": "Not signed in."})
-    return {"ok": True, "user": s.get("adm")}
+    return {"ok": True, "user": s.get("adm"), "role": s["role"], "name": s.get("name") or s.get("adm"),
+            "doctor_id": s.get("doc")}
 
 
 @router.get("/api/ops/handoffs", dependencies=[Depends(ops_auth)])
@@ -1221,9 +1250,11 @@ def create_app() -> FastAPI:
 
     from .commerce_api import router as commerce_router
     from .admin_api import router as admin_router
+    from .staff_api import router as staff_router
     from .patient_api import router as patient_router
     app.include_router(commerce_router)
     app.include_router(admin_router)      # /api/admin/* — staff writes, admin cookie only
+    app.include_router(staff_router)      # /api/staff/* — doctors prescribe, pharmacists check; role-scoped
     app.include_router(patient_router)    # /api/me/pharmacy, /api/me/wallet — patient token only
     app.include_router(router)
     (DIST / "assets").mkdir(parents=True, exist_ok=True)

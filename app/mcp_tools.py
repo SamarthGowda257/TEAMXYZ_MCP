@@ -236,11 +236,13 @@ Medicine = Annotated[S, Field(description="Medicine(s) as the patient said them,
 
 
 @tool
-def check_medicine_stock(medicine_name: Medicine) -> dict:
+def check_medicine_stock(medicine_name: Medicine, phone: OptPhone = "", date_of_birth: OptDob = "") -> dict:
     """Check the 24-hour hospital pharmacy: in stock or not, price per pack, whether a prescription is needed
     (OTC, Schedule H/H1, or Schedule X which can't be ordered by chat), cold-chain handling, and for out-of-stock
-    brands the restock time and an in-stock generic with the same medicine. No verification needed."""
-    return ph.check_stock(medicine_name)
+    brands the restock time and an in-stock generic with the same medicine. With the patient's mobile number it also
+    says how much they may order: days left on their prescription and the next refill date, or the safety limit for
+    over-the-counter medicines. Pass medicine_name 'my prescriptions' to list what the patient can order."""
+    return ph.check_stock(medicine_name, phone, date_of_birth)
 
 
 @tool

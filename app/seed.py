@@ -289,6 +289,10 @@ def ensure_extras() -> dict:
                                                                  db.prescriptions.c.medicine_name == rx["medicine_name"])).first():
                 c.execute(db.prescriptions.insert().values(**rx))
                 done["prescriptions"] = done.get("prescriptions", 0) + 1
+        from .services import rx as rxs        # Pharmacy V3: product fields, pharmacist rules, prescription items
+        v3 = rxs.ensure_reference(c)
+        v3["prescription_items"] = rxs.ensure_items(c)
+        done.update({k: v for k, v in v3.items() if v})
     return done
 
 
@@ -343,7 +347,11 @@ def is_seeded() -> bool:
 def reset(verbose: bool = True) -> dict:
     db.drop_schema()
     db.create_schema()
-    return seed(verbose)
+    out = seed(verbose)
+    with db.engine.begin() as c:
+        from .services import rx as rxs
+        rxs.ensure_reference(c)
+    return out
 
 
 def seed(verbose: bool = False) -> dict:

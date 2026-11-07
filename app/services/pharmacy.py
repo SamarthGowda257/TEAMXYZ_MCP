@@ -1,16 +1,19 @@
 """In-chat mini-pharmacy: stock, prescription rules, doorstep delivery and HealthCredits checkout.
 
 Prescription rules (Drugs and Cosmetics Act 1940 / Rules 1945, enforced on the server, not by the agent):
-  OTC        sold to any adult.
-  H, H1      need a prescription for that medicine on file from the last 6 months; otherwise refused and the
-             patient is offered a General Medicine consultation instead.
+  OTC        sold within the pharmacist's limits per order and per 7 days (by ingredient, across brands).
+  H, H1      need an active prescription item with days of supply left, not refilled too early (services/rx.py);
+             a pharmacist checks the order before it leaves (Schedule H1 rows form the H1 register).
   X          never sold by chat or phone (in-person consultation only).
+Money is held at order time (credits taken, stock reserved) and captured at dispatch; a pharmacist's rejection,
+a cancellation or a failed delivery gives it all back.
 Cold-chain medicines (insulin) go in an insulated pouch and need an adult at home to receive them (OTP handover).
 Delivery: within 5 km in 90 minutes, elsewhere in Bengaluru the same day; free from 500 rupees, else 50 rupees.
 Orders are quoted first and placed only with confirm=yes; the same order repeated within a minute is the same order.
 """
 
 import hashlib
+import math
 import re
 from datetime import datetime, time, timedelta
 
@@ -20,6 +23,7 @@ from .. import config, db, events, notify
 from ..util import Result, clean, fail, human_date, human_time, norm_code, ok, rupees, yes_no
 from . import calendar as cal
 from . import patients as pt
+from . import rx as rxs
 from . import wallet
 
 INV, ORD, RX = db.pharmacy_inventory, db.pharmacy_orders, db.prescriptions
@@ -28,6 +32,7 @@ FREE_DELIVERY_FROM, DELIVERY_FEE = 500, 50
 ZONE1 = ("marathahalli", "kadubeesanahalli", "munnekollal", "brookefield", "bellandur")     # under 5 km: 90 minutes
 ZONE2 = ("whitefield", "hsr", "koramangala", "indiranagar")                                  # 5-15 km: same day
 PHARMACY_DESK = "080 4000 1240"
+PAYMENT_HOLD_MIN = int(config.env("PAYMENT_HOLD_MIN", "30"))       # unpaid links release stock and credits after this
 GP = "Dr. Anil Kumar"                      # General Medicine, 600 rupees, Monday to Saturday mornings
 NUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
        "nine": 9, "ten": 10, "single": 1, "couple": 2}
@@ -126,10 +131,50 @@ def describe(conn, row: dict, qty: int = 1) -> dict:
             "generic_alternative": f"{_label(alt)} at {alt['unit_price_inr']} rupees" if alt else None}
 
 
-def check_stock(medicine_name) -> Result:
-    if not clean(medicine_name):
+MY_RX = re.compile(r"\b(my|what can i)\b.*\b(prescriptions?|medicines?|order)\b|^prescriptions?$", re.I)
+
+
+def _allowance(c, p: dict, r: dict) -> str:
+    """What this patient may order of this product right now, as a sentence."""
+    if r["schedule_class"] in ("H", "H1"):
+        item, st, why = rxs.coverage(c, p["id"], r)
+        if not item:
+            return {"used_up": " Your prescription for it has been fully supplied; it needs renewing.",
+                    "expired": " Your prescription for it has expired.",
+                    "stopped": " Your doctor has stopped it.",
+                    "pending_review": " Your uploaded prescription is still being checked."}.get(why, " There's no prescription for it on your record.")
+        one = rxs.days_for(r, item, 1)
+        packs = max(1, math.ceil(min(st["left_days"], 30) / one)) if one else 1
+        s = (f" Your prescription {item['rx_code']} has about {round(st['left_days'])} days left"
+             f" (up to {packs} pack{'s' if packs != 1 else ''} per order).")
+        if st["next_refill_from"]:
+            s += f" The next refill can be ordered from {human_date(st['next_refill_from'])}."
+        return s
+    rule = rxs.rule_for(c, r.get("ingredient") or "") or {}
+    caps = []
+    upp, mg = r.get("units_per_pack") or 1, r.get("strength_mg") or 0
+    if rule.get("otc_max_mg_per_order") and mg:
+        caps.append(rule["otc_max_mg_per_order"] / (mg * upp))
+    if rule.get("otc_max_units_per_order"):
+        caps.append(rule["otc_max_units_per_order"] / upp)
+    return f" For safety we send at most {int(min(caps))} packs per order." if caps else ""
+
+
+def check_stock(medicine_name, phone="", dob="") -> Result:
+    if not clean(medicine_name) and not clean(phone):
         return fail("invalid_input", "Which medicine would you like me to check?")
-    with db.engine.connect() as c:
+    p = None
+    if clean(phone):
+        with db.engine.begin() as c:
+            p, err = pt.check_identity(c, phone, dob)
+        if err and (MY_RX.search(clean(medicine_name)) or not clean(medicine_name)):
+            return err
+    if p and (MY_RX.search(clean(medicine_name)) or not clean(medicine_name)):
+        with db.engine.begin() as c:
+            items = rxs.patient_summary(c, p["id"])
+        return ok(rxs.summary_sentence(items), prescriptions=[i for i in items if i["status"] == "active"][:6])
+    with db.engine.begin() as c:
+        rxs.ensure_reference(c)
         rows, missing = _resolve(c, medicine_name, "")
         if not rows:
             return fail("not_found", f"I couldn't find {clean(medicine_name)} in our hospital pharmacy list. Please check the "
@@ -151,6 +196,8 @@ def check_stock(medicine_name) -> Result:
             line += "." if r["schedule_class"] == "OTC" else ", so we need a doctor's prescription from the last 6 months on file."
             if r["cold_chain"]:
                 line += " It travels in a cooled pouch and an adult must be home to receive it."
+            if p:
+                line += _allowance(c, p, dict(c.execute(select(INV).where(INV.c.id == r["id"])).mappings().first()))
             lines.append(line)
         if missing:
             lines.append(f"I couldn't find {', '.join(missing)} in our list.")
@@ -159,14 +206,9 @@ def check_stock(medicine_name) -> Result:
 
 # ------------------------------------------------------------------ prescription check
 def active_prescription(conn, patient_id, row) -> dict | None:
-    """A prescription for this medicine (any of its active ingredients) signed in the last 6 months."""
-    names = [w for w in re.findall(r"[a-z]+", row["generic_name"].lower()) if len(w) >= 5 and w not in ("human", "glargine")]
-    names = names or [row["generic_name"].lower().split()[0]]
-    since = config.today() - timedelta(days=RX_VALID_DAYS)
-    q = select(RX).where(RX.c.patient_id == patient_id, or_(*[RX.c.medicine_name.ilike(f"%{n}%") for n in names]),
-                         or_(RX.c.start_date >= since, RX.c.end_date >= config.today()))
-    r = conn.execute(q.order_by(RX.c.start_date.desc())).mappings().first()
-    return dict(r) if r else None
+    """The active prescription item covering this medicine, with days of supply left (V3), or None."""
+    item, _st, _why = rxs.coverage(conn, patient_id, row)
+    return item
 
 
 def _zone(address: str) -> tuple[str, datetime]:
@@ -189,30 +231,33 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
         p, err = pt.check_identity(c, phone, dob)
         if err:
             return err
+        rxs.ensure_reference(c)
         rows, missing = _resolve(c, medicine_name, quantity)
         if missing or not rows:
             return fail("not_found", f"I couldn't find {', '.join(missing) or clean(medicine_name)} in our pharmacy list. "
                                      f"Please check the name, or call the pharmacy desk on {PHARMACY_DESK}.")
+        rows = [(dict(c.execute(select(INV).where(INV.c.id == r["id"])).mappings().first()), q) for r, q in rows]
+        address = clean(delivery_address) or (p.get("address") or "")
+        # the same order repeated within a minute (voice lag, double click) is the same order: before any rule,
+        # because the first one already used the prescription days the second would be checked against
+        key = hashlib.sha256(f"{p['id']}|{sorted((r['medicine_code'], q) for r, q in rows)}|{address}|"
+                             f"{config.now().strftime('%Y%m%d%H%M')}".encode()).hexdigest()[:40]
+        if go:
+            dup = c.execute(select(ORD).where(ORD.c.idempotency_key == key)).mappings().first()
+            if dup:
+                return ok(f"That order is already placed: {dup['order_code']}, total {rupees(dup['total_inr'])}.",
+                          order_id=dup["order_code"], status=dup["status"], duplicate=True)
         # 1. controlled medicines: never by chat or phone
         x = [r for r, _ in rows if r["schedule_class"] == "X"]
         if x:
             return fail("not_allowed", f"{_label(x[0])} is a controlled medicine (Schedule X). By law it can't be ordered by "
                                        "chat or phone; it needs an in-person consultation and a signed prescription at the "
                                        "hospital. I can book that consultation for you.", next_step="book_consultation")
-        # 2. prescription medicines need a valid prescription on file
-        no_rx = [r for r, _ in rows if r["schedule_class"] in ("H", "H1") and not active_prescription(c, p["id"], r)]
-        if no_rx:
-            r = no_rx[0]
-            kind = "an antibiotic" if any(w in r["generic_name"].lower() for w in ("amoxicillin", "azithromycin", "cef", "cipro", "doxy")) else "a prescription medicine"
-            otc = [x for x, _ in rows if x["schedule_class"] == "OTC"]
-            return fail("prescription_required",
-                        f"{_label(r)} is {kind} under Schedule {r['schedule_class']}, and I can't find a prescription for it "
-                        "from the last 6 months on your record, so by law our pharmacy can't send it. I can book a quick "
-                        f"consultation with {GP} in General Medicine, 600 rupees, so a doctor can review "
-                        f"it and prescribe the right treatment. Shall I check his slots?"
-                        + (f" The other items ({', '.join(x['brand_name'] for x in otc)}) don't need a prescription; I can "
-                           "order those on their own." if otc else ""),
-                        next_step="book_consultation", department="General Medicine", doctor=GP)
+        # 2. prescription, patient fit, OTC limits, duplicates (services/rx.py)
+        refusal, plan = rxs.check(c, p, rows)
+        if refusal:
+            return refusal
+        review = list(dict.fromkeys(plan["review"]))
         # 3. stock
         short = [(r, q) for r, q in rows if r["stock_qty"] < q]
         if short and not wait:
@@ -233,7 +278,6 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
         subtotal = sum(i["line_total"] for i in items)
         fee = 0 if subtotal >= FREE_DELIVERY_FROM else DELIVERY_FEE
         total = subtotal + fee
-        address = clean(delivery_address) or (p.get("address") or "")
         if not address:
             return fail("invalid_input", "Which address should we deliver to?")
         zone, eta = _zone(address)
@@ -243,7 +287,9 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
         cold = any(r["cold_chain"] for r, _ in rows)
         bal = wallet.spendable(c, p)                   # own credits plus any family wallet they may draw on
         child = wallet.minor(p)
-        rx_doc = next((rx for r, _ in rows if r["schedule_class"] in ("H", "H1") and (rx := active_prescription(c, p["id"], r))), None)
+        rx_doc = plan["rx_doc"]
+        notes = " ".join(plan["notes"])
+        review_line = (" " + rxs.review_window_note()) if review else ""
         credits = 0 if (method == "payment_link" or child) else min(bal, total)
         due = total - credits
         summary = ", ".join(f"{i['qty']} x {i['name'].split(' (')[0]}" for i in items)
@@ -258,25 +304,25 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
                         ("As this is a child's account, the payment link will go to the parent or guardian. Shall I place it?"
                          if child else f"I'll send a secure payment link for {rupees(total)}. Shall I place the order?"))
             when = "within 90 minutes" if zone == "express" and not backorder else _eta_text(eta)
-            return ok(("Your prescription on file is valid. " if rx_doc else "") + f"{summary}: {rupees(subtotal)}"
+            rx_line = (f"Your prescription {rx_doc['rx_code']} covers this. " if rx_doc else "")
+            return ok(rx_line + f"{summary}: {rupees(subtotal)}"
                       + (f", plus {rupees(fee)} delivery (free from 500 rupees)" if fee else ", with free delivery")
-                      + f", total {rupees(total)}. Delivery to {address} {when}. {pay_line}{cold_note}",
+                      + f", total {rupees(total)}. Delivery to {address} {when}." + (f" {notes}" if notes else "")
+                      + review_line + f" {pay_line}{cold_note}",
                       quote={"items": items, "subtotal_inr": subtotal, "delivery_fee_inr": fee, "total_inr": total,
                              "credits_to_use": credits, "amount_by_link_inr": due, "balance_credits": bal},
-                      needs="confirm", prescription_verified=bool(rx_doc))
-        # 5. place it (idempotent: the same order in the same minute is the same order)
-        key = hashlib.sha256(f"{p['id']}|{sorted((i['code'], i['qty']) for i in items)}|{total}|{address}|"
-                             f"{config.now().strftime('%Y%m%d%H%M')}".encode()).hexdigest()[:40]
-        dup = c.execute(select(ORD).where(ORD.c.idempotency_key == key)).mappings().first()
-        if dup:
-            return ok(f"That order is already placed: {dup['order_code']}, total {rupees(dup['total_inr'])}.",
-                      order_id=dup["order_code"], status=dup["status"], duplicate=True)
+                      needs="confirm", prescription_verified=bool(rx_doc), pharmacist_check=bool(review))
+        # 5. place it: reserve stock and prescription days, hold the credits
         code = _new_code(c)
-        status = "awaiting_payment" if due else ("awaiting_stock" if backorder else "confirmed")
-        c.execute(insert(ORD).values(order_code=code, patient_id=p["id"], items=items, subtotal_inr=subtotal,
-                                     delivery_fee_inr=fee, total_inr=total, credits_used=credits, amount_due_inr=due,
-                                     delivery_address=address[:200], zone=zone, status=status, cold_chain=cold, eta=eta,
-                                     idempotency_key=key, created_at=config.now(), updated_at=config.now()))
+        status = next_status(due=bool(due), backorder=backorder, review=bool(review))
+        oid = c.execute(insert(ORD).values(order_code=code, patient_id=p["id"], items=items, subtotal_inr=subtotal,
+                                           delivery_fee_inr=fee, total_inr=total, credits_used=credits, amount_due_inr=due,
+                                           delivery_address=address[:200], zone=zone, status=status, cold_chain=cold, eta=eta,
+                                           idempotency_key=key, created_at=config.now(), updated_at=config.now(),
+                                           verification="pending_pharmacist" if review else "auto",
+                                           review_notes="; ".join(review)[:300] or None, credits_held=credits)
+                        ).inserted_primary_key[0]
+        rxs.reserve(c, oid, p["id"], plan, rows, auto=not review)
         if credits:
             good, txn = wallet.debit_with_pool(c, p, credits, "pharmacy", code, f"order:{code}")
             if not good:
@@ -294,6 +340,8 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
                         backorder, child)
     events.publish("pharmacy.ordered", patient_id=p["id"], order_id=code)
     parts = [f"Done. Order {code}: {summary}, total {rupees(total)}."]
+    if review:
+        parts.append(rxs.review_window_note())
     if credits:
         parts.append(f"{credits:,} HealthCredits used; your balance is now {new_bal:,}.")
     if due:
@@ -302,11 +350,14 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
     if backorder:
         parts.append(f"It's reserved and will be sent when the stock arrives, around {_eta_text(eta)}.")
     elif not due:
-        parts.append("Our rider will deliver it " + ("within 90 minutes" if zone == "express" else _eta_text(eta)) +
+        parts.append(("After that check, our" if review else "Our") + " rider will deliver it "
+                     + ("within 90 minutes" if zone == "express" else _eta_text(eta)) +
                      f" to {address}. You'll get an SMS with the tracking link.")
+    if notes:
+        parts.append(notes)
     return ok(" ".join(parts) + cold_note, order_id=code, total_inr=total, credits_used=credits, balance_credits=new_bal,
               amount_by_link_inr=due, payment_url=link["url"] if link else None, delivery_eta=_eta_text(eta), status=status,
-              tracking_url=f"{config.PUBLIC_BASE_URL}/track/{code}")
+              tracking_url=f"{config.PUBLIC_BASE_URL}/track/{code}", pharmacist_check=bool(review))
 
 
 def _new_code(c) -> str:
@@ -378,13 +429,93 @@ def refill_line(due: list[dict]) -> str:
             "refill, or would you prefer a review with your doctor?")
 
 
+def next_status(due: bool = False, backorder: bool = False, review: bool = False) -> str:
+    """What the order waits for, in order: the payment link, the stock, the pharmacist. Then it's packed."""
+    return "awaiting_payment" if due else "awaiting_stock" if backorder else "awaiting_review" if review else "confirmed"
+
+
+def _pending_review(o) -> bool:
+    return o.get("verification") == "pending_pharmacist"
+
+
 def payment_received(conn, order_code) -> None:
     o = conn.execute(select(ORD).where(ORD.c.order_code == order_code)).mappings().first()
     if not o or o["status"] != "awaiting_payment":
         return
     backorder = any(i.get("backorder") for i in o["items"])
-    conn.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="awaiting_stock" if backorder else "confirmed",
+    conn.execute(update(ORD).where(ORD.c.id == o["id"]).values(status=next_status(backorder=backorder, review=_pending_review(o)),
                                                                amount_due_inr=0, updated_at=config.now()))
+
+
+def _release(c, o: dict, reason_key: str) -> int:
+    """Give back everything an order took: held credits, reserved stock, prescription days, the payment link."""
+    back = 0 if o.get("captured_at") and reason_key == "cancel" else (o["credits_used"] or 0)
+    if back:
+        wallet.give_back(c, o["patient_id"], back, o["order_code"], f"order:{o['order_code']}", f"order_refund:{o['order_code']}")
+    if o["status"] not in ("dispatched", "delivered", "returned"):
+        for i in o["items"]:
+            if not i.get("backorder"):
+                c.execute(update(INV).where(INV.c.medicine_code == i["code"]).values(stock_qty=INV.c.stock_qty + i["qty"]))
+    rxs.void(c, o["id"])
+    if o["payment_link_code"]:
+        c.execute(update(db.payment_links).where(db.payment_links.c.link_code == o["payment_link_code"],
+                                                 db.payment_links.c.status == "created").values(status="expired"))
+    cal.cancel(c, o["order_code"])
+    return back
+
+
+def approve(order_id: int, pharmacist: str, notes: str = "") -> Result:
+    with db.engine.begin() as c:
+        o = c.execute(select(ORD).where(ORD.c.id == order_id).with_for_update()).mappings().first()
+        if not o:
+            return fail("not_found", "That order doesn't exist.")
+        o = dict(o)
+        if o["verification"] != "pending_pharmacist":
+            return fail("not_allowed", f"Order {o['order_code']} isn't waiting for a check ({o['verification'] or 'auto'}).")
+        if o["status"] == "cancelled":
+            return fail("not_allowed", f"Order {o['order_code']} is already cancelled.")
+        st = "confirmed" if o["status"] == "awaiting_review" else o["status"]
+        c.execute(update(ORD).where(ORD.c.id == order_id).values(verification="approved", pharmacist=pharmacist[:80],
+                                                                 verified_at=config.now(), status=st, updated_at=config.now(),
+                                                                 review_notes=(o["review_notes"] or "") + (f" | {clean(notes)}" if clean(notes) else "")))
+        rxs.approve_lines(c, order_id, pharmacist)
+        pt.log(c, o["patient_id"], "pharmacist_approved", o["order_code"], True, f"Checked by {pharmacist}", actor="staff", channel="staff")
+        if st == "confirmed":
+            p = pt.get_by_id(c, o["patient_id"])
+            notify.queue(c, patient_id=p["id"], channel="sms", template="pharmacy_approved", to=p["phone"],
+                         body=f"WellNest: our pharmacist checked order {o['order_code']}; it's being packed now.",
+                         dedupe_key=f"appr:{o['order_code']}")
+    events.publish("pharmacy.reviewed", patient_id=o["patient_id"], order_id=o["order_code"])
+    return ok(f"Approved {o['order_code']}.", status=st)
+
+
+def reject(order_id: int, reason: str, pharmacist: str) -> Result:
+    if not clean(reason):
+        return fail("invalid_input", "Give the patient a reason.")
+    with db.engine.begin() as c:
+        o = c.execute(select(ORD).where(ORD.c.id == order_id).with_for_update()).mappings().first()
+        if not o:
+            return fail("not_found", "That order doesn't exist.")
+        o = dict(o)
+        if o["status"] in ("dispatched", "delivered", "cancelled", "returned"):
+            return fail("not_allowed", f"Order {o['order_code']} is {o['status'].replace('_', ' ')}; it can't be rejected now.")
+        back = _release(c, o, "reject")
+        c.execute(update(ORD).where(ORD.c.id == order_id).values(status="cancelled", verification="rejected",
+                                                                 rejection_reason=clean(reason)[:200], pharmacist=pharmacist[:80],
+                                                                 verified_at=config.now(), updated_at=config.now()))
+        p = pt.get_by_id(c, o["patient_id"])
+        notify.email_and_sms(c, patient=p, template="pharmacy_rejected", key=f"rej:{o['order_code']}",
+                             subject=f"Medicine order {o['order_code']} couldn't be sent - WellNest Hospitals",
+                             body=f"Dear {p['full_name']},\n\nOur pharmacist couldn't send order {o['order_code']}: {clean(reason)}\n"
+                                  + (f"{back:,} HealthCredits are back in your wallet.\n" if back else "")
+                                  + f"\nPlease call the pharmacy on {PHARMACY_DESK} or book a consultation in the WellNest chat."
+                                    "\n\nWellNest Hospitals",
+                             sms=f"WellNest: order {o['order_code']} wasn't sent: {clean(reason)[:80]}. "
+                                 + (f"{back:,} credits refunded. " if back else "") + f"Pharmacy {PHARMACY_DESK}.")
+        pt.log(c, o["patient_id"], "pharmacist_rejected", o["order_code"], True, f"{pharmacist}: {clean(reason)}; refunded {back}",
+               actor="staff", channel="staff")
+    events.publish("pharmacy.reviewed", patient_id=o["patient_id"], order_id=o["order_code"])
+    return ok(f"Rejected {o['order_code']}; {back:,} credits refunded.", refunded_credits=back)
 
 
 # ------------------------------------------------------------------ track / cancel
@@ -404,7 +535,7 @@ def track(phone, dob="", order_id="", action="") -> Result:
         o = dict(o)
         what = ", ".join(f"{i['qty']} x {i['name'].split(' (')[0]}" for i in o["items"])
         if want_cancel:
-            if o["status"] in ("dispatched", "delivered"):
+            if o["status"] in ("dispatched", "delivered", "returned"):
                 return fail("not_allowed", f"Order {o['order_code']} has already left the pharmacy with our rider. Under our "
                                            "drug safety policy dispensed medicines can't be recalled or restocked once "
                                            "dispatched. If you refuse it at the door, the pharmacy audit team checks the "
@@ -412,16 +543,8 @@ def track(phone, dob="", order_id="", action="") -> Result:
                             order_id=o["order_code"], status=o["status"])
             if o["status"] == "cancelled":
                 return ok(f"Order {o['order_code']} is already cancelled.", order_id=o["order_code"], status="cancelled")
+            back = _release(c, o, "cancel")
             c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="cancelled", updated_at=config.now()))
-            back = o["credits_used"]
-            wallet.give_back(c, p["id"], back, o["order_code"], f"order:{o['order_code']}", f"order_refund:{o['order_code']}")
-            for i in o["items"]:
-                if not i.get("backorder"):
-                    c.execute(update(INV).where(INV.c.medicine_code == i["code"]).values(stock_qty=INV.c.stock_qty + i["qty"]))
-            if o["payment_link_code"]:
-                c.execute(update(db.payment_links).where(db.payment_links.c.link_code == o["payment_link_code"],
-                                                         db.payment_links.c.status == "created").values(status="expired"))
-            cal.cancel(c, o["order_code"])
             pt.log(c, p["id"], "cancel_medicine_order", o["order_code"], True, f"Cancelled; refunded {back} credits")
             return ok(f"Cancelled order {o['order_code']} ({what})."
                       + (f" {back:,} HealthCredits are back in your wallet; balance {wallet.balance(c, p['id']):,}." if back else ""),
@@ -429,11 +552,21 @@ def track(phone, dob="", order_id="", action="") -> Result:
     st = o["status"]
     say = {"awaiting_payment": f"is waiting for the payment of {rupees(o['amount_due_inr'])} by the link we sent",
            "awaiting_stock": f"is reserved and will be sent when the stock arrives, around {_eta_text(o['eta'])}",
+           "awaiting_review": "is with our pharmacist for the prescription check; it's packed right after",
            "confirmed": "is being packed at the pharmacy",
            "dispatched": f"is on the way with our rider, expected {_eta_text(o['eta'])}",
-           "delivered": "was delivered", "cancelled": "was cancelled"}[st]
-    return ok(f"Order {o['order_code']} ({what}) {say}. Tracking: {config.PUBLIC_BASE_URL}/track/{o['order_code']}",
-              order_id=o["order_code"], status=st, eta=_eta_text(o["eta"]), total_inr=o["total_inr"])
+           "ready_for_pickup": f"is ready to collect at the pharmacy counter, Gate 1 (no rider was available); call {PHARMACY_DESK}",
+           "delivered": "was delivered",
+           "returned": "came back to the pharmacy after two missed delivery attempts and was refunded",
+           "cancelled": "was cancelled" + (f" by our pharmacist: {o['rejection_reason']}" if o.get("rejection_reason") else "")}.get(st, st.replace("_", " "))
+    from . import delivery as dl
+    d = dl.latest(o["id"])
+    extra = ""
+    if d and st == "dispatched" and d["attempts"]:
+        extra = f" The first delivery attempt was missed; the rider will try again {_eta_text(o['eta'])}."
+    return ok(f"Order {o['order_code']} ({what}) {say}.{extra} Tracking: {config.PUBLIC_BASE_URL}/track/{o['order_code']}",
+              order_id=o["order_code"], status=st, eta=_eta_text(o["eta"]), total_inr=o["total_inr"],
+              pharmacist_check=o.get("verification"), courier=d["status"] if d else None)
 
 
 def public_status(order_code) -> dict | None:
@@ -463,11 +596,18 @@ def advance() -> dict:
             if all(c.execute(select(INV.c.stock_qty).where(INV.c.medicine_code == i["code"])).scalar() >= i["qty"] for i in o["items"]):
                 for i in o["items"]:
                     c.execute(update(INV).where(INV.c.medicine_code == i["code"]).values(stock_qty=INV.c.stock_qty - i["qty"]))
-                c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="confirmed", updated_at=now))
+                c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status=next_status(review=_pending_review(o)), updated_at=now))
+        from . import delivery as dl
         for o in c.execute(select(ORD).where(ORD.c.status == "confirmed", ORD.c.updated_at <= now - timedelta(minutes=10))).mappings().all():
-            eta = max(o["eta"] or now, now + timedelta(minutes=60 if o["zone"] == "express" else 120))
-            c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="dispatched", dispatched_at=now, eta=eta, updated_at=now))
+            o = dict(o)
             p = pt.get_by_id(c, o["patient_id"])
+            if not dl.dispatch(c, o, p):
+                continue                              # courier unreachable: stays packed, retried on the next run
+            eta = max(o["eta"] or now, now + timedelta(minutes=60 if o["zone"] == "express" else 120))
+            # capture: the held credits are now spent; prescription days become dispensed (OTC already were)
+            c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="dispatched", dispatched_at=now, eta=eta, updated_at=now,
+                                                                    captured_at=now, credits_held=0))
+            rxs.approve_lines(c, o["id"], o.get("pharmacist") or "auto")
             track_url = f"{config.PUBLIC_BASE_URL}/track/{o['order_code']}"
             notify.email_and_sms(c, patient=p, template="pharmacy_dispatched", key=f"disp:{o['order_code']}",
                                  subject=f"Dispatched: medicine order {o['order_code']} is on its way",
@@ -484,11 +624,23 @@ def advance() -> dict:
                                 body=f"Delivery {o['order_code']} for {p['full_name']} is expected {_eta_text(eta)}.",
                                 sms=f"WellNest: delivery {o['order_code']} for {p['full_name']} expected {_eta_text(eta)}.")
             n["dispatched"] += 1
-        res = c.execute(update(ORD).where(ORD.c.status == "dispatched", ORD.c.eta <= now).values(status="delivered", updated_at=now))
-        n["delivered"] = res.rowcount or 0
-        for o in c.execute(select(ORD).where(ORD.c.status == "awaiting_payment", ORD.c.created_at <= now - timedelta(hours=24))).mappings().all():
-            c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="cancelled", updated_at=now))
-            wallet.give_back(c, o["patient_id"], o["credits_used"], o["order_code"], f"order:{o['order_code']}", f"order_refund:{o['order_code']}")
+        if dl.PROVIDER == "simulated":                 # a real courier reports delivery by webhook instead
+            for o in c.execute(select(ORD).where(ORD.c.status == "dispatched", ORD.c.eta <= now)).mappings().all():
+                c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="delivered", updated_at=now))
+                c.execute(update(dl.D).where(dl.D.c.order_id == o["id"], dl.D.c.status.in_(("booked", "picked_up", "failed_attempt")))
+                          .values(status="delivered", last_event_at=now))
+                n["delivered"] += 1
+        hold = now - timedelta(minutes=PAYMENT_HOLD_MIN)
+        for o in c.execute(select(ORD).where(ORD.c.status == "awaiting_payment", ORD.c.created_at <= hold)).mappings().all():
+            o = dict(o)
+            back = _release(c, o, "expired")
+            c.execute(update(ORD).where(ORD.c.id == o["id"]).values(status="cancelled", rejection_reason="Payment link expired",
+                                                                    updated_at=now))
+            p = pt.get_by_id(c, o["patient_id"])
+            notify.queue(c, patient_id=p["id"], channel="sms", template="pharmacy_link_expired", to=p["phone"],
+                         body=f"WellNest: order {o['order_code']} was released because the payment link wasn't paid within "
+                              f"{PAYMENT_HOLD_MIN} minutes." + (f" {back:,} HealthCredits are back in your wallet." if back else "")
+                              + " Reorder any time in the chat.", dedupe_key=f"exp:{o['order_code']}")
             n["expired"] += 1
     return n
 

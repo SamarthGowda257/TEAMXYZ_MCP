@@ -4,8 +4,8 @@ The same SQLAlchemy Core schema runs on both. Integrity lives in the database:
 the partial unique indexes below make double booking impossible.
 """
 
-from sqlalchemy import (JSON, Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, MetaData,
-                        String, Table, Text, create_engine, event, text)
+from sqlalchemy import (JSON, Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, LargeBinary,
+                        MetaData, String, Table, Text, create_engine, event, inspect, text)
 
 from . import config
 
@@ -93,7 +93,11 @@ patients = Table("patients", md, _id(),
     Column("is_guest", Boolean, nullable=False, default=False),
     Column("password_hash", String(200)),
     Column("web_email", String(120), unique=True),             # website login email
-    _ts())
+    _ts(),
+    # pharmacy safety (V3): checked on every medicine order
+    Column("allergies", String(200)),                          # ingredients, comma separated, e.g. "penicillin, sulfa"
+    Column("pregnant_until", Date),                            # set by clinical staff; pregnancy-caution medicines go to a pharmacist
+    Column("weight_kg", Float))                                # children: weight-based doses need a pharmacist
 
 verification_attempts = Table("verification_attempts", md, _id(),
     Column("phone", String(16), nullable=False),
@@ -167,8 +171,97 @@ lab_reports = Table("lab_reports", md, _id(),
 prescriptions = Table("prescriptions", md, _id(),
     Column("patient_id", ForeignKey("patients.id"), nullable=False),
     Column("doctor_id", ForeignKey("doctors.id")),
-    Column("medicine_name", String(80), nullable=False),
-    Column("dosage", String(80)), Column("start_date", Date), Column("end_date", Date))
+    Column("medicine_name", String(80), nullable=False),                # V2 single-medicine row (kept for old readers)
+    Column("dosage", String(80)), Column("start_date", Date), Column("end_date", Date),
+    # V3 header: one signed prescription with one or more items (prescription_items)
+    Column("rx_code", String(14), unique=True),
+    Column("appointment_id", ForeignKey("appointments.id")),
+    Column("source", String(16)),                                       # in_house external_upload legacy
+    Column("status", String(16)),                                       # active pending_review cancelled expired
+    Column("issued_at", DateTime), Column("valid_until", Date),
+    Column("signed_by", String(80)), Column("signature_hash", String(64)),
+    Column("cancel_reason", String(200)), Column("updated_at", DateTime))
+
+# One medicine on a prescription. Quantities are counted in DAYS OF SUPPLY, so strips, bottles, weekly capsules,
+# inhalers and pens all compare the same way: days covered = units / (dose_units x times_per_day), or packs x
+# days_per_unit for devices. Days given out are summed from `dispensations`, never kept as a running counter.
+prescription_items = Table("prescription_items", md, _id(),
+    Column("rx_id", ForeignKey("prescriptions.id"), nullable=False),
+    Column("medicine_code", String(20)),                                # a specific product, or None for any brand
+    Column("ingredient", String(120), nullable=False),                  # matched against the product's generic name
+    Column("strength_mg", Float),
+    Column("dose_units", Float, nullable=False, default=1),             # tablets, capsules, puffs or ml per intake
+    Column("times_per_day", Float, nullable=False, default=1),          # 1/7 for once a week
+    Column("duration_days", Integer, nullable=False),
+    Column("refills_allowed", Integer, nullable=False, default=0),
+    Column("substitution_allowed", Boolean, nullable=False, default=True),
+    Column("instructions", String(160)),
+    Column("override_reason", String(200)),                             # doctor went above the usual daily maximum
+    Column("stopped_at", DateTime), Column("stop_reason", String(160)), _ts(),
+    Index("ix_rxitem_rx", "rx_id"))
+
+# Every supply against a prescription item, and every pharmacist check. Schedule H1 rows are the legal H1 register.
+dispensations = Table("dispensations", md, _id(),
+    Column("order_id", ForeignKey("pharmacy_orders.id"), nullable=False),
+    Column("rx_item_id", ForeignKey("prescription_items.id")),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("medicine_code", String(20), nullable=False),
+    Column("schedule_class", String(4), nullable=False),
+    Column("packs", Integer, nullable=False), Column("units", Float, nullable=False),
+    Column("days_supply", Float, nullable=False, default=0),
+    Column("status", String(12), nullable=False),                       # reserved dispensed void
+    Column("pharmacist", String(80)), Column("verified_at", DateTime),
+    Column("batch_no", String(30)), Column("expiry_date", Date), _ts(),
+    Index("ix_disp_item", "rx_item_id", "status"), Index("ix_disp_patient", "patient_id", "created_at"))
+
+# Pharmacist-owned limits per active ingredient. Seeded values are demo defaults until a pharmacist signs them off.
+drug_rules = Table("drug_rules", md, _id(),
+    Column("ingredient", String(80), unique=True, nullable=False),      # lower case, e.g. "paracetamol"
+    Column("max_daily_mg_adult", Float),
+    Column("min_age_years", Integer),
+    Column("pregnancy_caution", Boolean, nullable=False, default=False),
+    Column("otc_max_mg_per_order", Float), Column("otc_max_mg_per_7d", Float),
+    Column("otc_max_units_per_order", Float), Column("otc_max_units_per_7d", Float),
+    Column("early_refill_pct", Integer, nullable=False, default=80),
+    Column("max_days_per_order", Integer, nullable=False, default=30),
+    Column("requires_pharmacist", Boolean, nullable=False, default=False),
+    Column("signed_off_by", String(80)), Column("signed_off_at", DateTime), Column("updated_at", DateTime))
+
+prescription_uploads = Table("prescription_uploads", md, _id(),
+    Column("upload_code", String(14), unique=True, nullable=False),
+    Column("patient_id", ForeignKey("patients.id"), nullable=False),
+    Column("file_name", String(120)), Column("content_type", String(40)),
+    Column("data", LargeBinary),                                        # max 4 MB, images or PDF only
+    Column("note", String(200)),
+    Column("status", String(12), nullable=False),                       # pending approved rejected
+    Column("reviewer", String(80)), Column("reason", String(200)), Column("reviewed_at", DateTime),
+    Column("created_rx_id", ForeignKey("prescriptions.id")), _ts())
+
+deliveries = Table("deliveries", md, _id(),
+    Column("order_id", ForeignKey("pharmacy_orders.id"), nullable=False),
+    Column("provider", String(20), nullable=False),
+    Column("provider_job_id", String(60)),
+    Column("status", String(20), nullable=False),     # booked picked_up delivered failed_attempt no_rider returned cancelled
+    Column("attempts", Integer, nullable=False, default=0),
+    Column("rider_name", String(60)), Column("otp_hash", String(64)),
+    Column("proof", String(200)), Column("last_event_at", DateTime), _ts(),
+    Index("ix_delivery_order", "order_id"))
+
+delivery_events = Table("delivery_events", md, _id(),
+    Column("provider", String(20), nullable=False),
+    Column("event_id", String(80), nullable=False),
+    Column("delivery_id", ForeignKey("deliveries.id")),
+    Column("event", String(30), nullable=False), Column("body", JSON), _ts(),
+    Index("ux_delivery_event", "provider", "event_id", unique=True))
+
+staff_users = Table("staff_users", md, _id(),
+    Column("username", String(60), unique=True, nullable=False),
+    Column("full_name", String(80), nullable=False),
+    Column("role", String(16), nullable=False),                         # admin doctor pharmacist
+    Column("doctor_id", ForeignKey("doctors.id")),
+    Column("password_hash", String(200), nullable=False),
+    Column("active", Boolean, nullable=False, default=True),
+    Column("last_login_at", DateTime), _ts())
 
 prescription_requests = Table("prescription_requests", md, _id(),
     Column("request_code", String(12), unique=True, nullable=False),
@@ -286,7 +379,12 @@ pharmacy_inventory = Table("pharmacy_inventory", md, _id(),
     Column("restock_eta", DateTime),
     Column("cold_chain", Boolean, nullable=False, default=False),    # 2-8 C, insulated pouch, OTP handover
     Column("alternative_code", String(20)),                          # in-stock bioequivalent generic
-    Column("updated_at", DateTime))
+    Column("updated_at", DateTime),
+    Column("ingredient", String(80)),                                # main active ingredient, lower case (rules key)
+    Column("strength_mg", Float),                                    # per tablet/capsule, for dose sums
+    Column("units_per_pack", Float),                                 # 15 tablets; 1 for a bottle, pen or inhaler
+    Column("days_per_unit", Float),                                  # devices: how many days one pen or inhaler lasts
+    Column("returnable", Boolean))
 
 pharmacy_orders = Table("pharmacy_orders", md, _id(),
     Column("order_code", String(16), unique=True, nullable=False),
@@ -303,6 +401,12 @@ pharmacy_orders = Table("pharmacy_orders", md, _id(),
     Column("eta", DateTime),
     Column("idempotency_key", String(80), unique=True),
     _ts(), Column("dispatched_at", DateTime), Column("updated_at", DateTime),
+    Column("verification", String(20)),                              # auto pending_pharmacist approved rejected
+    Column("review_notes", String(300)),                             # why a pharmacist must look (duplicates, pregnancy...)
+    Column("credits_held", Integer),                                 # taken at order time, captured at dispatch
+    Column("captured_at", DateTime),
+    Column("rejection_reason", String(200)),
+    Column("pharmacist", String(80)), Column("verified_at", DateTime),
     Index("ix_pharm_patient", "patient_id", "created_at"))
 
 health_credit_wallets = Table("health_credit_wallets", md,
@@ -421,8 +525,29 @@ def fallback_to_sqlite(reason: str) -> None:
     DB_ERROR = reason
 
 
+def add_missing_columns() -> list[str]:
+    """create_all makes new tables but never new columns. Add any column the schema has and the live table lacks,
+    as a nullable column (no default, no constraint), so an existing database upgrades in place. Idempotent."""
+    added = []
+    insp = inspect(engine)
+    have_tables = set(insp.get_table_names())
+    with engine.begin() as c:
+        for name, table in md.tables.items():
+            if name not in have_tables:
+                continue
+            have = {col["name"] for col in insp.get_columns(name)}
+            for col in table.columns:
+                if col.name in have or col.primary_key:
+                    continue
+                ctype = col.type.compile(dialect=engine.dialect)
+                c.execute(text(f'ALTER TABLE "{name}" ADD COLUMN "{col.name}" {ctype}'))
+                added.append(f"{name}.{col.name}")
+    return added
+
+
 def create_schema():
     md.create_all(engine)
+    add_missing_columns()
     if IS_POSTGRES:
         lock_down()
         setup_search()

@@ -343,3 +343,44 @@ def set_sharing(b: ShareReq, cp: Any = Me):
                              "" if b.per_txn_limit in (None, 0) else str(b.per_txn_limit),
                              "" if b.daily_limit in (None, 0) else str(b.daily_limit),
                              action=clean(b.action)))
+
+
+# ------------------------------------------------------------------ prescriptions (Pharmacy V3)
+@router.get("/prescriptions")
+def my_prescriptions(cp: Any = Me):
+    """What this patient can order: active items, days left, next refill date; and their uploads under review."""
+    from .services import rx
+    U = db.prescription_uploads
+    with db.engine.begin() as c:
+        items = rx.patient_summary(c, cp.id)
+        ups = c.execute(select(U.c.upload_code, U.c.file_name, U.c.status, U.c.reason, U.c.created_at)
+                        .where(U.c.patient_id == cp.id).order_by(U.c.created_at.desc()).limit(10)).mappings().all()
+    return {"ok": True, "message": rx.summary_sentence(items), "prescriptions": items,
+            "uploads": [{**dict(u), "created_at": u["created_at"].isoformat()} for u in ups]}
+
+
+class UploadIn(BaseModel):
+    file_name: str = ""
+    content_type: str
+    data: str                     # base64; images or PDF, 4 MB at most
+    note: str = ""
+
+
+@router.post("/prescriptions/upload")
+def upload_prescription(body: UploadIn, cp: Any = Me):
+    import base64
+    import binascii
+    from .services import rx
+    if len(body.data) > rx.MAX_UPLOAD * 4 // 3 + 8:
+        return _out(fail("invalid_input", "The file must be under 4 MB."))
+    try:
+        raw = base64.b64decode(body.data, validate=True)
+    except (binascii.Error, ValueError):
+        return _out(fail("invalid_input", "That file couldn't be read. Please try again."))
+    sniff = {b"\xff\xd8": "image/jpeg", b"\x89P": "image/png", b"%P": "application/pdf", b"RI": "image/webp"}
+    if sniff.get(raw[:2]) != body.content_type:   # the bytes must really be the type they claim
+        return _out(fail("invalid_input", "Please upload a photo (JPG, PNG or WebP) or a PDF of the prescription."))
+    res = rx.upload(cp.id, body.file_name, body.content_type, raw, body.note)
+    if not res.ok:
+        return _out(res)
+    return {"ok": True, "message": res.message, "upload_code": res.data["upload_code"]}

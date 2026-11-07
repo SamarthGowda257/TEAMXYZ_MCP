@@ -118,7 +118,9 @@ def test_cold_chain_and_child_account():
                                                    start_date=config.today() - timedelta(days=10)))
     q = ph.order(SHAN, SHAN_DOB, "Lantus pen")
     assert q.ok and "ice-pack" in q.message and "adult" in q.message
-    child = ph.order("9845000005", "12 May 2018", "Dolo 650")
+    adult_tab = ph.order("9845000005", "12 May 2018", "Dolo 650")
+    assert adult_tab.error_code == "not_suitable" and "an 8-year-old" in adult_tab.message   # adult tablet, child's dose is by weight
+    child = ph.order("9845000005", "", "Electral ORS")
     assert child.ok and child.data["quote"]["credits_to_use"] == 0 and "guardian" in child.message
 
 

@@ -293,15 +293,20 @@ def get_balance(phone, dob) -> Result:
         bal = balance(c, p["id"])
         last = c.execute(select(T).where(T.c.patient_id == p["id"]).order_by(T.c.created_at.desc(), T.c.id.desc())
                          .limit(3)).mappings().all()
+        held = int(c.execute(select(func.coalesce(func.sum(db.pharmacy_orders.c.credits_held), 0)).where(
+            db.pharmacy_orders.c.patient_id == p["id"], db.pharmacy_orders.c.captured_at.is_(None),
+            db.pharmacy_orders.c.status.notin_(("cancelled", "returned", "delivered", "dispatched")))).scalar() or 0)
     recent = [{"txn": t["txn_code"], "type": t["direction"], "credits": t["amount"], "for": t["service"],
                "reference": t["reference"], "on": t["created_at"].strftime("%d %b %H:%M")} for t in last]
     msg = f"You have {bal:,} HealthCredits, worth {rupees(bal)}."
+    if held:
+        msg += f" {held:,} more are held for a medicine order until it's sent; they come back if it's cancelled."
     if recent:
         t = recent[0]
         msg += f" Last transaction: {t['credits']:,} credits {'used' if t['type'] == 'debit' else 'added'} for {t['for']} on {t['on']}."
     if minor(p):
         msg += " As this account belongs to a child, spending needs the parent or guardian's approval."
-    return ok(msg, balance_credits=bal, recent=recent)
+    return ok(msg, balance_credits=bal, held_credits=held, recent=recent)
 
 
 def recharge(phone, amount, dob="") -> Result:
