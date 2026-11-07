@@ -236,3 +236,24 @@ for the full name before answering; and it called a past visit the "next appoint
    (click the failed turn). The trace shows whether Talkdesk re-routes after a specialist answers. If it doesn't, the
    orchestration may have a setting for it that I couldn't confirm from the docs (support.talkdesk.com blocks
    automated reading).
+
+## 13. Pharmacy V3: prescriptions, limits and the pharmacist check (7 Nov)
+
+The server now refuses or limits orders by itself (prescription days left, refills too early, OTC limits across brands,
+allergies, age) and every prescription medicine waits for a pharmacist before it's packed. The agent only needs to
+pass the patient's number to the stock check and explain the server's replies.
+
+1. **MCP Servers → Refresh** (still 47 tools; `check_medicine_stock` gains two optional inputs).
+2. **Pharmacy and HealthCredits Agent:** delete and re-add `check_medicine_stock`, then map
+   medicine_name → `medicine_name`, **phone → `patient_phone`**, **date_of_birth → `date_of_birth`**.
+3. **Pharmacy and HealthCredits Agent instructions**, add:
+   ```
+   PRESCRIPTIONS: When a known patient asks for a medicine or "what can I order", call check_medicine_stock with their mobile number first; it says how much they may order. For "my prescriptions", pass medicine_name "my prescriptions". If order_medicine refuses with a limit, offer the allowed number of packs it gives. If it says a refill is too early, the prescription is used up or expired, offer a refill request to the doctor (Records Agent) or a consultation. If it mentions an allergy, offer a person (Support Agent). Prescription medicines are checked by a pharmacist before dispatch: say so, and read out the order ID (PHARM-) and the new balance.
+   ```
+4. **Save → Publish.**
+5. **Staff accounts (website, not Talkdesk):** sign in at `/admin` as the admin → **Staff accounts** → create one
+   **doctor** account (pick the doctor) and one **pharmacist** account. Each signs in at `/admin` with their own ID:
+   doctors land on **Prescribe**, pharmacists on the **Pharmacist desk**. Before go-live, the pharmacist opens
+   **Limits** and signs off (or changes) every demo number.
+6. **Render (optional):** `PAYMENT_HOLD_MIN` (default 30), `DELIVERY_PROVIDER` (default `simulated`),
+   `DELIVERY_WEBHOOK_SECRET` (only when a real courier is connected).

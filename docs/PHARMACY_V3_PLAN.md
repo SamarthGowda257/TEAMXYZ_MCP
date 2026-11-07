@@ -1,6 +1,9 @@
 # Pharmacy V3: prescription-controlled medicine ordering (plan)
 
-Status: proposal, 7 Nov 2026. Nothing here is built yet. It extends what V2 already has.
+Status: **built** 7 Nov 2026 (`app/services/rx.py`, `delivery.py`, `staff_api.py`, the Prescribe / Pharmacist desk /
+Staff screens, "My prescriptions" on the portal; tests in `tests/test_pharmacy_v3.py`). Still open: section 10
+(courier partner, pharmacist sign-off of the demo limits, legal review). Courier runs as `simulated` until a partner
+is chosen. Uploaded files are stored in the database (4 MB cap); move them to private object storage before real use.
 
 ## 1. What already works (V2) and what's missing
 

@@ -243,3 +243,64 @@ body:has(.ad-shell) #tdWebchat, body:has(.ad-login) #tdWebchat { display: none !
   background: var(--warn-tint); border: 1px solid var(--warn-ink);
   border-radius: var(--radius); padding: 12px 14px;
 }
+
+/* ---- shared form and layout pieces ----------------------------------------
+   Used by every CRUD section and the clinical desks (Prescribe, Pharmacist, Staff). */
+.ad-stack { display: grid; gap: 16px; min-width: 0; }
+.ad-page-head h1 { font-family: var(--font-display); font-size: 1.375rem; margin: 0; }
+.ad-page-head p { color: var(--muted); font-size: var(--step-small); margin: 4px 0 0; max-width: 68ch; }
+.ad-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px 16px; align-items: start; }
+.ad-field-span { grid-column: 1 / -1; }
+.ad-field label, .ad-field-label { font-size: var(--step-small); font-weight: 700; color: var(--ink-soft); }
+.ad-field .hint { font-size: .8125rem; color: var(--faint); }
+.ad-checks { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.ad-select { position: relative; }
+.ad-select select { appearance: none; padding-right: 32px; width: 100%; }
+.ad-select svg { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--muted); }
+.ad-mini {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 4px 11px;
+  border: 1px solid var(--line-strong); background: #fff; color: var(--ink); border-radius: 8px;
+  font: 700 .8125rem var(--font-text); cursor: pointer; text-decoration: none;
+}
+.ad-mini:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-deep); }
+.ad-mini:disabled { opacity: .5; cursor: not-allowed; }
+.ad-mini-accent { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.ad-mini-accent:hover:not(:disabled) { background: var(--accent-deep); color: var(--accent-ink); }
+.ad-mini-danger { color: var(--alert); border-color: #e3b7b2; }
+.ad-mini-danger:hover:not(:disabled) { border-color: var(--alert); color: var(--alert); }
+.ad-confirm { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ad-confirm-q { font-size: .8125rem; color: var(--alert); font-weight: 700; }
+.ad-input-sm { min-height: 32px; padding: 4px 10px; font-size: .8125rem; width: 220px; max-width: 100%; }
+.ad-sub { display: block; font-size: .8125rem; color: var(--faint); }
+.ad-warn { color: var(--warn); font-weight: 700; font-size: var(--step-small); }
+.ad-dim { color: var(--faint); }
+.ad-sheet { background: #fff; border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.ad-sheet-head { display: flex; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.ad-sheet-head h2 { font-size: 1.0625rem; margin: 0; }
+.ad-sheet-head p { color: var(--muted); font-size: var(--step-small); margin: 2px 0 0; }
+.ad-sheet-body { padding: 16px 20px; }
+.ad-sheet-foot { padding: 12px 20px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; }
+
+/* clinical desks */
+.ad-pick { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.ad-pick button { width: 100%; text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 10px 14px; cursor: pointer; font: inherit; }
+.ad-pick button:hover, .ad-pick button.is-on { border-color: var(--accent); background: var(--accent-tint); }
+.ad-rx-line { border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px 14px; margin: 0; display: grid; gap: 10px; min-width: 0; }
+.ad-rx-line legend { font-weight: 700; font-size: var(--step-small); padding: 0 6px; color: var(--ink-soft); }
+.ad-rx-dose { grid-column: 1 / -1; margin: 0; font-size: var(--step-small); color: var(--ok); font-weight: 700; }
+.ad-rx-dose.is-over { color: var(--alert); }
+.ad-lines { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
+.ad-lines li { border-left: 3px solid var(--accent-edge); padding-left: 10px; }
+@media (max-width: 640px) {
+  .ad-input-sm { width: 100%; }
+  .ad-form-grid { grid-template-columns: 1fr; }
+}
+
+/* server messages after a write: bottom right, announced politely */
+.ad-notes { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 60; max-width: min(420px, calc(100vw - 32px)); }
+.ad-note-card { display: flex; align-items: flex-start; gap: 10px; background: #fff; border: 1px solid var(--line-strong); border-left: 4px solid var(--ok); border-radius: 10px; padding: 10px 12px; box-shadow: 0 6px 24px rgba(15, 46, 43, .12); }
+.ad-note-card p { margin: 0; font-size: var(--step-small); flex: 1; }
+.ad-note-card button { border: 0; background: none; cursor: pointer; color: var(--muted); }
+.ad-note-ok svg:first-child { color: var(--ok); }
+.ad-note-bad { border-left-color: var(--alert); }
+.ad-note-bad svg:first-child { color: var(--alert); }

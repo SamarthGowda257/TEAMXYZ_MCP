@@ -269,7 +269,8 @@ def orders_list(status: str = "", limit: int = Query(default=80, le=300)):
     return {"total": len(rows), "orders": [{**_row(r), "phone": mask_phone(r["phone"])} for r in rows]}
 
 
-ORDER_STATES = {"awaiting_payment", "awaiting_stock", "confirmed", "dispatched", "delivered", "cancelled"}
+ORDER_STATES = {"awaiting_payment", "awaiting_stock", "awaiting_review", "confirmed", "dispatched", "delivered",
+                "ready_for_pickup", "cancelled"}
 
 
 @router.post("/orders/{pk}/status", dependencies=[Guard])
@@ -278,8 +279,17 @@ def order_status(pk: int, body: dict):
     if new not in ORDER_STATES:
         raise HTTPException(400, detail={"error_code": "invalid_input",
                                          "message": f"Status must be one of: {', '.join(sorted(ORDER_STATES))}."})
+    if new == "cancelled":                     # a staff cancel gives back credits, stock and prescription days
+        from .services import pharmacy as ph
+        res = ph.reject(pk, clean(body.get("reason", "")) or "Cancelled by the hospital", "staff console")
+        if not res.ok:
+            raise HTTPException(400, detail={"error_code": res.error_code, "message": res.message})
+        return {"ok": True, "message": res.message}
     with db.engine.begin() as c:
         o = _one(c, db.pharmacy_orders, pk)
+        if new in ("confirmed", "dispatched", "delivered") and o["verification"] == "pending_pharmacist":
+            raise HTTPException(400, detail={"error_code": "not_allowed",
+                                             "message": "A pharmacist must check this order first (Pharmacist desk)."})
         c.execute(update(db.pharmacy_orders).where(db.pharmacy_orders.c.id == pk).values(status=new))
         _log(c, "staff_order_status", o["order_code"], f"Order {o['order_code']} marked {new}", o["patient_id"])
     return {"ok": True, "message": f"Order {o['order_code']} is now {new}."}

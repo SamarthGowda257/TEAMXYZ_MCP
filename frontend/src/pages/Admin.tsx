@@ -14,12 +14,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import {
-  BookOpen, Building2, CalendarDays, ExternalLink, FlaskConical, Gauge, LayoutDashboard, LifeBuoy,
-  LogOut, MessagesSquare, PhoneOutgoing, Pill, ShieldCheck, Stethoscope, Users, Wallet,
+  BookOpen, Building2, CalendarDays, ClipboardCheck, ExternalLink, FilePenLine, FlaskConical, Gauge, LayoutDashboard,
+  LifeBuoy, LogOut, MessagesSquare, PhoneOutgoing, Pill, ShieldCheck, Stethoscope, UserCog, Users, Wallet,
 } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Mark } from "../components/Site";
-import { Loading } from "./adminKit";
+import { Loading, Notices } from "./adminKit";
 import { AdminInsurance, AdminKnowledge, AdminTests } from "./AdminHospital";
 import { Today } from "./admin/Today";
 import { Escalations } from "./admin/Escalations";
@@ -32,6 +32,9 @@ import { Departments } from "./admin/Departments";
 import { Pharmacy } from "./admin/Pharmacy";
 import { Wallets } from "./admin/Wallets";
 import { SystemView } from "./admin/SystemView";
+import { Prescribe } from "./admin/Prescribe";
+import { Pharmacist } from "./admin/Pharmacist";
+import { Staff } from "./admin/Staff";
 
 /* The human's actual replies happen in Talkdesk Conversations; this console is the context,
    the control surface and the record beside it. */
@@ -56,9 +59,9 @@ export function AdminLogin({ onDone, lostCookie }: { onDone: () => void; lostCoo
       <form className="ad-login-card" onSubmit={submit}>
         <Mark size={44} />
         <h1>WellNest staff console</h1>
-        <p className="ad-login-sub">Appointments, escalations, the pharmacy, wallets and the whole patient record.</p>
+        <p className="ad-login-sub">Administrators, doctors and pharmacists sign in here with their own staff ID.</p>
         <div className="field">
-          <label htmlFor="au">Admin ID</label>
+          <label htmlFor="au">Staff ID</label>
           <input id="au" className="input" autoComplete="username" value={username}
                  onChange={(e) => setUsername(e.target.value)} required />
         </div>
@@ -91,6 +94,15 @@ const NAV = [
   { to: "/admin/patients", label: "Patients", icon: Users },
 ];
 
+/* The clinical desks. A doctor sees only Prescribe, a pharmacist only the Pharmacist desk; the admin sees all. */
+const CLINICAL_NAV = [
+  { to: "/admin/prescribe", label: "Prescribe", icon: FilePenLine, roles: ["admin", "doctor"] },
+  { to: "/admin/pharmacist", label: "Pharmacist desk", icon: ClipboardCheck, roles: ["admin", "pharmacist"] },
+  { to: "/admin/staff", label: "Staff accounts", icon: UserCog, roles: ["admin"] },
+];
+
+type Me = { user: string; role: "admin" | "doctor" | "pharmacist"; name?: string };
+
 const REF_NAV = [
   { to: "/admin/doctors", label: "Doctors", icon: Stethoscope },
   { to: "/admin/departments", label: "Departments", icon: Building2 },
@@ -104,6 +116,7 @@ const REF_NAV = [
 
 export function Admin() {
   const [who, setWho] = useState<string | null>(null);
+  const [role, setRole] = useState<Me["role"]>("admin");
   const [checked, setChecked] = useState(false);
   /* Lifted here so Escalations, Conversations and Wallets can all open the same patient record. */
   const [openPatient, setOpenPatient] = useState<number | null>(null);
@@ -117,8 +130,8 @@ export function Admin() {
 
   const check = useCallback(async () => {
     try {
-      const r = await api<{ user: string }>("/api/admin/me");
-      setWho(r.user); setLostCookie(false);
+      const r = await api<Me>("/api/admin/me");
+      setWho(r.name || r.user); setRole(r.role || "admin"); setLostCookie(false);
     } catch {
       setWho(null);
       if (signedIn.current) setLostCookie(true);
@@ -163,14 +176,22 @@ export function Admin() {
       <aside className="ad-side">
         <div className="ad-brand"><Mark size={30} /><span>WellNest<small>Staff console</small></span></div>
         <nav aria-label="Admin">
-          <p className="ad-nav-h">Operations</p>
-          {NAV.map(({ to, end, label, icon: Icon }) => (
-            <NavLink key={to} to={to} end={end}><Icon size={18} aria-hidden="true" /> {label}</NavLink>
-          ))}
-          <p className="ad-nav-h">The hospital</p>
-          {REF_NAV.map(({ to, label, icon: Icon }) => (
+          {role === "admin" && <>
+            <p className="ad-nav-h">Operations</p>
+            {NAV.map(({ to, end, label, icon: Icon }) => (
+              <NavLink key={to} to={to} end={end}><Icon size={18} aria-hidden="true" /> {label}</NavLink>
+            ))}
+          </>}
+          <p className="ad-nav-h">Clinical</p>
+          {CLINICAL_NAV.filter((n) => n.roles.includes(role)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to}><Icon size={18} aria-hidden="true" /> {label}</NavLink>
           ))}
+          {role === "admin" && <>
+            <p className="ad-nav-h">The hospital</p>
+            {REF_NAV.map(({ to, label, icon: Icon }) => (
+              <NavLink key={to} to={to}><Icon size={18} aria-hidden="true" /> {label}</NavLink>
+            ))}
+          </>}
         </nav>
         <a className="ad-side-out" href={TALKDESK_CONVERSATIONS} target="_blank" rel="noreferrer">
           <ExternalLink size={16} aria-hidden="true" /> Talkdesk Conversations
@@ -185,9 +206,20 @@ export function Admin() {
             <LogOut size={15} aria-hidden="true" /> Sign out
           </button>
         </header>
+        <Notices>
         <div className="ad-body">
+          {role !== "admin" ? (
+            <Routes>
+              {role === "doctor" && <Route path="prescribe" element={<Prescribe />} />}
+              {role === "pharmacist" && <Route path="pharmacist" element={<Pharmacist />} />}
+              <Route path="*" element={<Navigate to={role === "doctor" ? "/admin/prescribe" : "/admin/pharmacist"} replace />} />
+            </Routes>
+          ) : (
           <Routes>
             <Route index element={<Today />} />
+            <Route path="prescribe" element={<Prescribe />} />
+            <Route path="pharmacist" element={<Pharmacist />} />
+            <Route path="staff" element={<Staff />} />
             <Route path="today" element={<Navigate to="/admin" replace />} />
             <Route path="escalations" element={<Escalations onPatient={toPatient} />} />
             <Route path="appointments" element={<Appointments />} />
@@ -206,7 +238,9 @@ export function Admin() {
             <Route path="system" element={<SystemView />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
+          )}
         </div>
+        </Notices>
       </div>
     </div>
   );

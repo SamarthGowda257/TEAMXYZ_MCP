@@ -1194,7 +1194,9 @@ PAGES = ["/", "/about", "/architecture", "/checkin", "/specialities", "/visitors
          "/portal/pharmacy", "/portal/wallet",
          # the staff console absorbed the old dashboard; these keep deep links working
          "/admin/today", "/admin/pharmacy", "/admin/orders", "/admin/wallets", "/admin/outbound",
-         "/admin/system", "/admin/calls"]
+         "/admin/system", "/admin/calls",
+         # Pharmacy V3: doctors, pharmacists, staff accounts; patient prescriptions
+         "/admin/prescribe", "/admin/pharmacist", "/admin/staff", "/portal/prescriptions"]
 
 
 def spa():

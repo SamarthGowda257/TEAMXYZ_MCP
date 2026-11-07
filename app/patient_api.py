@@ -46,7 +46,7 @@ router = APIRouter(prefix="/api/me")
 
 INV, ORD, TXN, SHARE = db.pharmacy_inventory, db.pharmacy_orders, db.health_credit_txns, db.wallet_shares
 MAX_QTY = 20                      # the pharmacy service caps a line at 20 packs; say so instead of silently clamping
-CANCELLABLE = ("awaiting_payment", "awaiting_stock", "confirmed")
+CANCELLABLE = ("awaiting_payment", "awaiting_stock", "awaiting_review", "confirmed")
 SCHEDULE_NOTE = {
     "OTC": "No prescription needed.",
     "H": "Prescription medicine (Schedule H): we need a doctor's prescription from the last 6 months on your record.",

@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle, Check, Minus, Package, Plus, Search, Snowflake, Trash2, Truck,
+  AlertTriangle, Check, FileUp, Minus, Package, Plus, Search, Snowflake, Trash2, Truck,
 } from "lucide-react";
 import { PortalShell } from "../components/PortalShell";
 import { api, rupees } from "../lib/api";
@@ -33,6 +33,18 @@ type OrderView = {
 type Quote = {
   ok?: boolean; message?: string; error_code?: string;
   data?: Record<string, unknown> & { needs?: string };
+};
+
+type MyRx = {
+  item_id: number; rx_code: string; ingredient: string; dose: string; doctor: string | null; valid_until: string | null;
+  days_left: number; next_refill_from: string | null; status: string; stop_reason: string | null;
+};
+type MyRxResp = { message: string; prescriptions: MyRx[]; uploads: { upload_code: string; file_name: string; status: string; reason: string | null }[] };
+
+const STATUS_WORDS: Record<string, string> = {
+  awaiting_payment: "waiting for payment", awaiting_stock: "waiting for stock", awaiting_review: "pharmacist checking",
+  confirmed: "being packed", dispatched: "on the way", delivered: "delivered", cancelled: "cancelled",
+  ready_for_pickup: "ready to collect", returned: "returned and refunded",
 };
 
 const SCHEDULE_TONE: Record<string, string> = { OTC: "chip-ok", H: "chip-warn", H1: "chip-warn", X: "chip-alert" };
@@ -211,6 +223,8 @@ export function Pharmacy() {
             )}
           </section>
 
+          <MyPrescriptions />
+
           <section className="shop-orders">
             <h2>Your orders</h2>
             {orders.data?.orders?.length ? (
@@ -219,7 +233,7 @@ export function Pharmacy() {
                   <li key={o.order_id}>
                     <div>
                       <strong className="code">{o.order_id}</strong>
-                      <span className="chip chip-quiet">{o.status.replace(/_/g, " ")}</span>
+                      <span className="chip chip-quiet">{STATUS_WORDS[o.status] || o.status.replace(/_/g, " ")}</span>
                     </div>
                     <p className="num">{rupees(o.total_inr)} · {o.credits_used ? `${o.credits_used.toLocaleString("en-IN")} credits` : "unpaid"}</p>
                     {o.eta && <p className="shop-eta"><Truck size={14} aria-hidden="true" /> {o.eta}</p>}
@@ -241,6 +255,69 @@ export function Pharmacy() {
       </div>
       </>)}
     </PortalShell>
+  );
+}
+
+/* What the patient can order on their prescriptions, and uploading one from another hospital. The pharmacist
+   checks every upload; nothing here decides what may be sent. */
+function MyPrescriptions() {
+  const mine = useApi<MyRxResp>("/api/me/prescriptions");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) { setMsg({ ok: false, text: "The file must be under 4 MB." }); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).split(",")[1] || "");
+        r.onerror = () => rej(new Error("read"));
+        r.readAsDataURL(file);
+      });
+      const r = await api<{ message: string }>("/api/me/prescriptions/upload", {
+        method: "POST", body: { file_name: file.name, content_type: file.type, data } });
+      setMsg({ ok: true, text: r.message });
+      mine.reload?.();
+    } catch (e: any) {
+      setMsg({ ok: false, text: e?.message || "That didn't upload. Please try again." });
+    } finally { setBusy(false); }
+  };
+
+  const active = mine.data?.prescriptions.filter((p) => p.status === "active") || [];
+  return (
+    <section className="shop-orders">
+      <h2>My prescriptions</h2>
+      {mine.loading && !mine.data ? <p className="quiet">Reading your prescriptions…</p> : active.length ? (
+        <ul>
+          {active.map((p) => (
+            <li key={p.item_id}>
+              <div><strong>{p.ingredient}</strong> <span className="chip chip-quiet">{p.dose}</span></div>
+              <p className="quiet">{p.doctor || "Your doctor"} · {p.rx_code} · about {p.days_left} days left</p>
+              {p.next_refill_from && <p className="shop-note">Next refill from {p.next_refill_from}.</p>}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="quiet">No active prescriptions on file. Medicines that need one can't be sent without it.</p>}
+      {!!mine.data?.uploads.length && (
+        <ul>
+          {mine.data.uploads.slice(0, 3).map((u) => (
+            <li key={u.upload_code}>
+              <div><strong className="code">{u.upload_code}</strong> <span className="chip chip-quiet">{u.status}</span></div>
+              {u.reason && <p className="shop-note">{u.reason}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+      <label className="btn btn-quiet btn-sm shop-upload">
+        <FileUp size={15} aria-hidden="true" /> {busy ? "Uploading…" : "Upload a prescription"}
+        <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" disabled={busy}
+               onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }} />
+      </label>
+      <p className="shop-fine">From another hospital? A photo or PDF, under 4 MB. Our pharmacist checks it, usually within a few hours.</p>
+      {msg && <p className={msg.ok ? "shop-fine" : "error-text"} role="status">{msg.text}</p>}
+    </section>
   );
 }
 
