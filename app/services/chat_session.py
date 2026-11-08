@@ -129,10 +129,10 @@ def _open_session(session_code, interaction_id="", caller_id="") -> Result:
     # with the agent that called the tool, so the next team asked again (seen live 8 Nov). The signed-in patient's own
     # number and date of birth are therefore said in this reply, in their own authenticated chat, never on a call.
     dob = p["date_of_birth"].strftime("%d-%m-%Y") if p.get("date_of_birth") else ""
-    local = p["phone"][-10:]
-    msg += (f" Your chat ID is {code}: it stands in for your mobile number and date of birth in this chat, so you "
-            f"won't need to type them (account mobile {local}" + (f", date of birth {p['date_of_birth'].day} "
-            f"{p['date_of_birth']:%B %Y})." if dob else ").")) if code else ""
+    # Every tool now reads the signed-in page from Talkdesk's Caller ID, so nothing has to be said in the chat to carry
+    # the identity (the chat ID still works in phone/date_of_birth, kept in data only).
+    if code:
+        msg += " I'll use the details on your account, so you won't need to type your mobile number or date of birth."
     data.update(patient_phone=p["phone"], date_of_birth=dob, chat_id=code, patient_name=p["full_name"], signed_in=True,
                 earlier=[{"date": m["date"], "summary": m["summary"][:140]} for m in (earlier.data or {}).get("matches", [])])
     return Result(True, msg, data, related=res.related)

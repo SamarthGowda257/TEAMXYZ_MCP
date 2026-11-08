@@ -52,7 +52,8 @@ def test_code_opens_the_right_patient_and_marks_them_signed_in():
     assert r.data["patient_phone"] == p["phone"] and r.data["signed_in"] is True
     assert pt.recently_verified(p["phone"])
     # the details are said in the reply: only text in the conversation reaches the next Talkdesk agent
-    assert f"Your chat ID is {code}" in r.message and "date of birth 10 September 1981" in r.message
+    assert "won't need to type your mobile number or date of birth" in r.message
+    assert "9845000004" not in r.message and code not in r.message      # nothing private or internal is said
     assert r.data["chat_id"] == code
     # both identity values reach the agent, so a specialist can call any tool without asking
     assert r.data["date_of_birth"] == "10-09-1981"
