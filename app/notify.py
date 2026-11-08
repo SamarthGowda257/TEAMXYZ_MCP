@@ -14,7 +14,7 @@ import time
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import case, func, insert, select, update
 
 from . import config, db, email_ui
 
@@ -144,11 +144,20 @@ def _send_one(row) -> tuple[str, str | None]:
 
 
 def flush(limit: int = 20) -> int:
+    N = db.notifications
     n = 0
     with db.engine.connect() as c:
-        rows = c.execute(select(db.notifications).where(db.notifications.c.status == "queued",
-                                                        db.notifications.c.attempts < 3)
-                         .order_by(db.notifications.c.id).limit(limit)).mappings().all()
+        # emails first: a backlog of calendar syncs must never hold up a booking confirmation
+        rows = c.execute(select(N).where(N.c.status == "queued", N.c.attempts < 3)
+                         .order_by(case((N.c.channel == "email", 0), else_=1), N.c.id).limit(limit)).mappings().all()
+        # a calendar sync pushes the event's latest state, so only the newest queued row per event needs sending
+        newest = dict(c.execute(select(N.c.to_address, func.max(N.c.id)).where(
+            N.c.status == "queued", N.c.channel == "calendar").group_by(N.c.to_address)).all())
+    stale = [r["id"] for r in rows if r["channel"] == "calendar" and newest.get(r["to_address"], r["id"]) > r["id"]]
+    if stale:
+        with db.engine.begin() as c:
+            c.execute(update(N).where(N.c.id.in_(stale)).values(status="sent", error="superseded", sent_at=config.now()))
+    rows = [r for r in rows if r["id"] not in stale]
     for r in rows:
         status, err = _send_one(r)
         if status == "failed" and r["attempts"] < 2:

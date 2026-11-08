@@ -287,3 +287,47 @@ def test_past_orders_are_found_by_condition():
     search.sync()
     r = sp.search_interactions(RAHUL, "", "Have I ever ordered anything for my diabetes?")
     assert r.ok and code in r.message
+
+
+def _cal_rows(ref_):
+    with db.engine.connect() as c:
+        return c.execute(select(db.notifications).where(db.notifications.c.channel == "calendar",
+                                                        db.notifications.c.to_address == ref_)).mappings().all()
+
+
+def test_unchanged_calendar_event_is_not_synced_again(monkeypatch):
+    """Live: reminder jobs re-queued the same Google sync every minute (647 rows in 25 minutes)."""
+    from datetime import datetime
+    from app import google
+    from app.services import calendar as cal
+    monkeypatch.setattr(google, "configured", lambda: True)
+    p = _rahul()
+    kw = dict(ref="refill-rx:test", patient=p, kind="refill", title="Refill alert", starts_at=datetime(2026, 11, 9, 9),
+              minutes=0, all_day=True, details="Reorder")
+    for _ in range(3):
+        with db.engine.begin() as c:
+            cal.upsert(c, **kw)
+    assert len(_cal_rows("refill-rx:test")) == 1
+    with db.engine.begin() as c:
+        cal.upsert(c, **dict(kw, title="Refill alert (changed)"))
+    assert len(_cal_rows("refill-rx:test")) == 2
+
+
+def test_emails_go_before_calendar_and_old_syncs_are_skipped(monkeypatch):
+    from app import google, notify
+    monkeypatch.setattr(google, "configured", lambda: True)
+    synced, mailed = [], []
+    from app.services import calendar as cal
+    monkeypatch.setattr(cal, "sync", lambda ref_: (synced.append(ref_), ("sent", None))[1])
+    monkeypatch.setattr(notify, "_send_email", lambda row: (mailed.append(row["id"]), ("sent", None))[1])
+    with db.engine.begin() as c:
+        for i in range(3):
+            notify.queue(c, patient_id=None, channel="calendar", template="gcal_sync", to="WN-1", dedupe_key=f"t:{i}")
+        notify.queue(c, patient_id=None, channel="email", template="t", to="x@gmail.com", subject="s", body="b")
+    notify.flush(2)                       # room for two: the email goes first, the oldest WN-1 sync is skipped
+    assert mailed and synced == []
+    notify.flush(2)
+    notify.flush(2)
+    assert synced == ["WN-1"]             # only the newest of the three is sent to Google
+    rows = _cal_rows("WN-1")
+    assert [r["error"] for r in rows].count("superseded") == 2 and all(r["status"] == "sent" for r in rows)

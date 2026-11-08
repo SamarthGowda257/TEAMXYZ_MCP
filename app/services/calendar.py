@@ -46,6 +46,13 @@ def upsert(conn, *, ref: str, patient: dict, kind: str, title: str, starts_at: d
                 all_day=all_day, details=details, location=(location or HOSPITAL_ADDRESS)[:200],
                 attendees=attendees_for(patient, caregiver), status="active", updated_at=config.now())
     row = conn.execute(select(CE).where(CE.c.ref == ref)).mappings().first()
+    same = row and row["status"] == "active" and all(
+        (row[k] or None) == (vals[k] or None) for k in ("patient_id", "kind", "title", "starts_at", "minutes", "all_day",
+                                                        "details", "location")) and \
+        sorted(row["attendees"] or []) == sorted(vals["attendees"] or [])
+    if same:
+        # Reminder jobs call this every minute: an unchanged event must not queue another Google sync
+        return dict(vals, ref=ref, sequence=row["sequence"])
     if row:
         seq = row["sequence"] + 1
         conn.execute(update(CE).where(CE.c.id == row["id"]).values(sequence=seq, sync_status="pending", sync_error=None, **vals))

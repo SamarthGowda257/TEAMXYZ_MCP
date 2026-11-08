@@ -752,15 +752,19 @@ def _outbox_status():
                              .order_by(N.c.id.desc()).limit(30)).all()
             waiting = c.execute(select(func.count(), func.min(N.c.created_at), func.max(N.c.attempts))
                                 .where(N.c.status == "queued")).first()
-            err = c.execute(select(N.c.error).where(N.c.error.isnot(None), N.c.channel.in_(("email", "calendar")))
+            err = c.execute(select(N.c.error).where(N.c.error.isnot(None), N.c.status.in_(("failed", "queued")),
+                                                    N.c.channel.in_(("email", "calendar")))
                             .order_by(N.c.id.desc()).limit(1)).scalar()
+            last_sent = {ch: str(c.execute(select(func.max(N.c.sent_at)).where(
+                N.c.channel == ch, N.c.status == "sent", N.c.error.is_(None))).scalar() or "")[:16] or None
+                for ch in ("email", "calendar")}
     except Exception as e:
         return {"error": str(e)[:120]}
     counts: dict = {}
     for ch, st, _ in rows:
         counts[f"{ch}:{st}"] = counts.get(f"{ch}:{st}", 0) + 1
     return {"recent": counts, "queued_total": waiting[0], "oldest_queued": str(waiting[1])[:16] if waiting[1] else None,
-            "max_attempts": waiting[2], "last_error": (err or "")[:160] or None}
+            "max_attempts": waiting[2], "last_sent": last_sent, "last_error": (err or "")[:160] or None}
 
 
 def _search_status():
