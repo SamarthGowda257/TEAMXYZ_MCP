@@ -193,3 +193,39 @@ text from section A above.
 
 Then tell me; I'll re-run: insurance as the first message, greeting then balance, booking a dentist, last-chat recall,
 and an order, all while signed in, plus one signed-out chat to make sure nothing changed for patients who aren't.
+
+---
+
+## G. Signed-in chat that doesn't depend on the AI's wording (8 Nov night), about 20 minutes
+**Why F wasn't enough (live tests 18:55):** the Receptionist rewrites every reply and dropped the chat ID, and it
+routed "Will my insurance cover…" straight to Billing. Anything the AI has to *say* is unreliable.
+**The fix:** Talkdesk fills system variables itself. For a web chat, **Caller ID** is the page address, which carries
+the signed-in session. Every tool that takes a phone number now has a new optional input `caller_id`; map it to that
+system variable and the server knows the patient, whichever agent is talking. `phone` is now optional on these tools.
+
+### G1. MCP Servers → WellNest_TeamXYZ_MCP → Refresh
+Still 47 tools. Each phone tool now shows an extra input `caller_id`.
+
+### G2. In each skill below: open it (no re-add) → `caller_id` → **System variables → Caller ID** → Save
+| Agent | Skills to open |
+|---|---|
+| Booking Agent | `verify_patient`, `book_appointment` |
+| Changes Agent | `verify_patient`, `find_appointments`, `cancel_appointment`, `reschedule_appointment` |
+| Support Agent | `search_past_interactions`, `save_interaction_note` |
+| Records Agent | `track_medicine_order`, `get_lab_report_status`, `email_lab_report`, `get_visit_history`, `request_prescription_refill` |
+| Billing and Insurance Agent | `check_coverage`, `get_bill_status`, `send_payment_link`, `request_credits_refund` |
+| Pharmacy and HealthCredits Agent | `check_medicine_stock`, `order_medicine`, `get_health_credits_balance`, `pay_with_health_credits` |
+| Care Assist Agent (optional) | `get_patient_preferences`, `request_assistance`, `send_caregiver_update` |
+| Aftercare Agent (optional) | `record_checkin`, `schedule_followup` |
+
+Leave `register_patient` and everything else as it is. If an opened skill doesn't show `caller_id` after the refresh,
+remove that skill and add it again with its usual mappings plus `caller_id` → Caller ID (tell me which, I'll check).
+
+### G3. Same agents (Booking, Changes, Support, Records, Billing and Insurance, Pharmacy and HealthCredits): add one line at the end of Instructions
+```
+SIGNED IN: Your tools recognise a patient who is signed in on the website by themselves. Call the tool straight away without asking for a mobile number or date of birth; ask for them only if the tool replies not_verified.
+```
+
+### G4. Top Save → Publish
+Then tell me and I'll re-run the signed-in tests (insurance first, balance, dentist booking, recall, an order) and one
+signed-out chat.
