@@ -1,7 +1,11 @@
 """Booking email + calendar: only promise an email that will really be sent; demo override reaches calendar guests."""
 
-from app import config, notify
-from app.services import calendar as cal
+import os
+
+os.environ.setdefault("MCP_BEARER_TOKEN", "test-token")      # same as the other test files, whichever loads first
+
+from app import config, notify  # noqa: E402
+from app.services import calendar as cal  # noqa: E402
 
 
 def test_will_email_needs_a_transport(monkeypatch):
