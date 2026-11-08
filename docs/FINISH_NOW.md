@@ -252,3 +252,12 @@ SIGNED IN: Your tools recognise a patient who is signed in on the website by the
 Then check the Booking skills `verify_patient` and `book_appointment` have `caller_id` → System variables → Caller ID,
 and **Save → Publish**. (Your orchestration showed "V31 – Draft" with Publish still active at 19:50: if you changed
 anything after the last publish, it isn't live until you publish again.)
+
+### H2. Pharmacy and HealthCredits Agent: replace the `ORDERING:` paragraph (1 min)
+**Why:** live 19:50, signed in: "Send me 1 strip of Dolo 650" answered "I need your mobile number and date of birth to
+check your prescription", though the balance question in the same chat worked without asking. Replace the paragraph
+starting `ORDERING:` (and the line after it that starts `After an order is placed`) with:
+```
+ORDERING: Call order_medicine straight away without order_confirm to get the quote; don't ask for the mobile number or date of birth first (it recognises a signed-in patient; ask only if it replies not_verified). Read the items, total, credits to use and delivery time, and ask if they agree. Only after a clear yes call order_medicine again with order_confirm yes. Start the reply with the order ID (PHARM-) and always state the new HealthCredits balance.
+```
+Then **Save → Publish**.
