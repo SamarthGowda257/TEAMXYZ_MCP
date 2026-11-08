@@ -154,6 +154,7 @@ def tool(fn):
             out = {"ok": False, "error_code": "service_unavailable",
                    "message": "Sorry, I couldn't reach the hospital system just now. Please try again in a moment, "
                               "or I can request a call back."}
+        call_info["server_ms"] = round((time.perf_counter() - t0) * 1000)
         _remember_call(fn.__name__, out, call_info)
         metrics.record(fn.__name__, (time.perf_counter() - t0) * 1000, out.get("ok", False), out.get("error_code"),
                        mask_phone(kwargs.get("phone", "")) if isinstance(kwargs.get("phone"), str) else "")
