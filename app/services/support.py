@@ -195,8 +195,10 @@ def search_interactions(phone, dob, query) -> Result:
                 parts.append(line)
         parts = parts[-4:]
         if len(parts) > 1:
+            # only this conversation's items go back: older ones in `matches` were read out as part of "last chat"
             return ok(f"In our last conversation, {when}: " + "; ".join(parts) + ".", search_mode=mode, matched_topic=True,
-                      matches=matches, items=len(parts))
+                      matches=[{"date": x["created_at"].date().isoformat(), "summary": x["body"][:200]} for x in session[:4]],
+                      items=len(parts))
     lead = "I don't see one on that exact topic. The most recent was" if missed else "Yes. Most recently,"
     return ok(f"{lead} {when}: {m['body']}", search_mode=mode, matched_topic=not missed, matches=matches)
 
