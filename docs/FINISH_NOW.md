@@ -70,8 +70,10 @@ Use one Gmail account as "the hospital" (it sends the emails and owns the events
 2. **APIs & Services → Library** → search **Gmail API** → **Enable**. Back → search **Google Calendar API** → **Enable**.
 3. **APIs & Services → OAuth consent screen** (may be called **Google Auth Platform**) → **Get started**:
    app name `WellNest Hospitals`, support email = the hospital Gmail → **External** → contact email → **Create**.
-4. **Audience** → **Publish app** → **Confirm** (status "In production"). Don't skip: in "Testing" the token stops
-   working after 7 days.
+4. **Audience** → **Publish app** → **Confirm** (status must read **In production**). If it still says "Testing",
+   Google blocks the sign-in with "Error 403: access_denied", and a token made in Testing stops working after 7 days.
+   If Publish isn't offered, add the hospital Gmail under **Audience → Test users → + Add users** instead, and redo step 6
+   every 7 days.
 5. **Clients** (or **Credentials → Create credentials → OAuth client ID**) → type **Desktop app** → name `WellNest` →
    **Create**. Keep the **Client ID** and **Client secret** on screen.
 6. On your Mac, in Terminal, in this repo folder, run this (paste your two values in place of the dots):
