@@ -732,12 +732,30 @@ def health():
     return {"ok": True, "service": "WellNest Hospitals MCP + web", "version": config.VERSION, "db": db.db_ok(),
             "db_kind": "postgres" if db.IS_POSTGRES else "sqlite", "db_error": db.DB_ERROR, "db_target": db.db_target() if db.DB_ERROR else None, "time_ist": config.now().isoformat(),
             "email": notify.transport() if config.EMAIL_ENABLED else "simulated", "calendar": _calendar_mode(),
-            "blackboard": _store_status(), "events": _events_backend(), "search": _search_status()}
+            "outbox": _outbox_status(), "blackboard": _store_status(), "events": _events_backend(), "search": _search_status()}
 
 
 def _calendar_mode():
     from . import google
     return "google" if google.configured() else ("ics_invite" if notify.transport() != "none" else "simulated")
+
+
+def _outbox_status():
+    """Counts of the last 30 email/calendar sends and the newest failure (first words only), so a broken Google
+    connection shows up without signing in. No addresses or content."""
+    from sqlalchemy import select
+    N = db.notifications
+    try:
+        with db.engine.connect() as c:
+            rows = c.execute(select(N.c.channel, N.c.status, N.c.error).where(N.c.channel.in_(("email", "calendar")))
+                             .order_by(N.c.id.desc()).limit(30)).all()
+    except Exception:
+        return None
+    counts: dict = {}
+    for ch, st, _ in rows:
+        counts[f"{ch}:{st}"] = counts.get(f"{ch}:{st}", 0) + 1
+    err = next((e for _, st, e in rows if st in ("failed", "queued") and e), None)
+    return {"recent": counts, "last_error": (err or "")[:120] or None}
 
 
 def _search_status():
