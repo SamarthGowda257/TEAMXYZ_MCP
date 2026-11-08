@@ -277,6 +277,6 @@ IDS IN CHAT: In a chat, write booking, order and reference IDs exactly as the to
 | Book a dentist on 12 Nov afternoon (first message) | Slots offered, booked WN-70042, nothing asked |
 | Send 1 strip of Dolo 650 | Asked only for a delivery address (none on the new account), quote 82 rupees, placed PHARM-84887 |
 | Upcoming appointments | Both listed, nothing asked |
-| Insurance, balance, next appointment, last-chat recall (20:46 round) | Answered, nothing asked |
+| Insurance, balance, next appointment, last-chat recall (19:46 round) | Answered, nothing asked |
 `/health` → `chat_link.recent_tool_calls` shows each tool call with `signed_in_page: true`, so it can be checked
 any time without signing in to Talkdesk.
