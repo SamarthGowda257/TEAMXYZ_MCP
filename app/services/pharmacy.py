@@ -311,8 +311,9 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
         subtotal = sum(i["line_total"] for i in items)
         fee = 0 if subtotal >= FREE_DELIVERY_FROM else DELIVERY_FEE
         total = subtotal + fee
-        if not address:
-            return fail("invalid_input", "Which address should we deliver to?")
+        if not address:                   # name what is being ordered, so a misheard quantity is caught here
+            what = ", ".join(f"{i['qty']} x {i['name'].split(' (')[0]}" for i in items)
+            return fail("invalid_input", f"Which address should we deliver {what} to?", order_items=what)
         zone, eta = _zone(address)
         backorder = any(i["backorder"] for i in items)
         if backorder:
