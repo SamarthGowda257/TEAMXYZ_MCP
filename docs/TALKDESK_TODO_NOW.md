@@ -107,3 +107,56 @@ Top **Save** → **Publish**.
 ## Then tell me
 Say "done" and I'll run the live chat tests: memory across chats, the refund, Dolo limits, "what can I order",
 an antibiotic without a prescription, and an order going through the pharmacist desk.
+
+---
+
+# Round 2 (8 Nov, after the live chat test). Only these 5 items.
+
+Live test results: identity, "no upcoming bookings", balance, Dolo limits, "what can I order", prescription refusal,
+ordering with the pharmacist check, order tracking, memory across chats and complaints all work. Four things didn't,
+and these items fix them. Server-side fixes (order ID and complaint reference now come last in the reply; a past-order
+question that lands on the pharmacy now answers from the patient's history) are already live.
+
+## R1. Billing and Insurance Agent: map the refund's confirm (2 min)
+**Why:** "yes" to a refund gave "Sorry, I cannot handle your request right now" twice; nothing was refunded. Every
+other two-step action (like medicine orders) has its confirm mapped to a variable and works.
+1. **{ } → + Add variable** `refund_confirm`, description:
+   ```
+   yes only after the patient has heard the refund amount and clearly agreed to it. Otherwise empty.
+   ```
+2. **Billing and Insurance Agent → request_credits_refund** (just open it, no re-add) → **confirm → Variables → `refund_confirm`** → Save.
+3. In its instructions, in the REFUNDS paragraph, change `with confirm yes` (or `confirm=yes`) to `with refund_confirm yes`.
+
+## R2. Conditions box: replace again (1 min)
+**Why:** "Have I ever ordered anything for my diabetes?" went to the Pharmacy agent instead of the memory search.
+**Skip if** your box already contains `what they ordered, booked or asked before`. Paste (1,937 characters):
+```
+1. Support Agent: FIRST CHECK. Re-route every new topic. Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning, suicidal thoughts (urgent handoff). Also: wants a person, call back or to complain; asks about past chats, a handoff, or what they ordered, booked or asked before; asks us to remember something; asks who they are or if we know them; asks about their own record without giving a mobile number.
+2. Outreach Agent: says WellNest just called, was transferred from a WellNest call, or answers a question from that call.
+3. Booking Agent: NEW appointment, test or scan; if or when a doctor or department is free; new patient registration; checking details on file; joining a waitlist.
+4. Changes Agent: see, cancel or reschedule an EXISTING booking; waitlist status; waitlist OFFER CODE.
+5. Pharmacy and HealthCredits Agent: buy or order medicine; medicine stock or price; what their prescriptions allow; HealthCredits balance, adding credits, paying a booking or bill with credits. NOT refunds (rule 8).
+6. Care Assist Agent: wheelchair, escort, interpreter or transport; sending booking details to family or caregiver; adding a caregiver; letting family use credits; language or time preferences.
+7. Records Agent: lab or scan reports, emailing a report, past visits, prescription refill requests, where a medicine order is or cancelling one.
+8. Billing and Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, payment links; ANY refund, including HealthCredits back to a bank, card or cash.
+9. Aftercare Agent: after a visit or new medicine reports how they feel, wants a nurse to call, gives feedback or a rating, wants a follow-up.
+10. Info Agent: non-urgent symptoms and which department; doctors' days, fees, languages; address, parking, visiting, food, facilities, room charges, hospital policies, other hospital questions; test or visit preparation.
+```
+
+## R3. Receptionist: add two lines at the end (1 min)
+**Why:** it told the patient "the Pharmacy and HealthCredits Agent has provided a quote", and twice asked for the full
+name when the patient asked "what's my name".
+```
+INTERNAL NAMES: Never mention agents, specialists or transfers to the patient; just give the answer as WellNest.
+OWN NAME: If the patient asks their own name, the specialist gets it from their record after the mobile number and date of birth; never ask them to say it.
+```
+
+## R4. Pharmacy and HealthCredits Agent: add one line at the end (30 s)
+**Why:** for "send me Azithromycin" it said "please hold on while I verify this" and then stopped.
+```
+NO WAITING: Never say you'll check and come back. Call the tool in the same turn and give the answer.
+```
+
+## R5. Save → Publish
+
+Then tell me "round 2 done" and I'll re-run the refund, the "have I ever ordered" question and an order.
