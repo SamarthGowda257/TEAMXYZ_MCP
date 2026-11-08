@@ -28,8 +28,11 @@ HOSPITAL_ADDRESS = "WellNest Hospitals, 42 Outer Ring Road, Marathahalli, Bengal
 
 def attendees_for(patient: dict, caregiver: bool = True) -> list[str]:
     out = []
-    if patient.get("email") and not patient["email"].lower().endswith(notify.FAKE_DOMAINS):
-        out.append(patient["email"].strip().lower())
+    email = (patient.get("email") or "").strip().lower()
+    if email.endswith(".demo@example.com") and config.DEMO_EMAIL_OVERRIDE:   # demo personas: same inbox as their email
+        email = config.DEMO_EMAIL_OVERRIDE.strip().lower()
+    if email and not email.endswith(notify.FAKE_DOMAINS):
+        out.append(email)
     cg = (patient.get("caregiver_email") or "").strip().lower()
     if caregiver and patient.get("caregiver_consent") and cg and not cg.endswith(notify.FAKE_DOMAINS) and cg not in out:
         out.append(cg)

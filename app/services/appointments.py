@@ -493,6 +493,8 @@ def _booked_result(patient, a: dict, repeat=False) -> Result:
         msg += " Please register with us to manage this booking later."
     if not patient.get("email"):
         msg += " Share your email address if you'd like the details and a calendar invite by email."
+    elif not repeat and notify.will_email(patient["email"]):
+        msg += " A confirmation email with a calendar invite is on its way."
     short = f"{lead} Booking ID {v['booking_id']}. {v['with']}, {v['date']} at {v['time']}."
     if free:
         short += " No fee: this is your free follow-up review."

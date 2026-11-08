@@ -78,6 +78,14 @@ def to_caregiver(conn, patient: dict, *, template: str, subject: str, body: str,
     return bool(patient.get("caregiver_email") or patient.get("caregiver_phone"))
 
 
+def will_email(to: str | None) -> bool:
+    """True when a message queued to this address will really be sent (a transport is set and it isn't invented)."""
+    addr = (to or "").strip().lower()
+    if not addr or transport() == "none":
+        return False
+    return not addr.endswith(FAKE_DOMAINS) or (addr.endswith(".demo@example.com") and bool(config.DEMO_EMAIL_OVERRIDE))
+
+
 # ------------------------------------------------------------------ sending
 def transport() -> str:
     from . import google

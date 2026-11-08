@@ -731,8 +731,13 @@ def reset_demo():
 def health():
     return {"ok": True, "service": "WellNest Hospitals MCP + web", "version": config.VERSION, "db": db.db_ok(),
             "db_kind": "postgres" if db.IS_POSTGRES else "sqlite", "db_error": db.DB_ERROR, "db_target": db.db_target() if db.DB_ERROR else None, "time_ist": config.now().isoformat(),
-            "email": notify.transport() if config.EMAIL_ENABLED else "simulated", "blackboard": _store_status(), "events": _events_backend(),
-            "search": _search_status()}
+            "email": notify.transport() if config.EMAIL_ENABLED else "simulated", "calendar": _calendar_mode(),
+            "blackboard": _store_status(), "events": _events_backend(), "search": _search_status()}
+
+
+def _calendar_mode():
+    from . import google
+    return "google" if google.configured() else ("ics_invite" if notify.transport() != "none" else "simulated")
 
 
 def _search_status():
