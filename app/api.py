@@ -764,7 +764,9 @@ def _outbox_status():
     for ch, st, _ in rows:
         counts[f"{ch}:{st}"] = counts.get(f"{ch}:{st}", 0) + 1
     return {"recent": counts, "queued_total": waiting[0], "oldest_queued": str(waiting[1])[:16] if waiting[1] else None,
-            "max_attempts": waiting[2], "last_sent": last_sent, "last_error": (err or "")[:160] or None}
+            "max_attempts": waiting[2], "last_sent": last_sent,
+            "demo_emails_set": sorted(config.DEMO_PERSONA_EMAILS),     # which demo patients have a real inbox (names only)
+            "last_error": (err or "")[:160] or None}
 
 
 def _search_status():

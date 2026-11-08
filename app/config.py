@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -79,7 +80,9 @@ DEMO_EMAIL_OVERRIDE = env("DEMO_EMAIL_OVERRIDE")
 try:
     # keys are the demo patients' first names (rahul, shanthamma, arjun, priya, meera), any capitalisation
     DEMO_PERSONA_EMAILS: dict = {str(k).strip().lower().split()[0]: str(v).strip()
-                                 for k, v in json.loads(env("DEMO_PERSONA_EMAILS", "{}")).items() if str(k).strip() and v}
+                                 for k, v in json.loads(re.sub("[“”‘’]", '"',      # pasted curly quotes
+                                                               env("DEMO_PERSONA_EMAILS", "{}"))).items()
+                                 if str(k).strip() and v}
 except (ValueError, AttributeError):
     DEMO_PERSONA_EMAILS = {}
 
