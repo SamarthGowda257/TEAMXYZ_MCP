@@ -8,8 +8,8 @@
 | Refund asks to confirm, "yes" completes it | **Working live**, but a bug refunded the whole balance instead of the 50 asked. **Fixed in code**, waiting for deploy (step 0) |
 | "Have I ever ordered anything for my diabetes?" | Answered "no" live. **Fixed in code** (orders now listed with what each medicine is for), waiting for deploy |
 | Signed-in chat knows you with no mobile number or date of birth | **Server ready** (deploy, step 0). Needs Talkdesk part A, then a live test with your sign-in (part D) |
-| Booking → email | **Built, switched off**: Render has no Gmail settings, `/health` says `"email": "simulated"`. Needs part B |
-| Booking → Google Calendar | **Built, switched off**: needs part B (option 1 puts it straight in their Google Calendar) |
+| Booking → email | **Done, verified live 8 Nov**: Gmail API sends confirmations and lab reports |
+| Booking → Google Calendar | **Done, verified live 8 Nov**: the event lands on the hospital calendar and in the patient's own Google Calendar |
 | Phone call: no asking for the number | Built and on Talkdesk; not yet tested on a real call (part D) |
 
 Every booking already queues a confirmation email with the visit details, the booking ID, a calendar invite and an
@@ -67,7 +67,8 @@ Use one Gmail account as "the hospital" (it sends the emails and owns the events
 
 1. Open https://console.cloud.google.com, signed in as the hospital Gmail → top bar project picker → **New project** →
    name `WellNest` → **Create**, then select it.
-2. **APIs & Services → Library** → search **Gmail API** → **Enable**. Back → search **Google Calendar API** → **Enable**.
+2. **APIs & Services → Library** → search **Gmail API** → **Enable**. Back → search **Google Calendar API** → **Enable**
+   (both are required: without the Calendar API every event fails with a 403 that `/health` shows under `outbox`).
 3. **APIs & Services → OAuth consent screen** (may be called **Google Auth Platform**) → **Get started**:
    app name `WellNest Hospitals`, support email = the hospital Gmail → **External** → contact email → **Create**.
 4. **Audience** → **Publish app** → **Confirm** (status must read **In production**). If it still says "Testing",
