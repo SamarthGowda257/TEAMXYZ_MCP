@@ -127,3 +127,27 @@ Verma) → **Adjust** → `+1454`, reason `Test refund reversed`.
 3. Refund 50 → confirm → exactly 50 refunded. "Have I ever ordered anything for my diabetes?" → names the Glycomet order.
 4. Phone call: you call the Talkdesk number from your registered mobile and ask "When is my next appointment?"; it
    should only ask "Am I speaking with …?" and the date of birth.
+
+---
+
+## E. Round 3 (8 Nov evening): signed-in memory and two wording slips (5 min)
+Studio needs nothing: the sign-in now reaches the AI through the page address (Caller ID), not through Studio.
+
+1. **MCP Servers → WellNest_TeamXYZ_MCP → Refresh** (tool descriptions changed; no new inputs, nothing to re-add).
+2. **Support Agent → Instructions:** replace the paragraph starting `MEMORY:` with:
+   ```
+   MEMORY: For an earlier conversation, a past order or request, or a handoff ID (HO-): if you don't have the mobile number yet, call open_signed_in_session first and use the number it returns, then call search_past_interactions and say what it found, with the date. Ask for the mobile number and date of birth only if open_signed_in_session says the chat isn't linked.
+   ```
+   and add at the end:
+   ```
+   NEVER ASK FIRST: In a new conversation, never ask for a mobile number or date of birth before calling open_signed_in_session.
+   ```
+3. **Pharmacy and HealthCredits Agent → Instructions**, add at the end:
+   ```
+   DELIVERY: Orders go to the address on file as soon as possible. Never ask for a delivery date or time.
+   ```
+4. Top **Save → Publish**.
+
+In the demo, open every new chat with a question about yourself ("Hi, do you know who I am?", "What did we talk about
+last time?"). Those reach the Support agent, which runs the sign-in check. A first message that goes straight to
+another team (e.g. "book me a cardiologist") can still ask for the number, because only Support has the sign-in tool.
