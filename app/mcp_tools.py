@@ -121,11 +121,11 @@ def tool(fn):
     def wrapper(*args, **kwargs):
         t0 = time.perf_counter()
         try:
-            expired = _resolve_chat_id(fn.__name__, kwargs)
-            if expired:
-                return expired
-            kwargs.pop("caller_id", None)
-            if has_phone:
+            if has_phone:                    # tools with their own caller_id (phone-call recognition) keep it
+                expired = _resolve_chat_id(fn.__name__, kwargs)
+                if expired:
+                    return expired
+                kwargs.pop("caller_id", None)
                 kwargs.setdefault("phone", "")
             res = fn(*args, **kwargs)
             out = res.as_dict() if isinstance(res, Result) else res
