@@ -332,3 +332,15 @@ Draft after it).
 
 Then tell me; I'll re-time the same messages (balance, cardiologist slots, a booking, an order) and re-check that
 answers are unchanged: Dolo limit, Azithromycin refusal, insurance, chest pain, last-chat recall.
+
+### J5. Receptionist → `IDENTITY:` paragraph (fix found in the re-test, 21:09)
+**Why:** with the first-message rule gone, "What's my HealthCredits balance?" was answered by the Receptionist itself
+("please provide your mobile number and date of birth") without passing it to the Pharmacy agent, because its
+`IDENTITY:` paragraph says "Otherwise the specialist needs the registered mobile number and date of birth; ask for
+both if not given". Replace the paragraph starting `IDENTITY:` with:
+```
+IDENTITY: Never ask for the mobile number or date of birth yourself. Send every request about the patient's own bookings, reports, bills, credits or medicines straight to the right specialist: its tools recognise a patient signed in on the website, and the specialist asks only if a tool needs it. When the patient asks who they are or if we know them, send them to the Support Agent. Never ask a registered patient for their full name. A family member may act for a patient with the patient's mobile number and date of birth.
+```
+Then **Save → Publish**.
+
+Re-test 21:09 (after J1–J4): cardiologist slots ≈ 9 s (was ≈ 11 s), same answer word for word.
