@@ -331,3 +331,15 @@ def test_emails_go_before_calendar_and_old_syncs_are_skipped(monkeypatch):
     assert synced == ["WN-1"]             # only the newest of the three is sent to Google
     rows = _cal_rows("WN-1")
     assert [r["error"] for r in rows].count("superseded") == 2 and all(r["status"] == "sent" for r in rows)
+
+
+def test_persona_email_does_not_clash_with_a_real_login(monkeypatch):
+    """Live: the tester's own account used the same address, the unique login email failed, and Rahul kept his
+    invented address, so every email to him was 'simulated'."""
+    from app import config as cfg
+    with db.engine.begin() as c:
+        c.execute(update(db.patients).where(db.patients.c.id == 1).values(web_email="tester@gmail.com"))
+    monkeypatch.setattr(cfg, "DEMO_PERSONA_EMAILS", {"rahul": "Tester@gmail.com"})
+    seed.ensure_extras()
+    p = _rahul()
+    assert p["email"] == "Tester@gmail.com" and p["web_email"] != "tester@gmail.com"

@@ -273,7 +273,13 @@ def ensure_extras() -> dict:
                 done["wallets"] = done.get("wallets", 0) + 1
             real = config.DEMO_PERSONA_EMAILS.get(p["key"])
             if real:
-                c.execute(db.patients.update().where(db.patients.c.id == pid).values(email=real, web_email=real.lower()))
+                # The login email is unique: if a real account (often the tester's own) already signs in with this
+                # address, give the persona the inbox only. Setting both used to roll back every demo extra.
+                taken = c.execute(select(db.patients.c.id).where(db.patients.c.web_email == real.lower(),
+                                                                 db.patients.c.id != pid)).first()
+                vals = {"email": real} if taken else {"email": real, "web_email": real.lower()}
+                c.execute(db.patients.update().where(db.patients.c.id == pid).values(**vals))
+                done["persona_emails"] = done.get("persona_emails", 0) + 1
         # Rahul's ready report: the lab status reply is where his medicine refill is offered. Ready 3 days ago, so it
         # doesn't also start an automatic "report ready" call during a demo.
         if c.execute(select(db.patients.c.id).where(db.patients.c.id == 4, db.patients.c.phone == "+919845000004")).first() and \
