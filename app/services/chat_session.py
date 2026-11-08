@@ -124,11 +124,14 @@ def _open_session(session_code, interaction_id="", caller_id="") -> Result:
     first = p["full_name"].split()[0]
     msg = re.sub(r"^Thank you, [^,]+, you're verified\.", f"Hello {first}, you're signed in.", res.message)
     data = dict(res.data or {})
-    # The date of birth goes to the agent (never to be read out) so every later tool has both identity values and no
-    # specialist asks for them again; the website login already proved who this is.
+    # Talkdesk agents only reuse details that appear in the conversation itself: a value inside a tool result stays
+    # with the agent that called the tool, so the next team asked again (seen live 8 Nov). The signed-in patient's own
+    # number and date of birth are therefore said in this reply, in their own authenticated chat, never on a call.
     dob = p["date_of_birth"].strftime("%d-%m-%Y") if p.get("date_of_birth") else ""
-    msg += (" I have your details from your sign-in, so you won't need to give your mobile number or date of birth "
-            "in this chat.")
+    local = p["phone"][-10:]
+    msg += (f" I'm using the details on your account (mobile {local}, date of birth {p['date_of_birth'].day} {p['date_of_birth']:%B %Y}), so "
+            "you won't need to type them in this chat." if dob else
+            f" I'm using the mobile number on your account ({local}), so you won't need to type it.")
     data.update(patient_phone=p["phone"], date_of_birth=dob, patient_name=p["full_name"], signed_in=True,
                 earlier=[{"date": m["date"], "summary": m["summary"][:140]} for m in (earlier.data or {}).get("matches", [])])
     return Result(True, msg, data, related=res.related)

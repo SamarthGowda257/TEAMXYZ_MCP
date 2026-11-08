@@ -147,7 +147,11 @@ def save_note(phone, summary, topics="", outcome="", channel="chat", last_messag
 _RECENCY_WORDS = {"last", "time", "chat", "chats", "conversation", "conversations", "before", "previous", "earlier",
                   "ask", "asked", "talk", "talked", "spoke", "discuss", "discussed", "said", "told", "did", "what", "about",
                   "recent", "recently", "history", "past", "you", "me", "my", "i", "we", "us", "the", "a", "in", "with",
-                  "do", "remember", "anything", "something", "call", "message", "messages", "ago", "yesterday", "week"}
+                  "do", "remember", "anything", "something", "call", "message", "messages", "ago", "yesterday", "week",
+                  "speak", "spoke", "spoken", "speaking", "talking", "discussion", "session", "previously", "prior", "our",
+                  "was", "were", "it", "that", "this", "have", "had", "any", "all", "over", "recap", "summary",
+                  "summarise", "summarize", "can", "tell", "know", "please", "everything", "go", "went", "there", "then",
+                  "happened", "conversation's", "last time"}
 
 
 def search_interactions(phone, dob, query) -> Result:
@@ -171,16 +175,37 @@ def search_interactions(phone, dob, query) -> Result:
         if not top:                                 # "what did I ask last time?", or nothing on that topic: newest first
             D = db.search_docs
             rows = c.execute(select(D.c.ref, D.c.kind, D.c.title, D.c.body, D.c.created_at).where(
-                D.c.patient_id == p["id"], D.c.kind.in_(("note", "action"))).order_by(D.c.created_at.desc()).limit(3)).mappings().all()
+                D.c.patient_id == p["id"], D.c.kind.in_(("note", "action"))).order_by(D.c.created_at.desc()).limit(12)).mappings().all()
             top, mode = [dict(r) for r in rows], "recent"
     if not top:
         return ok("I don't see any earlier conversation on your record yet.", matches=[], search_mode=mode)
     m = top[0]
     days = (config.today() - m["created_at"].date()).days
     when = "today" if days == 0 else "yesterday" if days == 1 else f"{days} days ago, on {human_date(m['created_at'].date())}"
+    matches = [{"date": x["created_at"].date().isoformat(), "summary": x["body"][:200]} for x in top[:5]]
+    if mode == "recent" and not missed:
+        # "what did we talk about last time": the whole last conversation (everything within an hour of the newest
+        # item), not only its final line. Live, a booking made in the same chat was left out.
+        session = [x for x in top if (m["created_at"] - x["created_at"]) <= timedelta(hours=1)]
+        seen, parts = set(), []
+        for x in reversed(session):                 # oldest first, so it reads in the order it happened
+            line = _short(x["body"])
+            if line.lower() not in seen:
+                seen.add(line.lower())
+                parts.append(line)
+        parts = parts[-4:]
+        if len(parts) > 1:
+            return ok(f"In our last conversation, {when}: " + "; ".join(parts) + ".", search_mode=mode, matched_topic=True,
+                      matches=matches, items=len(parts))
     lead = "I don't see one on that exact topic. The most recent was" if missed else "Yes. Most recently,"
-    return ok(f"{lead} {when}: {m['body']}", search_mode=mode, matched_topic=not missed,
-              matches=[{"date": x["created_at"].date().isoformat(), "summary": x["body"][:200]} for x in top])
+    return ok(f"{lead} {when}: {m['body']}", search_mode=mode, matched_topic=not missed, matches=matches)
+
+
+def _short(body: str) -> str:
+    t = re.sub(r"\s+", " ", clean(body)).rstrip(". ")
+    t = re.sub(r"^[a-z_ ]{3,40}: ", "", t)          # action lines start with the tool's name
+    t = re.sub(r"^(Patient |The patient )", "", t)
+    return t[:140] + ("..." if len(t) > 140 else "")
 
 
 def caregiver_update(phone, dob, booking_id="") -> Result:

@@ -51,7 +51,8 @@ def test_code_opens_the_right_patient_and_marks_them_signed_in():
     assert r.ok and r.message.startswith("Hello Rahul, you're signed in.")
     assert r.data["patient_phone"] == p["phone"] and r.data["signed_in"] is True
     assert pt.recently_verified(p["phone"])
-    assert "won't need to give your mobile number or date of birth" in r.message
+    # the details are said in the reply: only text in the conversation reaches the next Talkdesk agent
+    assert "mobile 9845000004, date of birth 10 September 1981" in r.message and "won't need to type them" in r.message
     # both identity values reach the agent, so a specialist can call any tool without asking
     assert r.data["date_of_birth"] == "10-09-1981"
     bal = mcp_tools.get_health_credits_balance(phone=r.data["patient_phone"], date_of_birth=r.data["date_of_birth"])
@@ -380,3 +381,20 @@ def test_about_the_hospital_gets_an_overview_not_a_policy(q):
     r = mcp_tools.get_hospital_info(topic=q)
     assert r["ok"] and "350-bed" in r["message"] and "privacy" not in r["message"].lower()
     assert mcp_tools.get_hospital_info(topic="tell me about the hospital parking")["data"].get("topic") != "about"
+
+
+def test_last_chat_recall_covers_the_whole_conversation():
+    """Live: the answer named only the insurance question and left out the booking made in the same chat."""
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    assert mcp_tools.save_interaction_note(phone=RAHUL, summary="Asked whether Star Health covers an MRI of the knee.")["ok"]
+    from app.services import appointments as ap
+    from app.util import parse_time
+    s = ap.find_slots("next available", doctor_name="Dr. Anil Kumar")
+    t = parse_time(s.data["doctors"][0]["free_slots"][0])
+    b = mcp_tools.book_appointment(phone=RAHUL, date="next available", time=t, doctor_name="Dr. Anil Kumar",
+                                   date_of_birth=RAHUL_DOB)
+    assert b["ok"], b["message"]
+    search.sync()
+    r = sp.search_interactions(RAHUL, "", "what did we speak about in the last chat?")
+    assert r.ok and "MRI" in r.message and b["data"]["booking_id"] in r.message, r.message
+    assert len(r.message) < 900

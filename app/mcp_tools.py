@@ -433,8 +433,10 @@ def open_signed_in_session(session_code: Annotated[S, Field(description="The ses
     opened at once (name, mobile number, bookings, reports, earlier conversations). On a phone call it names whose
     registered number is calling: then ask 'Am I speaking with <name>?' and for the date of birth only, and use the
     returned patient_phone. ALWAYS call it before asking anyone for a mobile number or date of birth, in every new
-    conversation: when the patient asks who they are, about their own record, past chats or orders. Only if it says the
-    chat isn't linked, ask for the registered mobile number and date of birth."""
+    conversation: when the patient asks who they are, about their own record, past chats or orders. For a signed-in
+    patient, say its message in full, including the mobile number and date of birth it states: they are the patient's
+    own details in their own signed-in chat, and the other teams can only use them once they are in the conversation.
+    Only if it says the chat isn't linked, ask for the registered mobile number and date of birth."""
     return cs.open_session(session_code, interaction_id, caller_id)
 
 
