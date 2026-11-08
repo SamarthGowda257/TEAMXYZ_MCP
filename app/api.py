@@ -746,7 +746,8 @@ def _chat_link_status():
     try:
         from .services import chat_session as cs
         from .store import store
-        return {"last_code_issued": store.get_json("chatlink:last_issued", count=False), "last_attempts": cs.diagnostics()[-5:]}
+        return {"last_code_issued": store.get_json("chatlink:last_issued", count=False), "last_attempts": cs.diagnostics()[-5:],
+                "recent_tool_calls": (store.get_json("toolcalls:recent", count=False) or [])[-8:]}
     except Exception as e:
         return {"error": str(e)[:80]}
 

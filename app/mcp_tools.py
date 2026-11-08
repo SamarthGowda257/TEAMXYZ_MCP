@@ -114,12 +114,28 @@ def _resolve_chat_id(name: str, kwargs: dict) -> dict | None:
     return None
 
 
+def _remember_call(name: str, out: dict, info: dict) -> None:
+    """Last 12 tool calls for /health (no personal data): shows whether an agent called a tool at all, and whether
+    Talkdesk passed the signed-in page in caller_id."""
+    try:
+        from .store import store
+        calls = (store.get_json("toolcalls:recent", count=False) or [])[-11:]
+        calls.append({"at": cs.config.now().strftime("%H:%M:%S"), "tool": name, "ok": bool(out.get("ok")),
+                      "error": out.get("error_code"), **info})
+        store.set_json("toolcalls:recent", calls, ttl=24 * 3600)
+    except Exception:
+        pass
+
+
 def tool(fn):
     """Register fn as an MCP tool with timing, logging and a never-raise guard."""
     has_phone = "phone" in inspect.signature(fn).parameters
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         t0 = time.perf_counter()
+        call_info = {"phone_typed": bool(pt.norm_phone(kwargs.get("phone", ""))),
+                     "signed_in_page": bool(cs.CODE_RE.search(str(kwargs.get("caller_id", "")).upper())),
+                     "caller_id_sent": bool(kwargs.get("caller_id"))}
         try:
             if has_phone:                    # tools with their own caller_id (phone-call recognition) keep it
                 expired = _resolve_chat_id(fn.__name__, kwargs)
@@ -138,6 +154,7 @@ def tool(fn):
             out = {"ok": False, "error_code": "service_unavailable",
                    "message": "Sorry, I couldn't reach the hospital system just now. Please try again in a moment, "
                               "or I can request a call back."}
+        _remember_call(fn.__name__, out, call_info)
         metrics.record(fn.__name__, (time.perf_counter() - t0) * 1000, out.get("ok", False), out.get("error_code"),
                        mask_phone(kwargs.get("phone", "")) if isinstance(kwargs.get("phone"), str) else "")
         return out
