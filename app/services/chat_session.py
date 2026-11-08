@@ -43,6 +43,7 @@ def mint(patient_id: int) -> str:
         code = "WS-" + "".join(secrets.choice(_ALPHABET) for _ in range(12))
     store.set_json(f"chatsess:{code}", patient_id, ttl=TTL)
     store.set_json(f"chatsess_p:{patient_id}", code, ttl=TTL)
+    store.set_json("chatlink:last_issued", config.now().strftime("%H:%M:%S"), ttl=7 * 24 * 3600)
     return code
 
 
@@ -70,9 +71,37 @@ def link_interaction(interaction_id, patient_id: int) -> None:
         store.set_json(f"chatlink:{i}", patient_id, ttl=LINK_TTL)
 
 
+DIAG_KEY = "chatlink:diag"
+
+
+def _diag(session_code, caller_id, interaction_id, result: str) -> None:
+    """Keep the last 10 attempts, masked, so /health shows which link of widget -> Studio -> agent is broken."""
+    raw = clean(session_code)
+    shape = re.sub(r"\d", "9", CODE_RE.sub("WS-<code>", raw.upper()))[:80]
+    entry = {"at": config.now().strftime("%H:%M:%S"), "application_input": shape or "(empty)",
+             "code_found": bool(_code_in(raw)), "caller_id": bool(clean(caller_id)),
+             "interaction_id": bool(clean(interaction_id)), "result": result}
+    try:
+        items = (store.get_json(DIAG_KEY, count=False) or [])[-9:] + [entry]
+        store.set_json(DIAG_KEY, items, ttl=7 * 24 * 3600)
+    except Exception:
+        pass
+
+
+def diagnostics() -> list:
+    return store.get_json(DIAG_KEY, count=False) or []
+
+
 def open_session(session_code, interaction_id="", caller_id="") -> Result:
     """A live website session code opens the record; failing that, on a phone call, the caller's number names the
     patient (without verifying them) so the agent asks only for the date of birth."""
+    res = _open_session(session_code, interaction_id, caller_id)
+    _diag(session_code, caller_id, interaction_id,
+          "signed_in" if res.ok and (res.data or {}).get("signed_in") else (res.error_code or "caller_recognised"))
+    return res
+
+
+def _open_session(session_code, interaction_id="", caller_id="") -> Result:
     pid = _patient_for_code(session_code)
     if not pid:
         if pt.norm_phone(caller_id):

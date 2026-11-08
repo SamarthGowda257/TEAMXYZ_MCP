@@ -732,12 +732,23 @@ def health():
     return {"ok": True, "service": "WellNest Hospitals MCP + web", "version": config.VERSION, "db": db.db_ok(),
             "db_kind": "postgres" if db.IS_POSTGRES else "sqlite", "db_error": db.DB_ERROR, "db_target": db.db_target() if db.DB_ERROR else None, "time_ist": config.now().isoformat(),
             "email": notify.transport() if config.EMAIL_ENABLED else "simulated", "calendar": _calendar_mode(),
-            "outbox": _outbox_status(), "blackboard": _store_status(), "events": _events_backend(), "search": _search_status()}
+            "outbox": _outbox_status(), "chat_link": _chat_link_status(), "blackboard": _store_status(), "events": _events_backend(), "search": _search_status()}
 
 
 def _calendar_mode():
     from . import google
     return "google" if google.configured() else ("ics_invite" if notify.transport() != "none" else "simulated")
+
+
+def _chat_link_status():
+    """Signed-in chat: when the website last issued a session code, and the last open_signed_in_session calls
+    (masked). Shows whether the code leaves the site, reaches the agent, and is recognised."""
+    try:
+        from .services import chat_session as cs
+        from .store import store
+        return {"last_code_issued": store.get_json("chatlink:last_issued", count=False), "last_attempts": cs.diagnostics()[-5:]}
+    except Exception as e:
+        return {"error": str(e)[:80]}
 
 
 def _outbox_status():
