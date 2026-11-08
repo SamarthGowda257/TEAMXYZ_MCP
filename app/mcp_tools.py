@@ -420,7 +420,8 @@ def save_interaction_note(phone: Phone, summary: Annotated[S, Field(description=
                           outcome: Annotated[S, Field(description="Optional. e.g. booked, informed, handed off.")] = "",
                           last_message: Annotated[S, Field(description="Optional. The patient's last message, word for word.")] = "",
                           interaction_id: Annotated[S, Field(description="Optional. Talkdesk's ID for this conversation.")] = "") -> dict:
-    """Save a short note at the end of a meaningful conversation so WellNest remembers it next time."""
+    """Save a short note at the end of a meaningful conversation so WellNest remembers it next time. Without the mobile
+    number, call open_signed_in_session first."""
     return sp.save_note(phone, summary, topics, outcome, last_message=last_message, interaction_id=interaction_id)
 
 
@@ -431,8 +432,9 @@ def open_signed_in_session(session_code: Annotated[S, Field(description="The ses
     """Find out who this patient is without asking for their mobile number. On the website chat a signed-in patient is
     opened at once (name, mobile number, bookings, reports, earlier conversations). On a phone call it names whose
     registered number is calling: then ask 'Am I speaking with <name>?' and for the date of birth only, and use the
-    returned patient_phone. Use it first when the patient asks who they are, or about their own record without giving a
-    mobile number. If it says the chat isn't linked, ask for the registered mobile number and date of birth."""
+    returned patient_phone. ALWAYS call it before asking anyone for a mobile number or date of birth, in every new
+    conversation: when the patient asks who they are, about their own record, past chats or orders. Only if it says the
+    chat isn't linked, ask for the registered mobile number and date of birth."""
     return cs.open_session(session_code, interaction_id, caller_id)
 
 
@@ -450,7 +452,8 @@ def search_past_interactions(phone: Phone,
                              query: Annotated[S, Field(description="What to look for, e.g. MRI report, insurance.")],
                              date_of_birth: SDob = "") -> dict:
     """Search this patient's earlier conversations and actions (e.g. 'did I ask about my MRI report last week?').
-    Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    Needs the mobile number: if you don't have it yet, call open_signed_in_session first and use the number it returns
+    (a signed-in patient needs no date of birth). Ask the patient only if that says the chat isn't linked."""
     return sp.search_interactions(phone, date_of_birth, query)
 
 

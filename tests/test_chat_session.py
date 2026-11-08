@@ -372,3 +372,11 @@ def test_code_in_the_page_address_opens_the_record():
     # a page address without a live code opens nothing
     bad = mcp_tools.open_signed_in_session(session_code="", caller_id="https://teamxyz-mcp.onrender.com/#wn=WS-AAAAAAAAAAAA")
     assert bad["error_code"] == "not_signed_in"
+
+
+@pytest.mark.parametrize("q", ["can i know about your hospital", "Tell me about WellNest", "what is wellnest?"])
+def test_about_the_hospital_gets_an_overview_not_a_policy(q):
+    """Live: 'can i know about your hospital' answered with the privacy policy."""
+    r = mcp_tools.get_hospital_info(topic=q)
+    assert r["ok"] and "350-bed" in r["message"] and "privacy" not in r["message"].lower()
+    assert mcp_tools.get_hospital_info(topic="tell me about the hospital parking")["data"].get("topic") != "about"

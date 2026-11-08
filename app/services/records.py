@@ -365,6 +365,20 @@ def suggest_department(symptoms) -> Result:
               department="General Medicine", emergency=False, disclaimer=DISCLAIMER, matched_by="default")
 
 
+END = r"\s*(please|pls)?\s*[?.!]*\s*$"          # the question ends there: "...about the hospital parking" is parking
+ABOUT_RE = re.compile(r"\babout (your|the|this|ur) (hospital|place)" + END
+                      + r"|\btell me (more )?about (yourselves|you|the hospital|wellnest)" + END
+                      + r"|\b(about|what is|who is|who are) wellnest( hospitals?)?" + END
+                      + r"|^(about )?(the )?(hospital|wellnest)" + END
+                      + r"|\b(overview|introduc\w*) (of )?(the |your )?(hospital|wellnest)\b")
+ABOUT = ("WellNest Hospitals is a 350-bed multi-speciality hospital on Outer Ring Road, Marathahalli, Bengaluru, caring for "
+         "families since 2009. It has 60 critical care beds, 14 departments and 45 senior consultants, with six centres of "
+         "excellence: the Heart Institute, Brain and Spine, Bone and Joint, Mother and Child, Digestive and Liver Care, and "
+         "Kidney and Urology. There's a cath lab that never closes, two 3 Tesla MRI and two 128-slice CT scanners, a level "
+         "III neonatal ICU, a 24-hour emergency department at entrance B and a 24-hour pharmacy with home delivery. Most "
+         "major insurers are cashless here. I can book a doctor, check a report, or answer anything about your visit.")
+
+
 def hospital_info(topic="") -> Result:
     t = clean(topic).lower()
     keys = {"address": ["address", "where", "location", "direction", "map", "reach"], "hours": ["hour", "timing", "open", "close", "time"],
@@ -375,6 +389,8 @@ def hospital_info(topic="") -> Result:
         return ok(REF.info[t], topic=t)
     if not t:
         return ok(f"{REF.info['address']} {REF.info['hours']}", topic="address,hours")
+    if ABOUT_RE.search(t):            # a general "tell me about you" matched the privacy policy by its words
+        return ok(ABOUT, topic="about")
     from . import hospital_ctx
     hit = hospital_ctx.cached_answer(t)            # same question asked before: answer from Redis, no search
     if hit:
