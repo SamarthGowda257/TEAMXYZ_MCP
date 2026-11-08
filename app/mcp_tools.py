@@ -5,6 +5,7 @@ The 6 V1 tool names and their V1 inputs are kept so existing Talkdesk skill mapp
 """
 
 import functools
+import inspect
 import logging
 import time
 from typing import Annotated
@@ -58,14 +59,42 @@ CHAT_ID_EXPIRED = ("That chat ID has expired. Please sign in again on the websit
                    "and date of birth.")
 
 
+CallerId = Annotated[S, Field(description="Map to the System variable Caller ID; never ask the patient. On the website it "
+                                          "carries the signed-in patient's session, so no mobile number is needed.")]
+PhoneOrSignedIn = Annotated[S, Field(description="Patient's mobile number, any format, e.g. 98450 12345 or +91 9845012345. "
+                                                "Leave EMPTY in a website chat until a tool replies not_verified: a "
+                                                "signed-in patient is recognised from caller_id automatically.")]
+
+
+def _with_caller_id(fn, wrapper) -> None:
+    """Give every tool that takes `phone` an optional `caller_id` (mapped in Talkdesk to the Caller ID system variable,
+    which for a web chat is the page address carrying #wn=<session code>) and make `phone` optional. Talkdesk fills
+    system variables itself, so a signed-in patient is known to every agent without the AI having to repeat anything."""
+    sig = inspect.signature(fn)
+    if "phone" not in sig.parameters:
+        return
+    params = []
+    for name, prm in sig.parameters.items():
+        if name == "phone":
+            prm = prm.replace(default="", annotation=PhoneOrSignedIn)
+        params.append(prm.replace(kind=inspect.Parameter.KEYWORD_ONLY))
+    params.append(inspect.Parameter("caller_id", inspect.Parameter.KEYWORD_ONLY, default="", annotation=CallerId))
+    wrapper.__signature__ = sig.replace(parameters=params)
+    wrapper.__annotations__ = {**getattr(fn, "__annotations__", {}), "phone": PhoneOrSignedIn, "caller_id": CallerId}
+
+
 def _resolve_chat_id(name: str, kwargs: dict) -> dict | None:
     """A signed-in website chat states a chat ID (the live session code, WS-...). Agents may pass it as the phone or as
     the date of birth; swap it for the account's real number and mark the patient verified, so every tool works as if
     both values had been typed. A code that is not live (forged, expired, signed out) opens nothing."""
     if name == "open_signed_in_session":
         return None
+    caller = str(kwargs.pop("caller_id", "") or "")
     found = next((cs.CODE_RE.search(str(kwargs.get(k, "")).upper()) for k in ("phone", "date_of_birth")
                   if cs.CODE_RE.search(str(kwargs.get(k, "")).upper())), None)
+    typed = pt.norm_phone(kwargs.get("phone", ""))
+    if not found and not typed and cs.CODE_RE.search(caller.upper()):
+        found = cs.CODE_RE.search(caller.upper())     # nothing typed: the signed-in page identifies the patient
     if not found:
         return None
     from .db import engine
@@ -78,7 +107,7 @@ def _resolve_chat_id(name: str, kwargs: dict) -> dict | None:
     if not p or p.get("is_guest"):
         return {"ok": False, "error_code": "not_verified", "message": CHAT_ID_EXPIRED}
     pt.remember_verified(p["phone"], cs.config.WEB_SESSION_MIN)
-    if "phone" in kwargs:
+    if "phone" in kwargs or caller:
         kwargs["phone"] = p["phone"]
     if cs.CODE_RE.search(str(kwargs.get("date_of_birth", "")).upper()):
         kwargs["date_of_birth"] = ""
@@ -87,6 +116,7 @@ def _resolve_chat_id(name: str, kwargs: dict) -> dict | None:
 
 def tool(fn):
     """Register fn as an MCP tool with timing, logging and a never-raise guard."""
+    has_phone = "phone" in inspect.signature(fn).parameters
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         t0 = time.perf_counter()
@@ -94,6 +124,9 @@ def tool(fn):
             expired = _resolve_chat_id(fn.__name__, kwargs)
             if expired:
                 return expired
+            kwargs.pop("caller_id", None)
+            if has_phone:
+                kwargs.setdefault("phone", "")
             res = fn(*args, **kwargs)
             out = res.as_dict() if isinstance(res, Result) else res
             if out.get("ok") and fn.__name__ in sp.REMEMBERED_READS and kwargs.get("phone"):
@@ -108,6 +141,7 @@ def tool(fn):
         metrics.record(fn.__name__, (time.perf_counter() - t0) * 1000, out.get("ok", False), out.get("error_code"),
                        mask_phone(kwargs.get("phone", "")) if isinstance(kwargs.get("phone"), str) else "")
         return out
+    _with_caller_id(fn, wrapper)
     mcp.tool()(wrapper)
     return wrapper
 

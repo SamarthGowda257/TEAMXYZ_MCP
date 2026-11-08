@@ -412,3 +412,28 @@ def test_chat_id_stands_in_for_mobile_and_date_of_birth():
     cs.revoke(p["id"])
     gone = mcp_tools.get_health_credits_balance(phone=code)
     assert not gone["ok"] and "expired" in gone["message"]
+
+
+def test_caller_id_page_address_identifies_a_signed_in_patient_in_any_tool():
+    """Talkdesk fills the Caller ID system variable itself (for a web chat: the page address with #wn=<code>), so any
+    agent's tool knows the signed-in patient without the AI repeating a number. Live 8 Nov the AI dropped every
+    identity detail it was told to repeat."""
+    import asyncio
+    from app.mcp_tools import mcp
+    p = _rahul()
+    code = cs.mint(p["id"])
+    page = f"https://teamxyz-mcp.onrender.com/portal#wn={code}"
+    assert mcp_tools.get_health_credits_balance(caller_id=page)["ok"]
+    assert mcp_tools.find_appointments(caller_id=page)["ok"]
+    assert mcp_tools.search_past_interactions(query="last chat", caller_id=page)["ok"]
+    # through the MCP layer, exactly as Talkdesk calls it
+    out = asyncio.run(mcp.call_tool("get_health_credits_balance", {"caller_id": page}))
+    assert "HealthCredits" in str(out)
+    # not signed in (no code in the address): asks, never guesses
+    anon = mcp_tools.get_health_credits_balance(caller_id="https://teamxyz-mcp.onrender.com/")
+    assert not anon["ok"]
+    # a typed number for someone else wins over the page (a family member), and needs that person's date of birth
+    other = mcp_tools.get_health_credits_balance(phone="9845000001", caller_id=page)
+    assert not other["ok"] or "Shanthamma" in other["message"]
+    cs.revoke(p["id"])
+    assert not mcp_tools.get_health_credits_balance(caller_id=page)["ok"]
