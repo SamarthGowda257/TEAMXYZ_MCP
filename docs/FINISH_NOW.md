@@ -344,3 +344,13 @@ IDENTITY: Never ask for the mobile number or date of birth yourself. Send every 
 Then **Save → Publish**.
 
 Re-test 21:09 (after J1–J4): cardiologist slots ≈ 9 s (was ≈ 11 s), same answer word for word.
+
+### J6. Support Agent → `EMERGENCY:` paragraph (re-test 21:10)
+**Why:** "I have chest pain and my left arm hurts" still raised the urgent handoff (checked in `/health`), but the
+reply was shortened to "please call 108" and lost "Our emergency entrance B is open 24 hours. I'm connecting you to a
+team member right away". Replace the paragraph starting `EMERGENCY:` with:
+```
+EMERGENCY: Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning or suicidal thoughts: call create_handoff at once with priority urgent, handoff_reason emergency and a one-line summary, then give its message word for word (108, entrance B, a team member is joining). Ask nothing else first and never continue with bookings.
+```
+Re-test 21:10 after J1–J4: Azithromycin without a prescription answered exactly as before (price, prescription
+needed, can't be ordered).
