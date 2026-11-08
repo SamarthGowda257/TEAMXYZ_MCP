@@ -50,8 +50,8 @@ the chat timestamps and `/health`:
 
 | Step done | Balance | Cardiologist slots | Booking (2 turns) | Order (2 turns) |
 |---|---|---|---|---|
-| Today | ≈ 16 s | ≈ 11 s | not timed | not timed |
-| After 1–2 | | | | |
+| Before (20:49) | ≈ 16 s | ≈ 11 s | not timed | not timed |
+| After 1–2 + J5/J6 (21:09–21:25) | ≈ 14 s (tool at +8 s, 81 ms) | ≈ 9 s (tool at +6 s, 21 ms) | | |
 | After 3–4 | | | | |
 
 ## Perceived speed (free, do anyway)
@@ -62,3 +62,11 @@ the chat timestamps and `/health`:
 - **Our own chat engine instead of Talkdesk** (one AI call with all 47 tools, streaming): 2–4 s is realistic, but the
   hackathon is about Talkdesk, and the phone line would still use Talkdesk. Mention it as future work only.
 - **Merging agents into one**: Talkdesk allows 5 skills per agent, and we use 47 tools.
+
+## Round 1 result (8 Nov, 21:25)
+- Saved 2–3 s per reply; most of the remaining time is **before** the tool call (6–8 s: Receptionist routing +
+  specialist choosing the tool). That is what round 2 (shorter instructions, Receptionist first) targets.
+- Answers checked unchanged: cardiologist slots (word for word), Azithromycin refusal, balance, last-chat recall,
+  emergency (full 108 / entrance B / team member text in a fresh chat).
+- Seen once: in a long chat the emergency reply came back as Talkdesk's "Sorry, I cannot handle your request right
+  now" although our urgent handoff was created; a fresh chat answered correctly. Watch in round 2.
