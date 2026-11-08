@@ -21,12 +21,15 @@ moment is the money shot of the video; give it a second of silence.
 
 1. Open https://teamxyz-mcp.onrender.com/health a minute before. Render sleeps; the first request is slow.
    It should say `"email": "gmail_api"`, `"calendar": "google"`.
-2. Admin → Wallets → Rahul Verma: at least 1,500 credits (top up if needed).
+2. Admin → Wallets → Rahul Verma: at least 1,500 credits. **On 8 Nov his balance was 0: top up first**, or the
+   medicine order goes to a payment link instead of HealthCredits.
 3. Cancel Rahul's test bookings from today (WN-83093, WN-59330) in Admin → Appointments, so his slots look clean.
 4. Phone: Gmail and Google Calendar for samarthgowda257 open, notifications on, Do Not Disturb off.
 5. Three browser windows signed in: the website as Rahul, admin as the pharmacist, admin as Dr. Anil Kumar.
-6. **Do not** run "reset demo" (`/ops/reset-demo`): it deletes everything, including your own account.
-7. Record each scene separately and **speed up the waiting** in editing (Talkdesk replies take 10–20 s; show them at
+6. Hide the browser's address bar in the recording (or crop it): while signed in it ends in `#wn=WS-…`, the code that
+   tells the chat who you are.
+7. **Do not** run "reset demo" (`/ops/reset-demo`): it deletes everything, including your own account.
+8. Record each scene separately and **speed up the waiting** in editing (Talkdesk replies take 10–20 s; show them at
    4x with a small "AI thinking" caption, then normal speed when the answer lands).
 
 Creative touches to add in editing:
@@ -45,13 +48,15 @@ desk. WellNest's assistant asks once, on chat or on the phone, and takes it from
 
 ## Scene 2. "It already knows me" (0:25–1:10)
 **Show:** Rahul signs in on the website → opens the chat.
-**Type:** `Hi`
+**Type:** `Hi, do you know who I am?` (start with this exact line: a bare "Hi" is answered by the receptionist without
+checking the sign-in)
 **Expect:** "Hello Rahul, you're signed in…", his upcoming visit or "no upcoming bookings", and that he won't need to
 give his number or date of birth.
 **Type:** `When is my next appointment?` → answered with no questions asked.
 **Caption:** "Signed in on the website = known in the chat. A one-time code, checked on the server. The browser can't
 fake it."
-**Status:** server tested; rehearse once after your Talkdesk part A.
+**Status:** fixed 8 Nov. Talkdesk never passed the website's code through Studio; the site now puts it in the page
+address, which Talkdesk hands the AI as "Caller ID". Server-tested; needs one live run signed in (see the end).
 
 ## Scene 3. Booking, then the phone buzzes (1:10–2:30)
 **Type:** `I need a general medicine doctor tomorrow morning`
@@ -81,16 +86,24 @@ The strongest "this is production, not a toy" scene. Four lines, four different 
    prescription. *(Schedule H1 law, enforced by the server)*
 3. `What can I order on my prescriptions?` → "Metformin, about … days left; Telmisartan, …" *(days of supply from the
    doctor's prescription; too-early refills refused)*
-4. `Order 2 strips of Glycomet` → quote: price, delivery, paid from HealthCredits → `Yes` → "Order PHARM-…, a
-   pharmacist will check it, new balance …"
+4. `Order 2 strips of Telma 40` → "Telma 40 is out of stock, Telmisartan 40 (Cipla) is in stock at 75 rupees instead
+   of 110: send that now or reserve Telma?" → `Send the Cipla one` → the quote (price, delivery, HealthCredits) →
+   `Yes` → "Order PHARM-…, a pharmacist will check it, new balance …". (Glycomet now answers "refill too early":
+   earlier test orders used up its days. That refusal is itself a good line to show.)
 **Cut to the pharmacist window:** Admin → **Pharmacist desk** → the order is in the queue with Rahul's prescription →
 **Approve**.
 **Back to chat:** `Where is my medicine order?` → "being packed" + tracking link.
 **Optional 10 s:** Pharmacist desk → simulated courier → "delivered" needs the one-time delivery code (H1 and
 cold-chain orders), and two failed attempts refund the credits automatically.
 **Caption:** "Credits are held at order, captured only at dispatch, refunded on any rejection or cancellation."
-**Status:** tested live 8 Nov (limits, refusal, prescription allowance, order, tracking). Approval on the live desk:
-rehearse once.
+**Status:** tested live 8 Nov: Dolo limit, Azithromycin refusal, "what can I order", the out-of-stock generic swap,
+order and tracking. Fixed the same day: the AI once placed an order without reading the price first; the server now
+always returns the quote before a "yes" counts. Approval on the live desk: rehearse once.
+
+## Scene 5b. "Will my insurance pay?" (20 s, Shanthamma)
+**Type (new chat):** `I'm Shanthamma, mobile 9845000001, born 4 March 1959. Will my insurance cover an MRI of the knee?`
+**Expect:** "Your insurance with Star Health covers the MRI of the knee… pre-approval within 24 hours, the insurance desk
+will handle it." **Status:** tested live 8 Nov.
 
 ## Scene 6. The doctor's side (4:40–5:20)
 **Show:** the doctor window → Admin → **Prescribe** → patient Rahul → add Paracetamol 650, 2 tablets, 4 times a day.
@@ -122,6 +135,23 @@ on the call.
 **Then Shanthamma (10 s, if your Talkdesk voice handles Kannada):** "ನಾಳೆ ಹೃದಯ ವೈದ್ಯರ ಅಪಾಯಿಂಟ್ಮೆಂಟ್ ಬೇಕು"
 ("I need a heart doctor tomorrow") → replies in Kannada. Try it before the shoot; cut it if it stumbles.
 **Status:** built and on Talkdesk; not yet tested on a real call. Rehearse.
+
+## Scene 9b. WellNest calls you (40 s): the reminder call
+**Story:** "Rahul booked tomorrow 9:15. The night before, WellNest calls him by itself."
+The scheduler does this automatically 2 to 26 hours before every visit; for the video you skip the wait.
+**Do:** in Terminal (token = `DASHBOARD_TOKEN` from Render; type it, never paste it on camera):
+```bash
+WELLNEST_TOKEN=... python3 scripts/remind_now.py WN-xxxxx
+```
+It prints `Call mode: talkdesk` and `Call OC-…: dialing`. Your phone rings within 30 seconds (the `OUTBOUND_TEST_NUMBER`
+on Render, or Rahul's number). The call says the visit, then "press 1 to confirm, 2 to change, 3 to talk to the
+assistant".
+**Press 1** → "Thank you, you're confirmed". **Or press 3** → the AI picks up, knows why it called, and you say
+"move it to Wednesday": it reschedules and the Google Calendar event on screen moves.
+**Cut to:** Admin → **Outbound calls**: the call with its outcome.
+**If it prints `Call mode: simulated`:** the Talkdesk outbound settings on Render are missing (the script lists which;
+see `docs/OUTBOUND_CALLS.md` step 5). The call is then only logged, not dialled; show Admin → Outbound calls instead.
+**Status:** built 4 Nov; the script is new (8 Nov). Run it once before the shoot to see which mode you are in.
 
 ## Scene 10. Behind the curtain (7:20–7:50)
 Fast montage, 3–4 seconds each:
