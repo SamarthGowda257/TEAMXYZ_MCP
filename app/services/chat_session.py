@@ -76,10 +76,11 @@ DIAG_KEY = "chatlink:diag"
 
 def _diag(session_code, caller_id, interaction_id, result: str) -> None:
     """Keep the last 10 attempts, masked, so /health shows which link of widget -> Studio -> agent is broken."""
+    def shape(v) -> str:
+        return re.sub(r"\d", "9", CODE_RE.sub("WS-<code>", clean(v).upper()))[:80] or "(empty)"
     raw = clean(session_code)
-    shape = re.sub(r"\d", "9", CODE_RE.sub("WS-<code>", raw.upper()))[:80]
-    entry = {"at": config.now().strftime("%H:%M:%S"), "application_input": shape or "(empty)",
-             "code_found": bool(_code_in(raw)), "caller_id": bool(clean(caller_id)),
+    entry = {"at": config.now().strftime("%H:%M:%S"), "application_input": shape(raw),
+             "code_found": bool(_code_in(raw) or _code_in(caller_id)), "caller_id": shape(caller_id),
              "interaction_id": bool(clean(interaction_id)), "result": result}
     try:
         items = (store.get_json(DIAG_KEY, count=False) or [])[-9:] + [entry]
@@ -102,7 +103,9 @@ def open_session(session_code, interaction_id="", caller_id="") -> Result:
 
 
 def _open_session(session_code, interaction_id="", caller_id="") -> Result:
-    pid = _patient_for_code(session_code)
+    # the code may reach us in Application Input or, for a chat, in the contact field Talkdesk passes as Caller ID;
+    # either way only a live code the server issued opens a record
+    pid = _patient_for_code(session_code) or _patient_for_code(caller_id)
     if not pid:
         if pt.norm_phone(caller_id):
             return recognise_caller(caller_id)

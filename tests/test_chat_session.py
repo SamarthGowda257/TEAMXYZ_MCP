@@ -278,6 +278,7 @@ def test_session_code_wins_over_caller_id_and_chat_without_either_fails():
 def test_past_orders_are_found_by_condition():
     """Live: 'Have I ever ordered anything for my diabetes?' answered 'no' after a Glycomet order."""
     pt.remember_verified(pt.norm_phone(RAHUL))
+    assert mcp_tools.order_medicine(phone=RAHUL, medicine_name="2 strips of Glycomet")["data"]["quote"]
     placed = mcp_tools.order_medicine(phone=RAHUL, medicine_name="2 strips of Glycomet", confirm="yes")
     assert placed["ok"], placed["message"]
     code = placed["data"]["order_id"]
@@ -343,3 +344,17 @@ def test_persona_email_does_not_clash_with_a_real_login(monkeypatch):
     seed.ensure_extras()
     p = _rahul()
     assert p["email"] == "Tester@gmail.com" and p["web_email"] != "tester@gmail.com"
+
+
+def test_assistant_order_needs_the_quote_first():
+    """Live: the AI sent confirm=yes on its first call and an order was placed that the patient never heard priced."""
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    first = mcp_tools.order_medicine(phone=RAHUL, medicine_name="1 strip of Dolo 650", confirm="yes")
+    assert first["ok"] and first["data"]["quote"] and "order_id" not in first["data"]
+    placed = mcp_tools.order_medicine(phone=RAHUL, medicine_name="1 strip of Dolo 650", confirm="yes")
+    assert placed["data"]["order_id"].startswith("PHARM-")
+    again = mcp_tools.order_medicine(phone=RAHUL, medicine_name="1 strip of Dolo 650", confirm="yes")
+    assert again["data"].get("duplicate") and again["data"]["order_id"] == placed["data"]["order_id"]
+    # a different quantity is a different quote: asked again, not placed
+    other = mcp_tools.order_medicine(phone=RAHUL, medicine_name="2 strips of Dolo 650", confirm="yes")
+    assert other["data"].get("quote") and "order_id" not in other["data"]

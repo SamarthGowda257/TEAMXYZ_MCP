@@ -257,7 +257,8 @@ def order_medicine(phone: Phone, medicine_name: Medicine, date_of_birth: SDob = 
     it. The server enforces prescription law: Schedule H/H1 need a prescription on file from the last 6 months (if
     not, it refuses and offers a General Medicine consultation), Schedule X is never sold by chat. Returns the order
     ID (PHARM-xxxxx), delivery time and new balance. Repeating the same order within a minute never charges twice."""
-    return ph.order(phone, date_of_birth, medicine_name, quantity, delivery_address, payment_method, confirm, wait_for_restock)
+    return ph.order_by_assistant(phone, date_of_birth, medicine_name, quantity, delivery_address, payment_method, confirm,
+                                 wait_for_restock)
 
 
 @tool

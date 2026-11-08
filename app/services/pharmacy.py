@@ -20,7 +20,8 @@ from datetime import datetime, time, timedelta
 from sqlalchemy import insert, or_, select, update
 
 from .. import config, db, events, notify
-from ..util import Result, clean, fail, human_date, human_time, norm_code, ok, rupees, yes_no
+from ..store import store
+from ..util import Result, clean, fail, human_date, human_time, norm_code, norm_phone, ok, rupees, yes_no
 from . import calendar as cal
 from . import patients as pt
 from . import rx as rxs
@@ -554,6 +555,40 @@ def reject(order_id: int, reason: str, pharmacist: str) -> Result:
 
 
 # ------------------------------------------------------------------ track / cancel
+QUOTE_TTL = 15 * 60
+
+
+def _quote_sig(res: Result) -> str:
+    q = (res.data or {}).get("quote") or {}
+    items = sorted((i["code"], i["qty"]) for i in q.get("items", []))
+    return hashlib.sha256(f"{items}|{q.get('total_inr')}|{q.get('credits_to_use')}".encode()).hexdigest()[:24]
+
+
+def order_by_assistant(phone, dob, medicine_name, quantity="", delivery_address="", payment_method="health_credits",
+                       confirm="", wait_for_restock="") -> Result:
+    """The chat and phone path: a "yes" places the order only if this patient was given exactly this quote (same
+    medicines, packs and total) in the last 15 minutes. The AI sometimes sends confirm=yes on its first call, which
+    placed orders the patient never heard priced; now that call returns the quote instead."""
+    if yes_no(confirm) is not True:
+        res = order(phone, dob, medicine_name, quantity, delivery_address, payment_method, "", wait_for_restock)
+        if res.ok and (res.data or {}).get("quote"):
+            store.set_json(f"order_quote:{norm_phone(phone)}", _quote_sig(res), ttl=QUOTE_TTL)
+        return res
+    preview = order(phone, dob, medicine_name, quantity, delivery_address, payment_method, "", wait_for_restock)
+    if not preview.ok or not (preview.data or {}).get("quote"):
+        return order(phone, dob, medicine_name, quantity, delivery_address, payment_method, confirm, wait_for_restock) \
+            if preview.ok else preview          # a repeat of a placed order, or a refusal: nothing new to confirm
+    key, sig = f"order_quote:{norm_phone(phone)}", _quote_sig(preview)
+    heard = store.get_json(key, count=False)
+    if heard not in (sig, "placed:" + sig):
+        store.set_json(key, sig, ttl=QUOTE_TTL)
+        return preview                          # not heard yet: the patient gets the price first
+    res = order(phone, dob, medicine_name, quantity, delivery_address, payment_method, confirm, wait_for_restock)
+    if res.ok:                                  # a repeated "yes" (voice lag) finds the placed order, not a new quote
+        store.set_json(key, "placed:" + sig, ttl=120)
+    return res
+
+
 def track(phone, dob="", order_id="", action="") -> Result:
     want_cancel = "cancel" in clean(action).lower()
     with db.engine.begin() as c:
