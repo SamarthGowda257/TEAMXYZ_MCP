@@ -280,3 +280,55 @@ IDS IN CHAT: In a chat, write booking, order and reference IDs exactly as the to
 | Insurance, balance, next appointment, last-chat recall (19:46 round) | Answered, nothing asked |
 `/health` → `chat_link.recent_tool_calls` shows each tool call with `signed_in_page: true`, so it can be checked
 any time without signing in to Talkdesk.
+
+---
+
+## J. Latency round 1 (8 Nov night): 4 edits, about 10 minutes
+**Why:** live timing showed 11–16 s per reply, of which our server is under 0.1 s. Two Talkdesk habits cost the most:
+the Receptionist re-writes every specialist answer (an extra AI writing step on every turn), and the "first message
+goes to Support" rules add a whole extra hop at the start of each chat. Since `caller_id` now identifies a
+signed-in patient in every tool, those rules are no longer needed. Nothing else changes: same agents, same tools,
+same answers (the tools' wording is unchanged).
+
+### J1. Receptionist → Instructions
+a) If there is a paragraph starting `SIGNED IN:`, **replace that paragraph** with:
+```
+SIGNED IN: Specialists' tools recognise a patient who is signed in on the website by themselves. Never ask a signed-in patient for their mobile number or date of birth.
+```
+b) Add at the end:
+```
+RELAY: Give the patient the specialist's answer exactly as the specialist wrote it, without rephrasing, shortening or adding to it, so every ID, time, fee and amount stays as given. In chat, keep IDs like WN-70042 without spaces.
+```
+(If you added the `IDS IN CHAT:` line from part I, you can leave it; it says the same thing.)
+
+### J2. Conditions box: replace (1877 characters; only rule 1 changes: no more "every conversation's first message")
+```
+1. Support Agent: FIRST CHECK. Re-route every new topic. Chest pain, breathing difficulty, stroke signs, heavy bleeding, unconsciousness, seizure, poisoning, suicidal thoughts (urgent handoff). Also: wants a person, call back or to complain; asks about past chats, a handoff, or what they ordered, booked or asked before; asks us to remember something; asks who they are or if we know them.
+2. Outreach Agent: says WellNest just called, was transferred from a WellNest call, or answers a question from that call.
+3. Booking Agent: NEW appointment, test or scan; if or when a doctor or department is free; new patient registration; checking details on file; joining a waitlist.
+4. Changes Agent: see, cancel or reschedule an EXISTING booking; waitlist status; waitlist OFFER CODE.
+5. Pharmacy and HealthCredits Agent: buy or order medicine; medicine stock or price; what their prescriptions allow; HealthCredits balance, adding credits, paying a booking or bill with credits. NOT refunds (rule 8).
+6. Care Assist Agent: wheelchair, escort, interpreter or transport; sending booking details to family or caregiver; adding a caregiver; letting family use credits; language or time preferences.
+7. Records Agent: lab or scan reports, emailing a report, past visits, prescription refill requests, where a medicine order is or cancelling one.
+8. Billing and Insurance Agent: insurance, cashless, coverage, pre-approval, estimates, bills, payment links; ANY refund, including HealthCredits back to a bank, card or cash.
+9. Aftercare Agent: after a visit or new medicine reports how they feel, wants a nurse to call, gives feedback or a rating, wants a follow-up.
+10. Info Agent: non-urgent symptoms and which department; doctors' days, fees, languages; address, parking, visiting, food, facilities, room charges, hospital policies, other hospital questions; test or visit preparation.
+```
+
+### J3. Support Agent → Instructions
+a) Replace the paragraph starting `WHO AM I:` with:
+```
+WHO AM I: When the patient asks who they are or if we know them, call open_signed_in_session and say its message. On a phone call it says whose registered number is calling: ask "Am I speaking with <name>?" and for the date of birth only. If it says the chat isn't linked, ask for the registered mobile number and date of birth.
+```
+b) Replace the paragraph starting `MEMORY:` with:
+```
+MEMORY: For an earlier conversation, a past order or request, or a handoff ID (HO-), call search_past_interactions straight away (it recognises a signed-in patient) and say what it found, with the date. Ask for the mobile number and date of birth only if it replies not_verified.
+```
+c) **Delete** the lines starting `NEVER ASK FIRST:` and `CHAT ID:` if they are there.
+
+### J4. Save → Publish
+Make sure the version you publish is the newest draft (the top bar should show the new number as Published with no
+Draft after it).
+
+Then tell me; I'll re-time the same messages (balance, cardiologist slots, a booking, an order) and re-check that
+answers are unchanged: Dolo limit, Azithromycin refusal, insurance, chest pain, last-chat recall.
