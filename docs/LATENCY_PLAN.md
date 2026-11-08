@@ -70,3 +70,18 @@ the chat timestamps and `/health`:
   emergency (full 108 / entrance B / team member text in a fresh chat).
 - Seen once: in a long chat the emergency reply came back as Talkdesk's "Sorry, I cannot handle your request right
   now" although our urgent handoff was created; a fresh chat answered correctly. Watch in round 2.
+
+## Round 2 result (8 Nov, 21:37)
+| Message | Before (20:49) | After round 1 | After round 2 (short Receptionist) |
+|---|---|---|---|
+| Balance | ≈ 16 s | ≈ 14 s | ≈ 13 s |
+| Cardiologist slots | ≈ 11 s | ≈ 9 s | ≈ 11–13 s |
+
+- The same question varies by about ±3 s from run to run inside Talkdesk; that is now larger than anything the
+  instruction text changes. The Talkdesk call to our tool still comes 6–9 s after the message, and our server takes
+  under 0.1 s.
+- **Conclusion:** the configuration levers are used up. What is left inside the WellNest code (region move to the US)
+  would save about 0.3–0.6 s per tool call: not worth the migration risk before the demo.
+- What remains is Talkdesk's own pipeline (Receptionist and specialist AI steps). Options outside our code, for the
+  team to decide: ask Talkdesk whether the hackathon tenant can use a faster model or a single-agent setup for chat; in
+  the demo video, speed up the waits (the script already says so).
