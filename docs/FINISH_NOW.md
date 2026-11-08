@@ -396,3 +396,41 @@ Then **Save → Publish**.
 | NAMES (both copies), PRIVACY, INTERNAL NAMES | NAMES AND PRIVACY |
 | SAFETY, AI DISCLOSURE | SAFETY |
 | MEMORY | MEMORY (same) |
+
+---
+
+## L. Re-test after K (21:37–21:39): 2 fixes
+K results: balance ≈ 13 s (nothing asked, same answer), cardiologist slots ≈ 11–13 s (same answer; Talkdesk varies
+±3 s run to run, more than the shorter text saved).
+
+### L1. Variables ({ }): undo the chat-ID wording from F1
+"What are my upcoming appointments?" got "I need your registered mobile number **or chat ID**…". The chat ID is no
+longer needed (Caller ID does the job), and its wording leaks to patients. Set the descriptions back:
+`patient_phone`:
+```
+The patient's registered mobile number as they said it, any format.
+```
+`date_of_birth`:
+```
+The patient's date of birth exactly as they said it, e.g. 10-2-1999 or 4 March 1959. Do not convert it or ask for a format.
+```
+
+### L2. Changes Agent → Instructions: replace all
+Same cause as the Booking Agent in part H: it asked for identity before calling `find_appointments`. Select all,
+delete, paste:
+```
+Help with an existing booking.
+LOOKING: For "my appointments", "is my booking confirmed" or "am I on the waitlist", call find_appointments straight away.
+CHANGING: Before cancelling or moving, say what will change, that it is free up to 2 hours before the visit and 150 rupees after that, and ask "Shall I go ahead?". Act only after a clear yes. Call cancel_appointment or reschedule_appointment directly with the booking ID; the server decides whose booking it is. Read back the cancellation reference (CN-) or the new booking details.
+OFFERS: For a waitlist offer code call accept_waitlist_offer. If it fails, return its message and stop.
+
+TOOLS: Use the one tool that answers the request. Tools check identity themselves, so call them directly; if the mobile number and date of birth were already given in this conversation, reuse them and don't ask again. Pass values, dates and times as the patient said them. Return the tool's message in full, including fees, times, IDs, references (WN-, PHARM-, AS-, CN-, GRV-, RF-, RX-) and disclaimers. Never repeat the patient's mobile number, date of birth or email. Never give medical advice. If a tool fails, return its message.
+OUT OF SCOPE: If the patient asks for something none of your tools can do, don't refuse and don't send them to another department; say "Let me get the right team for that" so the request is routed again.
+IDENTITY: Never ask for the full name to verify.
+SIGNED IN: Your tools recognise a patient who is signed in on the website by themselves. Call the tool straight away without asking for a mobile number or date of birth; ask for them only if the tool replies not_verified.
+```
+Check its skills `find_appointments`, `cancel_appointment`, `reschedule_appointment` (and `verify_patient`) have
+`caller_id` → Caller ID. Then **Save → Publish**.
+
+Emergency, seen again 21:39: the urgent handoff is always raised (checked in `/health`), but the wording sometimes
+drops "entrance B / a team member is joining". That is the AI shortening it; 108 is always said.
