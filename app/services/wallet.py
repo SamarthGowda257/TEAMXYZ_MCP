@@ -17,6 +17,7 @@ import httpx
 from sqlalchemy import func, insert, select, update
 
 from .. import config, db, events, notify
+from ..store import store
 from ..util import Result, age_on, clean, fail, norm_code, ok, rupees
 from . import patients as pt
 
@@ -411,17 +412,28 @@ def request_refund(phone, amount="", dob="", confirm="yes") -> Result:
         if err:
             return err
         bal = balance(c, p["id"])
-        try:
-            amt = int(float(clean(amount).replace(",", ""))) if clean(amount) else bal
-        except ValueError:
-            return fail("invalid_input", "How many credits would you like refunded? Say 'all' for the full balance.")
         if bal <= 0:
             return fail("not_allowed", "There are no HealthCredits to refund on this account.")
+        pending_key = f"refund_pending:{p['id']}"
+        pending = store.get_json(pending_key, count=False)
+        said = clean(amount).lower().replace(",", "").replace("credits", "").replace("rupees", "").strip()
+        try:
+            if said in ("", "all", "everything", "full", "whole balance", "full balance"):
+                # A "yes" often arrives without the amount: refund what was offered, never silently the whole balance
+                amt = int(pending) if (said == "" and pending) else bal
+            else:
+                amt = int(float(said))
+        except ValueError:
+            return fail("invalid_input", "How many credits would you like refunded? Say 'all' for the full balance.")
         amt = min(max(amt, 1), bal)
-        if clean(confirm).lower() not in ("yes", "y", "true", "confirm", "confirmed"):
+        confirmed = clean(confirm).lower() in ("yes", "y", "true", "confirm", "confirmed")
+        if not confirmed or not pending or int(pending) != amt:
+            # The server keeps the two steps: only the exact amount the patient heard can be refunded
+            store.set_json(pending_key, amt, ttl=15 * 60)
             return ok(f"You have {bal:,} HealthCredits. Shall I refund {rupees(amt)} to the bank account or card you originally "
                       "paid from? It usually arrives in 3 to 5 banking days.", needs_confirmation=True, amount_inr=amt,
                       balance_credits=bal)
+        store.delete(pending_key)
         code = pt.random_code("RF", 5)
         good, _txn = debit(c, p["id"], amt, "refund_out", code, f"refund_out:{code}")
         if not good:

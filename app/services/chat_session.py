@@ -32,8 +32,8 @@ TRANSCRIPT_TOPIC = "transcript"
 CHUNK = 480
 MAX_CHUNKS = 12
 
-NOT_SIGNED_IN = ("This chat isn't linked to a signed-in account. Please share the registered mobile number and date of "
-                 "birth so I can open the record.")
+NOT_SIGNED_IN = ("This chat isn't linked to a signed-in account. Help with what they asked; only for something about "
+                 "their own record, ask for the registered mobile number and date of birth.")
 
 
 def mint(patient_id: int) -> str:
@@ -92,7 +92,12 @@ def open_session(session_code, interaction_id="", caller_id="") -> Result:
     first = p["full_name"].split()[0]
     msg = re.sub(r"^Thank you, [^,]+, you're verified\.", f"Hello {first}, you're signed in.", res.message)
     data = dict(res.data or {})
-    data.update(patient_phone=p["phone"], patient_name=p["full_name"], signed_in=True,
+    # The date of birth goes to the agent (never to be read out) so every later tool has both identity values and no
+    # specialist asks for them again; the website login already proved who this is.
+    dob = p["date_of_birth"].strftime("%d-%m-%Y") if p.get("date_of_birth") else ""
+    msg += (" I have your details from your sign-in, so you won't need to give your mobile number or date of birth "
+            "in this chat.")
+    data.update(patient_phone=p["phone"], date_of_birth=dob, patient_name=p["full_name"], signed_in=True,
                 earlier=[{"date": m["date"], "summary": m["summary"][:140]} for m in (earlier.data or {}).get("matches", [])])
     return Result(True, msg, data, related=res.related)
 

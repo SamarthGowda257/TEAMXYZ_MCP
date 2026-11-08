@@ -134,7 +134,8 @@ def test_wallet_topup_bonus_pay_booking_and_refund_on_cancel():
     assert "already paid" in wl.pay(SHAN, "WN-48213", "").message and _bal(1) == 4400
     c = ap.cancel("WN-48213", SHAN, "")
     assert c.ok and "1,200 HealthCredits are back" in c.message and _bal(1) == 5600
-    rf = wl.request_refund(SHAN, "600", "")
+    assert wl.request_refund(SHAN, "600", "", confirm="").data["needs_confirmation"]
+    rf = wl.request_refund(SHAN, "600", "", confirm="yes")
     assert rf.ok and rf.data["refund_id"].startswith("RF-") and _bal(1) == 5000
 
 

@@ -51,6 +51,12 @@ def test_code_opens_the_right_patient_and_marks_them_signed_in():
     assert r.ok and r.message.startswith("Hello Rahul, you're signed in.")
     assert r.data["patient_phone"] == p["phone"] and r.data["signed_in"] is True
     assert pt.recently_verified(p["phone"])
+    assert "won't need to give your mobile number or date of birth" in r.message
+    # both identity values reach the agent, so a specialist can call any tool without asking
+    assert r.data["date_of_birth"] == "10-09-1981"
+    bal = mcp_tools.get_health_credits_balance(phone=r.data["patient_phone"], date_of_birth=r.data["date_of_birth"])
+    assert bal["ok"], bal["message"]
+    assert len(json.dumps(mcp_tools.open_signed_in_session(session_code=code))) < 1400
 
 
 def test_code_is_found_inside_application_input_json():
@@ -221,6 +227,25 @@ def test_refund_asks_before_moving_money():
     assert done["ok"] and done["data"]["refund_id"].startswith("RF-") and done["data"]["balance_credits"] == 1600
 
 
+def test_refund_yes_without_amount_refunds_only_what_was_offered():
+    """Live bug: the 'yes' turn reached the server without the amount and the whole balance was refunded."""
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    assert mcp_tools.request_credits_refund(phone=RAHUL, amount="50")["data"]["amount_inr"] == 50
+    done = mcp_tools.request_credits_refund(phone=RAHUL, confirm="yes")
+    assert done["data"]["refund_id"].startswith("RF-") and done["data"]["amount_inr"] == 50
+    assert done["data"]["balance_credits"] == 1750
+
+
+def test_refund_yes_with_nothing_offered_only_asks():
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    first = mcp_tools.request_credits_refund(phone=RAHUL, amount="100", confirm="yes")
+    assert first["data"]["needs_confirmation"] and "1,800" in mcp_tools.get_health_credits_balance(phone=RAHUL)["message"]
+    other = mcp_tools.request_credits_refund(phone=RAHUL, amount="300", confirm="yes")     # a different amount: ask again
+    assert other["data"]["needs_confirmation"] and other["data"]["amount_inr"] == 300
+    done = mcp_tools.request_credits_refund(phone=RAHUL, amount="300", confirm="yes")
+    assert done["data"]["refund_id"].startswith("RF-") and done["data"]["balance_credits"] == 1500
+
+
 @pytest.mark.parametrize("q", ["What did I ask you in my last chat?", "what did we talk about before", "anything earlier?"])
 def test_last_chat_questions_return_the_latest_conversation(q):
     pt.remember_verified(pt.norm_phone(RAHUL))
@@ -248,3 +273,17 @@ def test_session_code_wins_over_caller_id_and_chat_without_either_fails():
     code = cs.mint(_rahul()["id"])
     assert mcp_tools.open_signed_in_session(session_code=code, caller_id="9845000001")["data"]["signed_in"] is True
     assert mcp_tools.open_signed_in_session(session_code="", caller_id="chat-contact-abc")["error_code"] == "not_signed_in"
+
+
+def test_past_orders_are_found_by_condition():
+    """Live: 'Have I ever ordered anything for my diabetes?' answered 'no' after a Glycomet order."""
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    placed = mcp_tools.order_medicine(phone=RAHUL, medicine_name="2 strips of Glycomet", confirm="yes")
+    assert placed["ok"], placed["message"]
+    code = placed["data"]["order_id"]
+    h = mcp_tools.get_visit_history(phone=RAHUL)
+    assert h["ok"] and code in h["message"] and "for diabetes" in h["message"]
+    assert len(json.dumps(h)) < 1800
+    search.sync()
+    r = sp.search_interactions(RAHUL, "", "Have I ever ordered anything for my diabetes?")
+    assert r.ok and code in r.message

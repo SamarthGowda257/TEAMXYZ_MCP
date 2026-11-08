@@ -39,6 +39,21 @@ NUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "s
 UNITS = r"(?:strips?|packs?|packets?|box(?:es)?|bottles?|pens?|tubes?|inhalers?|sachets?|vials?|units?|tabs?|tablets?)"
 SCHEDULE_WORDS = {"OTC": "available without a prescription", "H": "a prescription medicine (Schedule H)",
                   "H1": "a prescription medicine (Schedule H1)", "X": "a controlled medicine (Schedule X)"}
+# What a medicine is commonly used for, so "anything for my diabetes?" finds a Glycomet order. Not advice: it is
+# only written into the patient's own order history and memory.
+USED_FOR = [("metformin", "diabetes"), ("glimepiride", "diabetes"), ("insulin", "diabetes"),
+            ("telmisartan", "blood pressure"), ("amlodipine", "blood pressure"), ("atorvastatin", "cholesterol"),
+            ("rosuvastatin", "cholesterol"), ("aspirin", "heart"), ("levothyroxine", "thyroid"),
+            ("pantoprazole", "acidity"), ("antacid", "acidity"), ("salbutamol", "asthma"), ("budesonide", "asthma"),
+            ("formoterol", "asthma"), ("montelukast", "allergy"), ("cetirizine", "allergy"),
+            ("paracetamol", "fever and pain"), ("amoxicillin", "infection"), ("azithromycin", "infection"),
+            ("rehydration", "dehydration"), ("vitamin", "vitamin supplement"), ("lozenges", "sore throat"),
+            ("zolpidem", "sleep"), ("alprazolam", "anxiety"), ("clonazepam", "anxiety")]
+
+
+def used_for(generic: str) -> str:
+    g = clean(generic).lower()
+    return next((use for key, use in USED_FOR if key in g), "")
 
 
 # ------------------------------------------------------------------ lookup
@@ -290,7 +305,8 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
         # 4. price, delivery and payment plan
         items = [{"code": r["medicine_code"], "name": _label(r), "pack": r["pack"], "qty": q, "unit_price": r["unit_price_inr"],
                   "line_total": r["unit_price_inr"] * q, "schedule": r["schedule_class"], "chronic": bool(r["chronic"]),
-                  "backorder": r["stock_qty"] < q} for r, q in rows]
+                  "backorder": r["stock_qty"] < q, "generic": r["generic_name"], "used_for": used_for(r["generic_name"])}
+                 for r, q in rows]
         subtotal = sum(i["line_total"] for i in items)
         fee = 0 if subtotal >= FREE_DELIVERY_FROM else DELIVERY_FEE
         total = subtotal + fee
@@ -351,7 +367,9 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
             if r["stock_qty"] >= q:
                 c.execute(update(INV).where(INV.c.id == r["id"]).values(stock_qty=INV.c.stock_qty - q, updated_at=config.now()))
         new_bal = wallet.spendable(c, p)
-        pt.log(c, p["id"], "order_medicine", code, True, f"{summary}; total {total}; credits {credits}; due {due}")
+        uses = sorted({i["used_for"] for i in items if i["used_for"]})
+        pt.log(c, p["id"], "order_medicine", code, True, f"Medicine order {code}: {summary}"
+               + (f" (for {', '.join(uses)})" if uses else "") + f"; total {total}; credits {credits}; due {due}")
         _order_messages(c, p, code, items, subtotal, fee, total, credits, new_bal, due, link, address, eta, zone, cold,
                         backorder, child)
     events.publish("pharmacy.ordered", patient_id=p["id"], order_id=code)

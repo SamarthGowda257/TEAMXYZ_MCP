@@ -104,6 +104,20 @@ def visit_history(phone, dob) -> Result:
             return err
         rows = c.execute(select(A).where(A.c.patient_id == p["id"], A.c.status == "completed")
                          .order_by(A.c.appt_date.desc()).limit(5)).mappings().all()
+        O = db.pharmacy_orders
+        order_rows = c.execute(select(O.c.order_code, O.c["items"], O.c.status, O.c.created_at).where(O.c.patient_id == p["id"])
+                               .order_by(O.c.created_at.desc()).limit(3)).mappings().all()
+    from .pharmacy import used_for
+    orders = []
+    for o in order_rows:
+        names = []
+        for i in o["items"] or []:
+            use = i.get("used_for") or used_for(i.get("generic") or i.get("name") or "")
+            names.append(i["name"].split(" (")[0] + (f" (for {use})" if use else ""))
+        orders.append({"order_id": o["order_code"], "date": short_date(o["created_at"].date()), "medicines": names,
+                       "status": o["status"].replace("_", " ")})
+    order_line = (" Medicine orders: " + "; ".join(f"{x['order_id']} on {x['date']}, {', '.join(x['medicines'])}, {x['status']}"
+                                                   for x in orders) + ".") if orders else ""
     visits = []
     for a in rows:
         who = REF.doctors[a["doctor_id"]]["name"] if a["doctor_id"] else REF.procedures[a["procedure_id"]]["name"]
@@ -116,9 +130,11 @@ def visit_history(phone, dob) -> Result:
     recent = [{"date": m["date"], "summary": m["summary"][:120]} for m in recent]
     tail = (" Most recent conversation or request: " + recent[0]["summary"].rstrip(".") + ".") if recent else ""
     if not visits:
-        return ok("I don't see any completed visits on your record yet." + tail, visits=[], recent_activity=recent)
+        return ok("I don't see any completed visits on your record yet." + order_line + tail, visits=[],
+                  medicine_orders=orders, recent_activity=recent)
     parts = [f"{v['date']} with {v['with']}" for v in visits[:3]]
-    return ok("Your recent visits: " + "; ".join(parts) + "." + tail, visits=visits, recent_activity=recent)
+    return ok("Your recent visits: " + "; ".join(parts) + "." + order_line + tail, visits=visits[:3],
+              medicine_orders=orders, recent_activity=recent)
 
 
 def prescription_refill(phone, dob, medicine_name, doctor_name="") -> Result:

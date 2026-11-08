@@ -296,7 +296,7 @@ def pay_with_health_credits(phone: Phone,
 
 @tool
 def request_credits_refund(phone: Phone, date_of_birth: SDob = "",
-                           amount: Annotated[S, Field(description="Optional. Credits to refund; empty means the whole balance.")] = "",
+                           amount: Annotated[S, Field(description="Credits to refund as the patient said, or 'all'. On the confirming call pass the same amount (empty refunds the amount just offered).")] = "",
                            confirm: Annotated[S, Field(description="Leave empty first: it returns the amount to confirm. Set to yes only after the patient agreed to that refund.")] = "") -> dict:
     """Refund unused HealthCredits to the original bank account or card (3 to 5 banking days). Credits are never paid
     out as cash (RBI closed-loop wallet rules). First call without confirm and read back the amount; call again with
