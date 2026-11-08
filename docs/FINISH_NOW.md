@@ -151,3 +151,45 @@ Studio needs nothing: the sign-in now reaches the AI through the page address (C
 In the demo, open every new chat with a question about yourself ("Hi, do you know who I am?", "What did we talk about
 last time?"). Those reach the Support agent, which runs the sign-in check. A first message that goes straight to
 another team (e.g. "book me a cardiologist") can still ask for the number, because only Support has the sign-in tool.
+
+---
+
+## F. Signed-in chat, final (8 Nov night): 5 edits, about 8 minutes
+Why: Talkdesk agents only reuse details written in the conversation. The server now gives a signed-in patient a chat
+ID (`WS-` + 12 letters/digits) that every tool accepts in place of the mobile number and date of birth. These edits
+make Support say it, make every agent pick it up, and send the first message to Support.
+
+### F1. Variables ({ }): change two descriptions
+`patient_phone` → description:
+```
+The patient's registered mobile number as they said it. If the conversation contains a chat ID (WS- followed by 12 letters and digits), put that chat ID here instead: it stands for the signed-in patient's mobile number and date of birth.
+```
+`date_of_birth` → description:
+```
+The patient's date of birth exactly as they said it, e.g. 10-2-1999 or 4 March 1959; never convert it or ask for a format. If the conversation contains a chat ID (WS- followed by 12 letters and digits), put that chat ID here instead.
+```
+
+### F2. Support Agent → Instructions
+Replace the paragraph starting `WHO AM I:` with:
+```
+WHO AM I: At the start of every conversation, before anything else, call open_signed_in_session. If they are signed in, reply with its message in full, word for word, including the sentence with the chat ID (WS-...): the other teams can use the patient's details only once the chat ID is written in the conversation. Never ask a signed-in patient for their mobile number or date of birth. If their first message also asked for something, end by offering it, e.g. "Shall I check your insurance for the knee MRI?". On a phone call it says whose registered number is calling: ask "Am I speaking with <name>?" and for the date of birth only. If the chat isn't linked, just help; ask for the registered mobile number and date of birth only when they want something from their own record.
+```
+and add at the end:
+```
+CHAT ID: A chat ID (WS-...) is not private. Always repeat it exactly when a tool gives it.
+```
+
+### F3. Receptionist → Instructions
+If there is a paragraph starting `SIGNED IN:`, replace it; otherwise add at the end:
+```
+SIGNED IN: In every new conversation, send the FIRST message to the Support Agent before any other team, whatever it asks (only a general hospital question may go straight to the Info Agent), so it can check the website sign-in; then send the request to the right team. Relay the Support Agent's reply in full, including any chat ID (WS-...). Once a chat ID is in the conversation, pass it to every team as both the mobile number and the date of birth, and never ask the patient for either.
+```
+
+### F4. Conditions box
+**Skip if** it starts with `1. Support Agent: FIRST CHECK. Every conversation's FIRST message`. Otherwise paste the A1
+text from section A above.
+
+### F5. MCP Servers → WellNest_TeamXYZ_MCP → Refresh, then top Save → Publish.
+
+Then tell me; I'll re-run: insurance as the first message, greeting then balance, booking a dentist, last-chat recall,
+and an order, all while signed in, plus one signed-out chat to make sure nothing changed for patients who aren't.
