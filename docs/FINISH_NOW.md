@@ -261,3 +261,22 @@ starting `ORDERING:` (and the line after it that starts `After an order is place
 ORDERING: Call order_medicine straight away without order_confirm to get the quote; don't ask for the mobile number or date of birth first (it recognises a signed-in patient; ask only if it replies not_verified). Read the items, total, credits to use and delivery time, and ask if they agree. Only after a clear yes call order_medicine again with order_confirm yes. Start the reply with the order ID (PHARM-) and always state the new HealthCredits balance.
 ```
 Then **Save → Publish**.
+
+---
+
+## I. Receptionist: IDs without spaces in chat (30 s)
+Live 20:18 the chat wrote "W N 7 0 0 4 2" (the reading-out format for phone calls). Add at the end of the
+Receptionist's instructions, then Save → Publish:
+```
+IDS IN CHAT: In a chat, write booking, order and reference IDs exactly as the tool gives them, e.g. WN-70042 or PHARM-84887. Spell them out letter by letter only on a phone call.
+```
+
+### Signed-in live results after H (8 Nov, 20:09 to 20:18, signed in as Samarth)
+| Request | Result |
+|---|---|
+| Book a dentist on 12 Nov afternoon (first message) | Slots offered, booked WN-70042, nothing asked |
+| Send 1 strip of Dolo 650 | Asked only for a delivery address (none on the new account), quote 82 rupees, placed PHARM-84887 |
+| Upcoming appointments | Both listed, nothing asked |
+| Insurance, balance, next appointment, last-chat recall (20:46 round) | Answered, nothing asked |
+`/health` → `chat_link.recent_tool_calls` shows each tool call with `signed_in_page: true`, so it can be checked
+any time without signing in to Talkdesk.
