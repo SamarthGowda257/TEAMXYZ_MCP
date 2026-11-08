@@ -52,7 +52,8 @@ def test_code_opens_the_right_patient_and_marks_them_signed_in():
     assert r.data["patient_phone"] == p["phone"] and r.data["signed_in"] is True
     assert pt.recently_verified(p["phone"])
     # the details are said in the reply: only text in the conversation reaches the next Talkdesk agent
-    assert "mobile 9845000004, date of birth 10 September 1981" in r.message and "won't need to type them" in r.message
+    assert f"Your chat ID is {code}" in r.message and "date of birth 10 September 1981" in r.message
+    assert r.data["chat_id"] == code
     # both identity values reach the agent, so a specialist can call any tool without asking
     assert r.data["date_of_birth"] == "10-09-1981"
     bal = mcp_tools.get_health_credits_balance(phone=r.data["patient_phone"], date_of_birth=r.data["date_of_birth"])
@@ -398,3 +399,16 @@ def test_last_chat_recall_covers_the_whole_conversation():
     r = sp.search_interactions(RAHUL, "", "what did we speak about in the last chat?")
     assert r.ok and "MRI" in r.message and b["data"]["booking_id"] in r.message, r.message
     assert len(r.message) < 900
+
+
+def test_chat_id_stands_in_for_mobile_and_date_of_birth():
+    """Talkdesk agents only reuse what is in the conversation; the signed-in reply states a chat ID that any tool
+    accepts in place of the number and date of birth, until sign-out."""
+    p = _rahul()
+    code = cs.mint(p["id"])
+    assert mcp_tools.get_health_credits_balance(phone=code)["ok"]
+    assert mcp_tools.find_appointments(phone=f"my chat ID is {code}")["ok"]
+    assert mcp_tools.get_health_credits_balance(phone="9845000004", date_of_birth=code)["ok"]
+    cs.revoke(p["id"])
+    gone = mcp_tools.get_health_credits_balance(phone=code)
+    assert not gone["ok"] and "expired" in gone["message"]

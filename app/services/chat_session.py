@@ -105,6 +105,7 @@ def open_session(session_code, interaction_id="", caller_id="") -> Result:
 def _open_session(session_code, interaction_id="", caller_id="") -> Result:
     # the code may reach us in Application Input or, for a chat, in the contact field Talkdesk passes as Caller ID;
     # either way only a live code the server issued opens a record
+    code = _code_in(session_code) or _code_in(caller_id)
     pid = _patient_for_code(session_code) or _patient_for_code(caller_id)
     if not pid:
         if pt.norm_phone(caller_id):
@@ -129,10 +130,10 @@ def _open_session(session_code, interaction_id="", caller_id="") -> Result:
     # number and date of birth are therefore said in this reply, in their own authenticated chat, never on a call.
     dob = p["date_of_birth"].strftime("%d-%m-%Y") if p.get("date_of_birth") else ""
     local = p["phone"][-10:]
-    msg += (f" I'm using the details on your account (mobile {local}, date of birth {p['date_of_birth'].day} {p['date_of_birth']:%B %Y}), so "
-            "you won't need to type them in this chat." if dob else
-            f" I'm using the mobile number on your account ({local}), so you won't need to type it.")
-    data.update(patient_phone=p["phone"], date_of_birth=dob, patient_name=p["full_name"], signed_in=True,
+    msg += (f" Your chat ID is {code}: it stands in for your mobile number and date of birth in this chat, so you "
+            f"won't need to type them (account mobile {local}" + (f", date of birth {p['date_of_birth'].day} "
+            f"{p['date_of_birth']:%B %Y})." if dob else ").")) if code else ""
+    data.update(patient_phone=p["phone"], date_of_birth=dob, chat_id=code, patient_name=p["full_name"], signed_in=True,
                 earlier=[{"date": m["date"], "summary": m["summary"][:140]} for m in (earlier.data or {}).get("matches", [])])
     return Result(True, msg, data, related=res.related)
 

@@ -75,6 +75,18 @@ def check_identity(conn, phone, dob) -> tuple[dict | None, Result | None]:
     """Server-side identity check. Returns (patient, None) or (None, failure Result). Generic failures only.
     The date of birth may be left out when this phone was verified (or signed in on the website) within the
     session window; a wrong date of birth still fails."""
+    # A signed-in website chat: the chat ID (the live session code, WS-...) stands in for both identity values, in either
+    # field. Only a code the server issued to a signed-in patient, and not yet revoked at sign-out, is accepted.
+    from .chat_session import CODE_RE
+    code = CODE_RE.search(clean(phone).upper()) or CODE_RE.search(clean(dob).upper())
+    if code:
+        pid = store.get_json(f"chatsess:{code.group(0)}", count=False)
+        p = get_by_id(conn, pid) if pid else None
+        if p and not p["is_guest"]:
+            remember_verified(p["phone"], config.WEB_SESSION_MIN)
+            return p, None
+        return None, fail("not_verified", "That chat ID has expired. Please sign in again on the website, or share the "
+                                          "registered mobile number and date of birth.")
     p_norm, d = norm_phone(phone), parse_dob(dob)
     if clean(phone) and not clean(dob) and p_norm and recently_verified(p_norm):
         p = get_by_phone(conn, p_norm)

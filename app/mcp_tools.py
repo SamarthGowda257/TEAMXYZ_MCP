@@ -37,8 +37,8 @@ mcp = MCPServer(
 
 # ---- input descriptions (shared) ----
 S = str
-Phone = Annotated[S, Field(description="Patient's mobile number, any format, e.g. 98450 12345 or +91 9845012345.")]
-OptPhone = Annotated[S, Field(description="Optional. Patient's mobile number if known; helps carry facts between agents.")]
+Phone = Annotated[S, Field(description="Patient's mobile number, any format, e.g. 98450 12345 or +91 9845012345. For a patient signed in on the website, the chat ID (WS-...) from earlier in the conversation works instead of the number and the date of birth.")]
+OptPhone = Annotated[S, Field(description="Optional. Patient's mobile number, or their chat ID (WS-...) if signed in; helps carry facts between agents.")]
 Dob = Annotated[S, Field(description="Patient's date of birth exactly as they said it, any format, e.g. 10-2-1999, 10/02/1999 or 4 March 1958. Day-month-year (India): 10-2-1999 is 10 February 1999. Do not convert it or ask the patient for a format.")]
 OptDob = Annotated[S, Field(description="Optional. Patient's date of birth, e.g. 1958-03-04, for identity verification. Leave empty if it was already given in this conversation or the patient is signed in on the website.")]
 # Identity tools: the server remembers a verified patient (phone + date of birth, or a website sign-in) for a while,
@@ -54,12 +54,46 @@ BookingId = Annotated[S, Field(description="Booking ID, e.g. WN-48213 (letters a
 Ins = Annotated[S, Field(description="Optional. Insurance company, e.g. Star Health, HDFC ERGO.")]
 
 
+CHAT_ID_EXPIRED = ("That chat ID has expired. Please sign in again on the website, or share the registered mobile number "
+                   "and date of birth.")
+
+
+def _resolve_chat_id(name: str, kwargs: dict) -> dict | None:
+    """A signed-in website chat states a chat ID (the live session code, WS-...). Agents may pass it as the phone or as
+    the date of birth; swap it for the account's real number and mark the patient verified, so every tool works as if
+    both values had been typed. A code that is not live (forged, expired, signed out) opens nothing."""
+    if name == "open_signed_in_session":
+        return None
+    found = next((cs.CODE_RE.search(str(kwargs.get(k, "")).upper()) for k in ("phone", "date_of_birth")
+                  if cs.CODE_RE.search(str(kwargs.get(k, "")).upper())), None)
+    if not found:
+        return None
+    from .db import engine
+    from .store import store
+    pid = store.get_json(f"chatsess:{found.group(0)}", count=False)
+    p = None
+    if pid:
+        with engine.connect() as c:
+            p = pt.get_by_id(c, pid)
+    if not p or p.get("is_guest"):
+        return {"ok": False, "error_code": "not_verified", "message": CHAT_ID_EXPIRED}
+    pt.remember_verified(p["phone"], cs.config.WEB_SESSION_MIN)
+    if "phone" in kwargs:
+        kwargs["phone"] = p["phone"]
+    if cs.CODE_RE.search(str(kwargs.get("date_of_birth", "")).upper()):
+        kwargs["date_of_birth"] = ""
+    return None
+
+
 def tool(fn):
     """Register fn as an MCP tool with timing, logging and a never-raise guard."""
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         t0 = time.perf_counter()
         try:
+            expired = _resolve_chat_id(fn.__name__, kwargs)
+            if expired:
+                return expired
             res = fn(*args, **kwargs)
             out = res.as_dict() if isinstance(res, Result) else res
             if out.get("ok") and fn.__name__ in sp.REMEMBERED_READS and kwargs.get("phone"):
