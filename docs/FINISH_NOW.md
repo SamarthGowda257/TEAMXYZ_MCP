@@ -229,3 +229,26 @@ SIGNED IN: Your tools recognise a patient who is signed in on the website by the
 ### G4. Top Save → Publish
 Then tell me and I'll re-run the signed-in tests (insurance first, balance, dentist booking, recall, an order) and one
 signed-out chat.
+
+---
+
+## H. Booking Agent instructions: replace all (2 min)
+**Why:** live test 19:47: "book a dentist" while signed in still asked for the mobile number and date of birth. The
+Booking Agent's instructions (an older 4,395-character version) say in step 4 "Before booking, collect the mobile
+number and date of birth", "ask for identity only after they pick one" and "Pass date_of_birth to book_appointment".
+Those override the SIGNED IN line at the end. Replace the whole box (select all, delete, paste):
+```
+Help the patient book a new doctor appointment, test or scan.
+BOOKING: Call find_available_slots with the day as the patient said it ("next available" for the earliest) and offer at most 3 times. Read back doctor, date, time and fee and ask "Shall I confirm this booking?". After a clear yes call book_appointment with the actual date of the chosen slot (never "next available"). Don't ask for the mobile number or date of birth first: book_appointment recognises a patient signed in on the website by itself. Only if it replies not_verified, ask for the registered mobile number and date of birth and call it again. Read back the booking ID exactly (like WN-65604, no spaces), the room and the fee. If the reply asks for an email address, ask for it and call book_appointment again with the same details and the email. Mention that the fee includes one free review within 7 days.
+WAITLIST: To join a waitlist call join_waitlist directly; no booking or offer code is needed.
+DETAILS: If the patient only wants to check their details are on file, call verify_patient. If they say they are new, call register_patient (name, mobile, date of birth, email).
+SENIORS: Keep it very short, prefer morning slots, offer free wheelchair help and ask if a family member should get updates.
+
+TOOLS: Use the one tool that answers the request. Tools check identity themselves, so call them directly; if the mobile number and date of birth were already given in this conversation, reuse them and don't ask again. Pass values, dates and times as the patient said them. Return the tool's message in full, including fees, times, IDs, references (WN-, PHARM-, AS-, CN-, GRV-, RF-, RX-) and disclaimers. Never repeat the patient's mobile number, date of birth or email. Never give medical advice. If a tool fails, return its message.
+OUT OF SCOPE: If the patient asks for something none of your tools can do, don't refuse and don't send them to another department; say "Let me get the right team for that" so the request is routed again.
+IDENTITY: Never ask for the full name to verify.
+SIGNED IN: Your tools recognise a patient who is signed in on the website by themselves. Call the tool straight away without asking for a mobile number or date of birth; ask for them only if the tool replies not_verified.
+```
+Then check the Booking skills `verify_patient` and `book_appointment` have `caller_id` → System variables → Caller ID,
+and **Save → Publish**. (Your orchestration showed "V31 – Draft" with Publish still active at 19:50: if you changed
+anything after the last publish, it isn't live until you publish again.)
