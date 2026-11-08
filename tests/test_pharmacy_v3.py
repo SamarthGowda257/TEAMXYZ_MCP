@@ -406,3 +406,22 @@ def test_old_database_gains_the_new_columns():
         assert db.add_missing_columns() == []
     finally:
         db.md.remove(probe)
+
+
+def test_non_medicine_question_answers_from_the_patients_history():
+    from app import search
+    from app.services import support as sp
+    pt.remember_verified(pt.norm_phone(RAHUL))
+    assert sp.save_note(RAHUL, "Ordered a knee brace for the left knee.").ok
+    search.sync()
+    r = mcp_tools.check_medicine_stock(medicine_name="knee brace", phone=RAHUL)
+    assert r["ok"] and r["data"]["from_history"] and "knee brace" in r["message"]
+    assert not mcp_tools.check_medicine_stock(medicine_name="knee brace")["ok"]          # no patient: plain not found
+
+
+def test_references_close_the_message():
+    from app.services import support as sp
+    o = ph.order(RAHUL, RAHUL_DOB, "Dolo 650", confirm="yes")
+    assert o.message.rstrip(".").endswith(o.data["order_id"])
+    h = sp.create_handoff("Charged twice", "normal", RAHUL, "complaint")
+    assert h.message.rstrip(".").endswith(h.data["grievance_id"])

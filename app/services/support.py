@@ -40,8 +40,9 @@ def create_handoff(summary, priority="normal", phone="", reason_code="", channel
            "If we get disconnected, we'll call you back within 2 hours.")
     if rc == "complaint":
         grv = "GRV-" + code.split("-")[1]
-        say = (f"I'm sorry about this. I've logged your complaint as {grv} and passed it to our patient relations team with a summary, "
-               "so you won't need to repeat yourself. If we get disconnected, we'll call you back within 2 hours.")
+        say = ("I'm sorry about this. I've logged your complaint and passed it to our patient relations team with a summary, "
+               "so you won't need to repeat yourself. If we get disconnected, we'll call you back within 2 hours. "
+               f"Your complaint reference is {grv}.")          # last, as its own sentence: summaries kept dropping it
         return ok(say, handoff_id=code, grievance_id=grv, priority=pr, say=say, transfer=True)
     return ok(say, handoff_id=code, priority=pr, say=say, transfer=True)
 

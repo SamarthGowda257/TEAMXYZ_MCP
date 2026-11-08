@@ -160,6 +160,19 @@ def _allowance(c, p: dict, r: dict) -> str:
     return f" For safety we send at most {int(min(caps))} packs per order." if caps else ""
 
 
+def _history_answer(p: dict, words: str) -> Result | None:
+    """"Did I ever order something for my diabetes?" often reaches the stock check as a medicine name. For a known
+    patient, answer from their own memory (meaning search over orders, notes and requests) instead of "not found"."""
+    from . import support as sp
+    res = sp.search_interactions(p["phone"], "", f"medicine order {clean(words)}")
+    hits = (res.data or {}).get("matches", []) if res.ok else []
+    if not hits or not (res.data or {}).get("matched_topic", True):
+        return None
+    m = hits[0]
+    return ok(f"{clean(words).capitalize()} isn't a medicine name, but from your record, on {m['date']}: {m['summary']}",
+              from_history=True, matches=hits[:3])
+
+
 def check_stock(medicine_name, phone="", dob="") -> Result:
     if not clean(medicine_name) and not clean(phone):
         return fail("invalid_input", "Which medicine would you like me to check?")
@@ -177,6 +190,9 @@ def check_stock(medicine_name, phone="", dob="") -> Result:
         rxs.ensure_reference(c)
         rows, missing = _resolve(c, medicine_name, "")
         if not rows:
+            past = _history_answer(p, medicine_name) if p else None
+            if past:
+                return past
             return fail("not_found", f"I couldn't find {clean(medicine_name)} in our hospital pharmacy list. Please check the "
                                      f"name on the prescription, or call the pharmacy desk on {PHARMACY_DESK}.")
         info = [describe(c, r, q) for r, q in rows]
@@ -339,7 +355,7 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
         _order_messages(c, p, code, items, subtotal, fee, total, credits, new_bal, due, link, address, eta, zone, cold,
                         backorder, child)
     events.publish("pharmacy.ordered", patient_id=p["id"], order_id=code)
-    parts = [f"Done. Order {code}: {summary}, total {rupees(total)}."]
+    parts = [f"Done. Your order of {summary} is placed, total {rupees(total)}."]
     if review:
         parts.append(rxs.review_window_note())
     if credits:
@@ -355,7 +371,8 @@ def order(phone, dob, medicine_name, quantity="", delivery_address="", payment_m
                      f" to {address}. You'll get an SMS with the tracking link.")
     if notes:
         parts.append(notes)
-    return ok(" ".join(parts) + cold_note, order_id=code, total_inr=total, credits_used=credits, balance_credits=new_bal,
+    msg = " ".join(parts) + cold_note + f" Your order ID is {code}."   # last, its own sentence: summaries kept dropping it
+    return ok(msg, order_id=code, total_inr=total, credits_used=credits, balance_credits=new_bal,
               amount_by_link_inr=due, payment_url=link["url"] if link else None, delivery_eta=_eta_text(eta), status=status,
               tracking_url=f"{config.PUBLIC_BASE_URL}/track/{code}", pharmacist_check=bool(review))
 
