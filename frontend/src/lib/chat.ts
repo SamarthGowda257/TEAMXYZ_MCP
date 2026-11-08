@@ -47,8 +47,40 @@ export function setChatPatient(p: { name: string; phone: string } | null) {
   pushContext();
 }
 
+/* How the code reaches the AI: in a web chat Talkdesk passes the page address as the Caller ID system variable, read
+   when each conversation starts (verified live 8 Nov: the Studio context field never reached Application Input).
+   So while signed in the address carries #wn=<code>; the fragment never goes to any server in a request, and the
+   server only accepts a live code it issued itself, revoked at sign-out. */
+const TAG = "#wn=";
+
+/** Put the session code in the page address (call after every navigation, since routing drops the fragment). */
+export function tagChatUrl() {
+  if (!sessionCode || !session.loggedIn()) return;
+  if (location.hash === TAG + sessionCode) return;
+  try { history.replaceState(history.state, "", location.pathname + location.search + TAG + sessionCode); } catch { /* ignore */ }
+}
+
+function untagChatUrl() {
+  if (!location.hash.startsWith(TAG)) return;
+  try { history.replaceState(history.state, "", location.pathname + location.search); } catch { /* ignore */ }
+}
+
+/** A conversation started before sign-in (Talkdesk keeps it across reloads) has no code: start one fresh chat,
+ *  once per sign-in, so the first thing the signed-in patient types already carries it. */
+const LINKED = "wn_chat_linked";
+function freshChatOnce(widgetReady: boolean) {
+  let done = "";
+  try { done = localStorage.getItem(LINKED) || ""; } catch { /* private mode */ }
+  if (done === sessionCode) return;
+  if (!widgetReady) { pendingFresh = true; return; }    // loadChat() resets once the widget is up
+  resetChat();
+  try { localStorage.setItem(LINKED, sessionCode); } catch { /* ignore */ }
+}
+let pendingFresh = false;
+
 /** Tell the chat who is signed in. Safe to call on every navigation: it asks the server once per sign-in. */
 export async function linkChatToLogin() {
+  if (session.loggedIn() && sessionCode) { tagChatUrl(); return; }
   if (!session.loggedIn() || sessionCode || linking) return;
   linking = true;
   const hadAnonymousChat = !!window.webchat;      // signing in mid-visit: start a fresh chat so it carries the login
@@ -57,7 +89,8 @@ export async function linkChatToLogin() {
     if (!session.loggedIn()) return;
     sessionCode = r.session_code;
     patient = { name: r.name, phone: r.phone };
-    if (hadAnonymousChat) resetChat();
+    tagChatUrl();                                  // before the reset, so the new conversation starts with the code
+    freshChatOnce(hadAnonymousChat);
     pushContext();
   } catch { /* the chat still works; it asks for mobile and date of birth */ } finally {
     linking = false;
@@ -69,6 +102,8 @@ export function unlinkChat() {
   if (session.loggedIn()) api("/api/chat/session", { method: "DELETE" }).catch(() => {});
   sessionCode = "";
   patient = null;
+  untagChatUrl();
+  resetChat();                                     // the open conversation was started with the code: end it
   pushContext();
 }
 
@@ -148,8 +183,9 @@ export function loadChat() {
       // chatThemeColor is the one colour Talkdesk lets us set inside the panel: match the site's teal.
       styles: { chatTitle: "WellNest Assistant", chatSubtitle: "Bookings, reports, insurance", chatThemeColor: "#0D6E63" },
     });
+    if (pendingFresh) { pendingFresh = false; freshChatOnce(true); }
     try {
-      window.webchat.onOpenWebchat = () => { pushContext(); warm(); };
+      window.webchat.onOpenWebchat = () => { pushContext(); tagChatUrl(); warm(); };
       window.webchat.onConversationStart = () => pushContext();
     } catch { /* older SDK */ }
     pushContext();

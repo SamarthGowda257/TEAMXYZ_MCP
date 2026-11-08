@@ -358,3 +358,17 @@ def test_assistant_order_needs_the_quote_first():
     # a different quantity is a different quote: asked again, not placed
     other = mcp_tools.order_medicine(phone=RAHUL, medicine_name="2 strips of Dolo 650", confirm="yes")
     assert other["data"].get("quote") and "order_id" not in other["data"]
+
+
+def test_code_in_the_page_address_opens_the_record():
+    """Live: for a web chat Talkdesk gives a conversation UUID as Application Input and the page address as Caller ID.
+    The signed-in site puts #wn=<code> in the address, so the code arrives inside Caller ID."""
+    p = _rahul()
+    code = cs.mint(p["id"])
+    r = mcp_tools.open_signed_in_session(session_code="3f2a9c1e-77b0-4c1d-9e2a-5b6c7d8e9f00",
+                                         caller_id=f"https://teamxyz-mcp.onrender.com/portal#wn={code}")
+    assert r["ok"] and r["data"]["signed_in"] and r["data"]["patient_phone"] == p["phone"]
+    assert cs.diagnostics()[-1]["result"] == "signed_in"
+    # a page address without a live code opens nothing
+    bad = mcp_tools.open_signed_in_session(session_code="", caller_id="https://teamxyz-mcp.onrender.com/#wn=WS-AAAAAAAAAAAA")
+    assert bad["error_code"] == "not_signed_in"
