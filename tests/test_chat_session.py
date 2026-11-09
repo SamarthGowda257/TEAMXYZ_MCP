@@ -433,9 +433,9 @@ def test_caller_id_page_address_identifies_a_signed_in_patient_in_any_tool():
     # not signed in (no code in the address): asks, never guesses
     anon = mcp_tools.get_health_credits_balance(caller_id="https://teamxyz-mcp.onrender.com/")
     assert not anon["ok"]
-    # a typed number for someone else wins over the page (a family member), and needs that person's date of birth
+    # a typed number never switches a signed-in chat to someone else (changed 9 Nov after a live mix-up)
     other = mcp_tools.get_health_credits_balance(phone="9845000001", caller_id=page)
-    assert not other["ok"] or "Shanthamma" in other["message"]
+    assert other["message"] == mcp_tools.get_health_credits_balance(caller_id=page)["message"]
     cs.revoke(p["id"])
     assert not mcp_tools.get_health_credits_balance(caller_id=page)["ok"]
 
@@ -464,3 +464,30 @@ def test_phone_call_uses_the_calling_number_and_asks_only_the_date_of_birth():
     # a typed number wins over the caller ID; a web page address is never taken for a phone number
     store.delete(f"verified:{bb.ref_for(RAHUL)}")
     assert mcp_tools.cancel_appointment(booking_id="WN-00000", caller_id="https://x/portal/9845000004")["message"] == pt.ASK_IDENTITY
+
+
+def test_signed_in_page_wins_over_a_typed_number():
+    """Live 9 Nov: Shanthamma, signed in, typed another patient's number and date of birth, and the agent switched to
+    that patient's bookings. A signed-in chat acts for the account holder only."""
+    other = _rahul()
+    with db.engine.connect() as c:
+        me = next(p for p in (pt.get_by_phone(c, pt.norm_phone(n)) for n in ("9845000001", "9845000002", "9845000003"))
+                  if p and not p["is_guest"] and p["id"] != other["id"])
+    page = f"https://teamxyz-mcp.onrender.com/portal#wn={cs.mint(me['id'])}"
+    r = mcp_tools.find_appointments(phone=RAHUL, date_of_birth=RAHUL_DOB, caller_id=page)
+    assert r["ok"]
+    seen = {a["booking_id"] for a in r["data"].get("appointments", [])}
+    with db.engine.connect() as c:
+        theirs = {a["booking_id"] for a in (mcp_tools.ap.find_appointments(RAHUL, RAHUL_DOB).data or {}).get("appointments", [])}
+    assert not (seen & theirs) or not theirs
+    # a lapsed page code falls back to what was typed
+    r = mcp_tools.find_appointments(phone=RAHUL, date_of_birth=RAHUL_DOB,
+                                    caller_id="https://teamxyz-mcp.onrender.com/portal#wn=WS-ABCDEFGHJKLM")
+    assert r["ok"]
+
+
+def test_eight_digit_date_of_birth():
+    from datetime import date
+    from app.util import parse_dob
+    assert parse_dob("25032005") == date(2005, 3, 25)
+    assert parse_dob("20050325") == date(2005, 3, 25)

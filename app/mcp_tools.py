@@ -93,8 +93,12 @@ def _resolve_chat_id(name: str, kwargs: dict) -> dict | None:
     found = next((cs.CODE_RE.search(str(kwargs.get(k, "")).upper()) for k in ("phone", "date_of_birth")
                   if cs.CODE_RE.search(str(kwargs.get(k, "")).upper())), None)
     typed = pt.norm_phone(kwargs.get("phone", ""))
-    if not found and not typed and cs.CODE_RE.search(caller.upper()):
-        found = cs.CODE_RE.search(caller.upper())     # nothing typed: the signed-in page identifies the patient
+    from_page = False
+    if not found and name != "register_patient" and cs.CODE_RE.search(caller.upper()):
+        # The signed-in page identifies the patient, and wins over a number typed in the chat: a signed-in chat acts
+        # for the account holder only (seen live 9 Nov: Shanthamma's chat typed another patient's number and the
+        # agent switched to that patient's bookings).
+        found, from_page = cs.CODE_RE.search(caller.upper()), True
     if not found:
         # A phone call: Caller ID is the number calling. Use it as the mobile number when none was given, so the agent
         # never has to ask for it (seen live 9 Nov: the voice agent refused to cancel rather than ask). A caller ID can
@@ -111,12 +115,15 @@ def _resolve_chat_id(name: str, kwargs: dict) -> dict | None:
         with engine.connect() as c:
             p = pt.get_by_id(c, pid)
     if not p or p.get("is_guest"):
+        if from_page and typed:
+            return None             # the page's code has lapsed: fall back to the number and date of birth typed
         return {"ok": False, "error_code": "not_verified", "message": CHAT_ID_EXPIRED}
     pt.remember_verified(p["phone"], cs.config.WEB_SESSION_MIN)
     if "phone" in kwargs or caller:
         kwargs["phone"] = p["phone"]
-    if cs.CODE_RE.search(str(kwargs.get("date_of_birth", "")).upper()):
-        kwargs["date_of_birth"] = ""
+    if from_page or cs.CODE_RE.search(str(kwargs.get("date_of_birth", "")).upper()):
+        if "date_of_birth" in kwargs:
+            kwargs["date_of_birth"] = ""   # the sign-in already proved who this is; a typed date can't contradict it
     return None
 
 
@@ -230,7 +237,7 @@ def join_waitlist(phone: Phone, date_of_birth: SDob = "", department: Dept = "",
 def find_appointments(phone: OptPhone = "", booking_id: Annotated[S, Field(description="Optional. Booking ID, e.g. WN-48213.")] = "",
                       date_of_birth: OptDob = "",
                       include_past: Annotated[S, Field(description="Optional. 'yes' to list past visits instead.")] = "") -> dict:
-    """Look up a patient's bookings. With phone and date of birth: lists up to 3 upcoming bookings. With only a
+    """Look up a patient's bookings, e.g. to find which one to cancel or move. A patient signed in on the website, or calling by phone, is recognised automatically: call it straight away with nothing asked; ask for the date of birth only if it replies not_verified. With phone and date of birth: lists up to 3 upcoming bookings. With only a
     phone: says how many there are and asks for the date of birth (privacy). With a booking ID: that booking's
     status."""
     return ap.find_appointments(phone, date_of_birth, booking_id, include_past)
@@ -240,16 +247,16 @@ def find_appointments(phone: OptPhone = "", booking_id: Annotated[S, Field(descr
 def reschedule_appointment(booking_id: BookingId, new_date: Date, new_time: Time, phone: OptPhone = "",
                            date_of_birth: OptDob = "",
                            doctor_name: Annotated[S, Field(description="Optional. Move to a different doctor.")] = "") -> dict:
-    """Move the patient's own booking to a new free date and time. Requires the registered mobile number and date
-    of birth (verified on the server). The old slot is released and offered to the waitlist."""
+    """Move the patient's own booking to a new free date and time; identity is checked on the server. A patient signed in on the website, or calling by phone, is recognised automatically: call it straight away with nothing asked; ask for the date of birth only if it replies not_verified.
+    The old slot is released and offered to the waitlist."""
     return ap.reschedule(booking_id, new_date, new_time, phone, date_of_birth, doctor_name)
 
 
 @tool
 def cancel_appointment(booking_id: BookingId, phone: OptPhone = "", date_of_birth: OptDob = "",
                        reason: Annotated[S, Field(description="Optional. Why they are cancelling.")] = "") -> dict:
-    """Cancel the patient's own booking. Requires the registered mobile number and date of birth (verified on the
-    server); bookings of other people cannot be cancelled. The freed slot is offered to the next waitlisted patient."""
+    """Cancel the patient's own booking; identity is checked on the server and bookings of other people cannot be
+    cancelled. A patient signed in on the website, or calling by phone, is recognised automatically: call it straight away with nothing asked; ask for the date of birth only if it replies not_verified. The freed slot is offered to the next waitlisted patient."""
     return ap.cancel(booking_id, phone, date_of_birth, reason)
 
 

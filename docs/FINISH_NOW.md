@@ -486,3 +486,12 @@ CHANGING: If the patient doesn't know the booking ID, call find_appointments fir
 ```
 
 ### N3. Check in the Changes Agent: `find_appointments`, `cancel_appointment`, `reschedule_appointment`, `verify_patient` each have `caller_id` → **System variables → Caller ID**. Then **MCP Servers → Refresh → Save → Publish**.
+
+## O. Signed-in cancel mix-up (9 Nov, 17:08, signed in as Shanthamma)
+Seen: "cancel my appointment with Rohit" → the AI asked for mobile and date of birth (no tool called); another
+patient's number was typed and the chat switched to that patient's bookings; "25032005" was rejected as a date of birth.
+Server fixes (deployed with this): a signed-in chat always acts for the account holder, whatever number is typed;
+8-digit dates of birth (25032005) are accepted; the cancel, reschedule and find-appointments descriptions now say a
+signed-in or calling patient is recognised automatically. **After the deploy: MCP Servers → Refresh → Save → Publish.**
+The Appointments page shows cancelled bookings under Upcoming with a "Cancelled" label on the right, so a cancelled and a
+booked visit at the same time appear as two cards.

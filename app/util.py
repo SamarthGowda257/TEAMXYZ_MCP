@@ -122,10 +122,15 @@ def parse_dob(text) -> date | None:
     t = clean(text).lower().strip(" .")
     if not t:
         return None
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d %m %Y"):
+    # 8 digits typed with no separators, e.g. 25032005 (day first, as Indian patients write it), or 20050325
+    digits = ("%d%m%Y", "%Y%m%d") if re.fullmatch(r"\d{8}", t) else ()
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d %m %Y", *digits):
         try:
             d = datetime.strptime(t, fmt).date()
-            return d if 1900 < d.year <= today().year else None
+            if 1900 < d.year <= today().year:
+                return d
+            if not digits:
+                return None
         except ValueError:
             pass
     dm = _parse_day_month(t)
