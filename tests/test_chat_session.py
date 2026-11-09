@@ -448,3 +448,19 @@ def test_chat_code_survives_overnight():
     first = cs.mint(p["id"])
     assert cs.mint(p["id"]) == first
     assert cs.open_session("", caller_id=f"https://x/portal#wn={first}").data["signed_in"]
+
+
+def test_phone_call_uses_the_calling_number_and_asks_only_the_date_of_birth():
+    """Live 9 Nov: on a voice call the agent refused to cancel rather than ask for identity. On a call Talkdesk's
+    Caller ID is the number calling: tools use it as the mobile number and ask only for the date of birth."""
+    from app.services import blackboard as bb
+    store.delete(f"verified:{bb.ref_for(RAHUL)}")
+    r = mcp_tools.find_appointments(caller_id="+91 " + RAHUL)
+    assert r["ok"] and r["data"]["needs"] == "date_of_birth"
+    r = mcp_tools.cancel_appointment(booking_id="WN-00000", caller_id="+91 " + RAHUL)
+    assert r["error_code"] == "not_verified" and r["message"] == pt.ASK_DOB
+    r = mcp_tools.find_appointments(date_of_birth=RAHUL_DOB, caller_id="+91 " + RAHUL)
+    assert r["ok"]
+    # a typed number wins over the caller ID; a web page address is never taken for a phone number
+    store.delete(f"verified:{bb.ref_for(RAHUL)}")
+    assert mcp_tools.cancel_appointment(booking_id="WN-00000", caller_id="https://x/portal/9845000004")["message"] == pt.ASK_IDENTITY

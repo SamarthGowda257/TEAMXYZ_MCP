@@ -20,6 +20,8 @@ LOCK_WINDOW_MIN = 15
 UHID_FEE = 150
 NOT_VERIFIED = "I couldn't verify those details. Please check the registered mobile number and date of birth and try again."
 ASK_IDENTITY = "Please share the registered mobile number and date of birth so I can check that securely."
+# The number is already known (typed, or the phone line it is calling from): ask only for the date of birth.
+ASK_DOB = "For your security, please tell me your date of birth, and I'll carry on."
 
 
 def get_by_phone(conn, phone) -> dict | None:
@@ -92,6 +94,8 @@ def check_identity(conn, phone, dob) -> tuple[dict | None, Result | None]:
         p = get_by_phone(conn, p_norm)
         if p and not p["is_guest"] and not _locked(conn, p_norm):
             return p, None
+    if p_norm and not clean(dob):
+        return None, fail("not_verified", ASK_DOB)
     if not clean(phone) or not clean(dob):
         return None, fail("not_verified", ASK_IDENTITY)
     if not p_norm:

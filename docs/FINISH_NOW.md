@@ -465,3 +465,24 @@ for the Records tools (and 6 others) ended "Needs the mobile number…". They no
 automatically. After this is deployed: **MCP Servers → WellNest_TeamXYZ_MCP → Refresh → Save → Publish**.
 If the reply still says "chat ID", the old F1 wording is still in **Variables ({ })**: set `patient_phone` and
 `date_of_birth` back as in L1.
+
+## N. Voice call: cancelling (9 Nov, 16:30)
+**Seen:** calling the voice number to cancel, the agent asked for the date and time, then said it can't ask for the
+mobile number or date of birth "for security reasons" and gave up. The server log shows **no tool was called**: the
+agent read the website rule "don't ask for mobile or date of birth" as a ban, and on a call nobody is signed in.
+
+**Server (deployed with this fix):** on a call Talkdesk's Caller ID is the number calling. Every tool with a phone
+input now uses it when no number was given, and replies "For your security, please tell me your date of birth" (a
+caller ID can be faked, so the date of birth is still checked). Website chats are unchanged.
+
+### N1. In every agent that has a `SIGNED IN:` line (Booking, Changes, Support, Records, Billing and Insurance, Pharmacy and HealthCredits): replace that line with
+```
+SIGNED IN OR CALLING: Call the tool straight away. Your tools know a patient signed in on the website, and on a phone call they know the number calling. If a tool asks for the date of birth or the mobile number, ask the patient for it: that is expected and allowed. Never refuse or give up because of identity checks.
+```
+
+### N2. Changes Agent: replace the `CHANGING:` paragraph with
+```
+CHANGING: If the patient doesn't know the booking ID, call find_appointments first and confirm which booking they mean. Before cancelling or moving, say what will change, that it is free up to 2 hours before the visit and 150 rupees after that, and ask "Shall I go ahead?". Act only after a clear yes. Call cancel_appointment or reschedule_appointment with the booking ID; the server decides whose booking it is. Read back the cancellation reference (CN-) or the new booking details.
+```
+
+### N3. Check in the Changes Agent: `find_appointments`, `cancel_appointment`, `reschedule_appointment`, `verify_patient` each have `caller_id` → **System variables → Caller ID**. Then **MCP Servers → Refresh → Save → Publish**.

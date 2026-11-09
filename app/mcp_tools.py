@@ -96,6 +96,12 @@ def _resolve_chat_id(name: str, kwargs: dict) -> dict | None:
     if not found and not typed and cs.CODE_RE.search(caller.upper()):
         found = cs.CODE_RE.search(caller.upper())     # nothing typed: the signed-in page identifies the patient
     if not found:
+        # A phone call: Caller ID is the number calling. Use it as the mobile number when none was given, so the agent
+        # never has to ask for it (seen live 9 Nov: the voice agent refused to cancel rather than ask). A caller ID can
+        # be spoofed, so it does not verify anyone: the tool still asks for the date of birth.
+        caller_phone = pt.norm_phone(caller) if "/" not in caller and ":" not in caller else ""
+        if caller_phone and not typed and name != "register_patient":
+            kwargs["phone"] = caller_phone
         return None
     from .db import engine
     from .store import store
