@@ -438,3 +438,13 @@ def test_caller_id_page_address_identifies_a_signed_in_patient_in_any_tool():
     assert not other["ok"] or "Shanthamma" in other["message"]
     cs.revoke(p["id"])
     assert not mcp_tools.get_health_credits_balance(caller_id=page)["ok"]
+
+
+def test_chat_code_survives_overnight():
+    """The page keeps #wn=<code> across reloads and Talkdesk may read it before the site renews it, so a signed-in
+    patient's code must outlive a night and stay the same on every visit (seen live 9 Nov)."""
+    assert cs.TTL >= 7 * 24 * 3600
+    p = _rahul()
+    first = cs.mint(p["id"])
+    assert cs.mint(p["id"]) == first
+    assert cs.open_session("", caller_id=f"https://x/portal#wn={first}").data["signed_in"]

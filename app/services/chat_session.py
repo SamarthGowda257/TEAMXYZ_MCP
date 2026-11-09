@@ -26,7 +26,10 @@ from . import patients as pt
 
 CODE_RE = re.compile(r"\bWS-[A-HJ-NP-Z2-9]{12}\b")
 _ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"      # no 0/O or 1/I, so a code survives being read aloud
-TTL = 12 * 3600
+# One stable code per signed-in patient, renewed on every page load and revoked at sign-out. It must outlive a night:
+# the page keeps #wn=<code> across reloads and Talkdesk can read that address before the site renews it (seen live
+# 9 Nov: a 12-hour code had expired overnight, so the next morning's chat came in "not signed in").
+TTL = 7 * 24 * 3600
 LINK_TTL = 7 * 24 * 3600
 TRANSCRIPT_TOPIC = "transcript"
 CHUNK = 480

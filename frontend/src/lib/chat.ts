@@ -68,29 +68,33 @@ function untagChatUrl() {
 /** A conversation started before sign-in (Talkdesk keeps it across reloads) has no code: start one fresh chat,
  *  once per sign-in, so the first thing the signed-in patient types already carries it. */
 const LINKED = "wn_chat_linked";
-function freshChatOnce(widgetReady: boolean) {
+function freshChatOnce(widgetReady: boolean, force = false) {
   let done = "";
   try { done = localStorage.getItem(LINKED) || ""; } catch { /* private mode */ }
-  if (done === sessionCode) return;
-  if (!widgetReady) { pendingFresh = true; return; }    // loadChat() resets once the widget is up
+  if (done === sessionCode && !force) return;
+  if (!widgetReady) { pendingFresh = true; pendingForce = force; return; }    // loadChat() resets once the widget is up
   resetChat();
   try { localStorage.setItem(LINKED, sessionCode); } catch { /* ignore */ }
 }
 let pendingFresh = false;
+let pendingForce = false;
 
 /** Tell the chat who is signed in. Safe to call on every navigation: it asks the server once per sign-in. */
 export async function linkChatToLogin() {
   if (session.loggedIn() && sessionCode) { tagChatUrl(); return; }
   if (!session.loggedIn() || sessionCode || linking) return;
   linking = true;
-  const hadAnonymousChat = !!window.webchat;      // signing in mid-visit: start a fresh chat so it carries the login
+  // the address may still carry the code from an earlier visit (the fragment survives a reload)
+  const codeInUrl = location.hash.startsWith(TAG) ? location.hash.slice(TAG.length) : "";
   try {
     const r = await api<{ session_code: string; name: string; phone: string }>("/api/chat/session", { method: "POST" });
     if (!session.loggedIn()) return;
     sessionCode = r.session_code;
     patient = { name: r.name, phone: r.phone };
     tagChatUrl();                                  // before the reset, so the new conversation starts with the code
-    freshChatOnce(hadAnonymousChat);
+    // Check the widget only now: it often finishes loading while we wait for the code, and a conversation it started
+    // from an old address carries a code that no longer opens the record, so start a fresh one.
+    freshChatOnce(!!window.webchat, !!codeInUrl && codeInUrl !== sessionCode);
     pushContext();
   } catch { /* the chat still works; it asks for mobile and date of birth */ } finally {
     linking = false;
@@ -183,7 +187,7 @@ export function loadChat() {
       // chatThemeColor is the one colour Talkdesk lets us set inside the panel: match the site's teal.
       styles: { chatTitle: "WellNest Assistant", chatSubtitle: "Bookings, reports, insurance", chatThemeColor: "#0D6E63" },
     });
-    if (pendingFresh) { pendingFresh = false; freshChatOnce(true); }
+    if (pendingFresh) { pendingFresh = false; freshChatOnce(true, pendingForce); }
     try {
       window.webchat.onOpenWebchat = () => { pushContext(); tagChatUrl(); warm(); };
       window.webchat.onConversationStart = () => pushContext();
