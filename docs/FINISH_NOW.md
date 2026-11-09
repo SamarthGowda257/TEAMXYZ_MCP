@@ -457,3 +457,11 @@ SIGNED IN: Your tools recognise a patient who is signed in on the website by the
 ```
 Check its 5 skills (`track_medicine_order`, `get_lab_report_status`, `email_lab_report`, `get_visit_history`,
 `request_prescription_refill`) have `caller_id` → Caller ID. Then **Save → Publish**.
+
+### M2. Re-test after M1 (9 Nov, 15:15–15:17)
+Lab report and past visits still asked "mobile number or chat ID and date of birth" with no tool call; balance (other
+agent, same kind of tool) answered straight away. Difference found on our side: the descriptions Talkdesk shows the AI
+for the Records tools (and 6 others) ended "Needs the mobile number…". They now say a signed-in patient is recognised
+automatically. After this is deployed: **MCP Servers → WellNest_TeamXYZ_MCP → Refresh → Save → Publish**.
+If the reply still says "chat ID", the old F1 wording is still in **Variables ({ })**: set `patient_phone` and
+`date_of_birth` back as in L1.

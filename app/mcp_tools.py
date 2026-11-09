@@ -259,7 +259,7 @@ def accept_waitlist_offer(offer_code: Annotated[S, Field(description="The 10-cha
 @tool
 def get_lab_report_status(phone: Phone, date_of_birth: SDob = "") -> dict:
     """Status of the patient's recent lab and scan reports: pending (with expected time), ready or collected.
-    Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.lab_status(phone, date_of_birth)
 
 
@@ -267,13 +267,13 @@ def get_lab_report_status(phone: Phone, date_of_birth: SDob = "") -> dict:
 def email_lab_report(phone: Phone, date_of_birth: SDob = "",
                      report_id: Annotated[S, Field(description="Optional. Report ID like LR-20931; default is the latest ready report.")] = "") -> dict:
     """Email a ready lab report to the patient's registered email (summary plus secure portal link, no full values).
-    Pending reports cannot be emailed. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    Pending reports cannot be emailed. A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.email_report(phone, date_of_birth, report_id)
 
 
 @tool
 def get_visit_history(phone: Phone, date_of_birth: SDob = "") -> dict:
-    """The patient's last 5 completed visits (date, doctor, department) and their 3 most recent conversations or requests (medicine orders, refunds, notes). Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    """The patient's last 5 completed visits (date, doctor, department) and their 3 most recent conversations or requests (medicine orders, refunds, notes). A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.visit_history(phone, date_of_birth)
 
 
@@ -282,7 +282,7 @@ def request_prescription_refill(phone: Phone,
                                 medicine_name: Annotated[S, Field(description="Medicine to refill, e.g. Amlodipine 5 mg.")],
                                 date_of_birth: SDob = "", doctor_name: Doc = "") -> dict:
     """Send a prescription refill request to the doctor for approval. It is never approved automatically.
-    Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.prescription_refill(phone, date_of_birth, medicine_name, doctor_name)
 
 
@@ -305,7 +305,7 @@ def check_coverage(insurance_provider: Ins = "", procedure: Proc = "", departmen
 
 @tool
 def get_bill_status(phone: Phone, date_of_birth: SDob = "") -> dict:
-    """Outstanding bills with amount and due date. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    """Outstanding bills with amount and due date. A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.bill_status(phone, date_of_birth)
 
 
@@ -313,7 +313,7 @@ def get_bill_status(phone: Phone, date_of_birth: SDob = "") -> dict:
 def send_payment_link(phone: Phone, date_of_birth: SDob = "",
                       bill_id: Annotated[S, Field(description="Optional. Bill ID like BL-55012; default is the oldest due bill.")] = "") -> dict:
     """Email a secure payment link for an outstanding bill (simulated in this demo). Never take card details by
-    chat or phone. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    chat or phone. A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return rc.send_payment_link(phone, date_of_birth, bill_id)
 
 
@@ -437,7 +437,7 @@ def get_visit_instructions(department: Dept = "", procedure: Proc = "") -> dict:
 @tool
 def get_patient_preferences(phone: Phone, date_of_birth: SDob = "") -> dict:
     """The patient's preferred language and time, caregiver on file and consent, and mobility needs.
-    Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return pt.get_preferences(phone, date_of_birth)
 
 
@@ -451,7 +451,7 @@ def set_patient_preferences(phone: Phone, date_of_birth: SDob = "",
                             caregiver_consent: Annotated[S, Field(description="Optional. yes or no: send booking updates to the caregiver.")] = "",
                             mobility_needs: Annotated[S, Field(description="Optional. e.g. needs a wheelchair, uses a walker.")] = "") -> dict:
     """Update the patient's preferences, caregiver details and consent, or mobility needs. Only the fields given
-    are changed. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    are changed. A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return pt.set_preferences(phone, date_of_birth, preferred_language, preferred_time, caregiver_name, caregiver_phone,
                               caregiver_email, caregiver_consent, mobility_needs)
 
@@ -553,7 +553,7 @@ def record_checkin(phone: Phone, date_of_birth: SDob = "", booking_id: Annotated
                    symptoms_worse: Annotated[S, Field(description="Optional. yes or no.")] = "",
                    notes: Annotated[S, Field(description="Optional. Anything else the patient said.")] = "") -> dict:
     """Record a post-visit check-in. Warning answers (pain 7 or more, fever, feeling worse) alert a nurse
-    automatically. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    automatically. A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return sp.record_checkin(phone, date_of_birth, booking_id, pain_score, fever, symptoms_worse, notes)
 
 
@@ -576,7 +576,7 @@ def submit_feedback(phone: Phone, rating: Annotated[S, Field(description="Rating
 def schedule_followup(phone: Phone, date_of_birth: SDob = "", doctor_name: Doc = "",
                       within_days: Annotated[S, Field(description="Optional. Number of days, default 7.")] = "") -> dict:
     """Find follow-up slots with the patient's last doctor (or a named doctor) within N days. Then book with
-    book_appointment. Needs the mobile number; the date of birth only if not verified earlier in this conversation."""
+    book_appointment. A patient signed in on the website is recognised automatically: call it straight away with nothing asked. Otherwise it needs the mobile number; the date of birth only if not verified earlier in this conversation."""
     return sp.schedule_followup(phone, date_of_birth, doctor_name, within_days)
 
 
